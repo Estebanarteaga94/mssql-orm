@@ -11,10 +11,11 @@ El control de versiones quedó consolidado en un único repositorio Git en la ra
 También existe CI base en GitHub Actions para validar formato, compilación, pruebas y lint del workspace.
 Ya existe documentación pública mínima en `README.md`, documentación arquitectónica en `docs/architecture/overview.md` y ADRs iniciales en `docs/adr/`.
 Ya existe `docs/ai/` con guía de colaboración, plantilla de sesión y checklist de handoff para futuras sesiones autónomas.
+`mssql-orm-core` ya contiene el contrato `Entity` y la metadata base de entidades, columnas, índices y foreign keys.
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 1 implementando `Entity` y la metadata base en `mssql-orm-core`, ahora que la Etapa 0 quedó cerrada.
+Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sobre la metadata base ya definida en `mssql-orm-core`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -24,7 +25,8 @@ Iniciar la Etapa 1 implementando `Entity` y la metadata base en `mssql-orm-core`
 - Tiberius debe quedar encapsulado como adaptador de infraestructura, no como núcleo del ORM.
 - El MVP debe enfocarse en metadata, macros de entidad, CRUD básico, query builder simple, `DbContext`, `DbSet` y migraciones básicas.
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
-- `mssql-orm-macros` quedó creada como crate `proc-macro`, pero sus derives siguen siendo placeholders sin generación real.
+- `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
+- `mssql-orm-macros` sigue siendo una crate `proc-macro` con derives placeholder sin generación real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
 - La arquitectura ya quedó documentada y respaldada por ADRs para SQL Server primero, separación estricta por crates y API pública concentrada en `mssql-orm`.
@@ -41,13 +43,14 @@ Iniciar la Etapa 1 implementando `Entity` y la metadata base en `mssql-orm-core`
 
 ## Riesgos Inmediatos
 
-- La base del workspace todavía es solo estructural; no existe metadata real, AST útil ni integración con SQL Server/Tiberius.
+- Aunque ya existe metadata base en `core`, todavía no se genera automáticamente desde modelos Rust.
 - Los derives actuales en `mssql-orm-macros` son stubs y no deben considerarse funcionalidad implementada.
+- Aún no existe AST útil ni integración con SQL Server/Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Empezar `Entity` trait y metadata base en `mssql-orm-core`.
-2. Diseñar `EntityMetadata`, `ColumnMetadata`, índices y foreign keys sin introducir dependencias hacia Tiberius.
+1. Implementar `#[derive(Entity)]` en `mssql-orm-macros`.
+2. Hacer que el derive genere `EntityMetadata` estática y respete los límites ya definidos en `core`.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.
