@@ -12,6 +12,7 @@ También existe CI base en GitHub Actions para validar formato, compilación, pr
 Ya existe documentación pública mínima en `README.md`, documentación arquitectónica en `docs/architecture/overview.md` y ADRs iniciales en `docs/adr/`.
 Ya existe `docs/ai/` con guía de colaboración, plantilla de sesión y checklist de handoff para futuras sesiones autónomas.
 `mssql-orm-core` ya contiene el contrato `Entity` y la metadata base de entidades, columnas, índices y foreign keys.
+La metadata base fue re-alineada contra el plan maestro para preservar el orden de PK compuesto y evitar helpers con semántica no definida por el plan.
 
 ## Objetivo Técnico Actual
 
@@ -26,6 +27,7 @@ Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sob
 - El MVP debe enfocarse en metadata, macros de entidad, CRUD básico, query builder simple, `DbContext`, `DbSet` y migraciones básicas.
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
+- El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
 - `mssql-orm-macros` sigue siendo una crate `proc-macro` con derives placeholder sin generación real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -52,5 +54,5 @@ Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sob
 ## Próximo Enfoque Recomendado
 
 1. Implementar `#[derive(Entity)]` en `mssql-orm-macros`.
-2. Hacer que el derive genere `EntityMetadata` estática y respete los límites ya definidos en `core`.
+2. Hacer que el derive genere `EntityMetadata` estática y respete tanto los tipos de `core` como el shape definido en el plan maestro.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.

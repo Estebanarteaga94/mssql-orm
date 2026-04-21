@@ -112,13 +112,6 @@ impl ColumnMetadata {
     pub const fn is_computed(&self) -> bool {
         self.computed_sql.is_some()
     }
-
-    pub const fn is_generated_on_insert(&self) -> bool {
-        self.identity.is_some()
-            || self.default_sql.is_some()
-            || self.rowversion
-            || self.is_computed()
-    }
 }
 
 /// Columns participating in an index and their sort direction.
@@ -199,9 +192,10 @@ impl EntityMetadata {
     }
 
     pub fn primary_key_columns(&self) -> Vec<&'static ColumnMetadata> {
-        self.columns
+        self.primary_key
+            .columns
             .iter()
-            .filter(|column| self.primary_key.columns.contains(&column.column_name))
+            .filter_map(|column_name| self.column(column_name))
             .collect()
     }
 }
@@ -214,7 +208,23 @@ mod tests {
         ReferentialAction, SqlServerType,
     };
 
-    const USER_COLUMNS: [ColumnMetadata; 3] = [
+    const USER_COLUMNS: [ColumnMetadata; 4] = [
+        ColumnMetadata {
+            rust_field: "tenant_id",
+            column_name: "tenant_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
@@ -265,7 +275,7 @@ mod tests {
         },
     ];
 
-    const USER_PRIMARY_KEY_COLUMNS: [&str; 1] = ["id"];
+    const USER_PRIMARY_KEY_COLUMNS: [&str; 2] = ["id", "tenant_id"];
 
     const USER_INDEXES: [IndexMetadata; 1] = [IndexMetadata {
         name: "ux_users_email",
@@ -323,6 +333,7 @@ mod tests {
         assert_eq!(metadata.primary_key.name, Some("pk_users"));
         assert_eq!(metadata.indexes.len(), 1);
         assert_eq!(metadata.foreign_keys.len(), 1);
+        assert_eq!(metadata.primary_key.columns, &["id", "tenant_id"]);
     }
 
     #[test]
@@ -342,16 +353,33 @@ mod tests {
         let metadata = User::metadata();
         let columns = metadata.primary_key_columns();
 
-        assert_eq!(columns.len(), 1);
+        assert_eq!(columns.len(), 2);
         assert_eq!(columns[0].column_name, "id");
-        assert!(columns[0].primary_key);
+        assert_eq!(columns[1].column_name, "tenant_id");
+        assert!(columns.iter().all(|column| column.primary_key));
     }
 
     #[test]
-    fn column_metadata_marks_generated_values() {
-        assert!(USER_COLUMNS[0].is_generated_on_insert());
-        assert!(USER_COLUMNS[2].is_generated_on_insert());
-        assert!(!USER_COLUMNS[1].is_generated_on_insert());
+    fn column_metadata_marks_computed_values() {
+        let computed = ColumnMetadata {
+            rust_field: "full_name",
+            column_name: "full_name",
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: Some("[first_name] + ' ' + [last_name]"),
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: Some(240),
+            precision: None,
+            scale: None,
+        };
+
+        assert!(computed.is_computed());
+        assert!(!USER_COLUMNS[0].is_computed());
     }
 
     #[test]

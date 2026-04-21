@@ -12,6 +12,7 @@ Este repositorio debe ser trabajado por un agente de desarrollo de forma autóno
 4. No asumir funcionalidades no documentadas como ya decididas.
 5. Antes de modificar código, revisar siempre `docs/tasks.md`, `docs/worklog.md` y `docs/context.md` si existe.
 6. Toda sesión debe dejar el repositorio en un estado más claro que al inicio.
+7. Cuando exista duda sobre contratos, nombres de tipos, campos o responsabilidades, el archivo `docs/plan_orm_sqlserver_tiberius_code_first.md` prevalece como fuente principal de verdad.
 
 ## Flujo de Trabajo Obligatorio
 
@@ -27,6 +28,7 @@ Seguir este flujo en cada sesión:
    - Definir el objetivo concreto de la sesión.
    - Seleccionar una sola tarea o un bloque pequeño de trabajo relacionado.
    - Establecer criterios de validación antes de editar.
+   - Verificar contra el plan maestro cualquier shape de tipos o contrato público nuevo.
 3. Ejecución
    - Implementar cambios mínimos y consistentes.
    - Respetar límites arquitectónicos y evitar mezclar responsabilidades.

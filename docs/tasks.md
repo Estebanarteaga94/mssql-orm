@@ -51,3 +51,4 @@
 - [x] Etapa 0: Crear README principal, ADRs iniciales y documentación arquitectónica mínima
 - [x] Etapa 0: Crear documentación de colaboración con IA en `docs/ai/`
 - [x] Etapa 1: Implementar `Entity` trait y metadata base (`EntityMetadata`, `ColumnMetadata`, índices y foreign keys)
+- [x] Operativo: Corregir desalineaciones contra el plan maestro en metadata base de entidades

@@ -14,6 +14,8 @@ Antes de trabajar, el agente debe tratar estos archivos como obligatorios:
 - `docs/context.md`
 - `docs/plan_orm_sqlserver_tiberius_code_first.md`
 
+Para contratos, nombres de tipos, campos de metadata y límites entre crates, `docs/plan_orm_sqlserver_tiberius_code_first.md` prevalece sobre inferencias locales o helpers introducidos durante implementación.
+
 ## Resultado esperado por sesión
 
 Cada sesión debe dejar:
@@ -28,6 +30,7 @@ Cada sesión debe dejar:
 ## Límites de actuación
 
 - No improvisar arquitectura fuera del plan vigente.
+- No introducir helpers o semánticas derivadas que contradigan o sustituyan contratos explícitos del plan maestro.
 - No adelantar features de etapas posteriores salvo soporte mínimo para completar la tarea activa.
 - No mezclar generación SQL en `mssql-orm-query`.
 - No mover ejecución fuera de `mssql-orm-tiberius`.
