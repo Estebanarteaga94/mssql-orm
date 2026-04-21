@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 0: Crear README principal, ADRs iniciales y documentación arquitectónica mínima
 - [ ] Etapa 0: Crear documentación de colaboración con IA en `docs/ai/`
 - [ ] Etapa 1: Implementar `Entity` trait y metadata base (`EntityMetadata`, `ColumnMetadata`, índices y foreign keys)
 - [ ] Etapa 1: Implementar `#[derive(Entity)]` con parser de atributos `#[orm(...)]`
@@ -51,3 +50,4 @@
 - [x] Etapa 0: Crear workspace Rust con crates internas base (`mssql-orm`, `core`, `macros`, `query`, `sqlserver`, `tiberius`, `migrate`, `cli`)
 - [x] Operativo: Consolidar repositorio Git único en la raíz y registrar política de commit al cierre
 - [x] Etapa 0: Configurar CI base con `cargo check`, `cargo test`, `rustfmt` y `clippy`
+- [x] Etapa 0: Crear README principal, ADRs iniciales y documentación arquitectónica mínima

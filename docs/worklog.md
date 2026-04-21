@@ -95,3 +95,25 @@
 ### Próximo paso recomendado
 
 - Implementar la tarea `Etapa 0: Crear README principal, ADRs iniciales y documentación arquitectónica mínima`.
+
+### Sesión: Base documental pública y arquitectónica
+
+- Se tomó la siguiente tarea prioritaria de la Etapa 0: `Crear README principal, ADRs iniciales y documentación arquitectónica mínima`.
+- Se creó `README.md` en la raíz con objetivo del proyecto, estado actual, arquitectura del workspace, restricciones y validación base.
+- Se creó `docs/architecture/overview.md` para fijar el flujo arquitectónico esperado y los límites explícitos por crate antes de la Etapa 1.
+- Se creó `docs/adr/0001-sql-server-first.md` para dejar formalizada la decisión de soportar solo SQL Server en esta fase.
+- Se creó `docs/adr/0002-workspace-boundaries.md` para fijar la separación estricta por crates y sus responsabilidades.
+- Se creó `docs/adr/0003-public-api-in-root-crate.md` para formalizar que la API pública se concentra en `mssql-orm`.
+- Se validó que el workspace siga compilando con `cargo check --workspace`.
+
+### Resultado
+
+- El repositorio ya tiene documentación pública mínima y decisiones arquitectónicas explícitas para evitar improvisación al iniciar metadata y macros reales.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos para esta tarea.
+
+### Próximo paso recomendado
+
+- Implementar la tarea `Etapa 0: Crear documentación de colaboración con IA en docs/ai/`.

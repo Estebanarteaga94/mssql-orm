@@ -9,10 +9,11 @@ El backlog operativo de `docs/tasks.md` ya fue alineado con ese plan maestro y a
 Ya existe un workspace Rust inicial con crates separadas para `mssql-orm`, `core`, `macros`, `query`, `sqlserver`, `tiberius`, `migrate` y `cli`.
 El control de versiones quedó consolidado en un único repositorio Git en la raíz; no deben existir repositorios anidados dentro de `crates/`.
 También existe CI base en GitHub Actions para validar formato, compilación, pruebas y lint del workspace.
+Ya existe documentación pública mínima en `README.md`, documentación arquitectónica en `docs/architecture/overview.md` y ADRs iniciales en `docs/adr/`.
 
 ## Objetivo Técnico Actual
 
-Completar la Etapa 0 restante con documentación arquitectónica mínima y guías operativas, dejando el terreno listo para iniciar metadata en Etapa 1.
+Cerrar la Etapa 0 restante con documentación de colaboración con IA en `docs/ai/`, dejando el terreno listo para iniciar metadata en Etapa 1.
 
 ## Dirección Arquitectónica Vigente
 
@@ -25,6 +26,7 @@ Completar la Etapa 0 restante con documentación arquitectónica mínima y guía
 - `mssql-orm-macros` quedó creada como crate `proc-macro`, pero sus derives siguen siendo placeholders sin generación real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
+- La arquitectura ya quedó documentada y respaldada por ADRs para SQL Server primero, separación estricta por crates y API pública concentrada en `mssql-orm`.
 
 ## Fuente de Verdad
 
@@ -32,6 +34,7 @@ Completar la Etapa 0 restante con documentación arquitectónica mínima y guía
 - Operación del agente: `docs/instructions.md`
 - Trabajo pendiente: `docs/tasks.md`
 - Historial de sesiones: `docs/worklog.md`
+- Arquitectura y decisiones: `README.md`, `docs/architecture/overview.md`, `docs/adr/`
 
 ## Riesgos Inmediatos
 
@@ -42,6 +45,6 @@ Completar la Etapa 0 restante con documentación arquitectónica mínima y guía
 
 ## Próximo Enfoque Recomendado
 
-1. Crear README principal y documentación arquitectónica mínima por crate para fijar límites antes de Etapa 1.
-2. Crear documentación de colaboración con IA en `docs/ai/`.
-3. Empezar `Entity` trait y metadata base en `mssql-orm-core` solo después de cerrar la Etapa 0.
+1. Crear documentación de colaboración con IA en `docs/ai/`.
+2. Empezar `Entity` trait y metadata base en `mssql-orm-core` solo después de cerrar la Etapa 0.
+3. Mantener `README`, arquitectura y ADRs sincronizados si cambia algún límite entre crates.
