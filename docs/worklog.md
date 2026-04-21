@@ -117,3 +117,23 @@
 ### Próximo paso recomendado
 
 - Implementar la tarea `Etapa 0: Crear documentación de colaboración con IA en docs/ai/`.
+
+### Sesión: Documentación de colaboración con IA
+
+- Se creó `docs/ai/README.md` como guía base de colaboración para agentes de IA con fuente de verdad, límites de actuación, política de continuidad y criterios mínimos de validación.
+- Se creó `docs/ai/session-template.md` con una plantilla de sesión para mantener el flujo de lectura, selección de tarea, ejecución, validación y cierre.
+- Se creó `docs/ai/handover-checklist.md` como checklist de cierre para asegurar trazabilidad documental y commits limpios.
+- Se movió en `docs/tasks.md` la tarea `Etapa 0: Crear documentación de colaboración con IA en docs/ai/` a `En Progreso` antes de implementarla y luego a `Completadas`.
+- Se verificó consistencia del repositorio documental y se validó el workspace con `cargo check --workspace`.
+
+### Resultado
+
+- La Etapa 0 quedó cerrada con base operativa, CI, documentación pública, arquitectura explícita y guías concretas para continuidad de agentes.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos para esta tarea.
+
+### Próximo paso recomendado
+
+- Empezar `Etapa 1: Implementar Entity trait y metadata base (EntityMetadata, ColumnMetadata, índices y foreign keys)` en `mssql-orm-core`.

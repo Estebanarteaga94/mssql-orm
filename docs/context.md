@@ -10,10 +10,11 @@ Ya existe un workspace Rust inicial con crates separadas para `mssql-orm`, `core
 El control de versiones quedó consolidado en un único repositorio Git en la raíz; no deben existir repositorios anidados dentro de `crates/`.
 También existe CI base en GitHub Actions para validar formato, compilación, pruebas y lint del workspace.
 Ya existe documentación pública mínima en `README.md`, documentación arquitectónica en `docs/architecture/overview.md` y ADRs iniciales en `docs/adr/`.
+Ya existe `docs/ai/` con guía de colaboración, plantilla de sesión y checklist de handoff para futuras sesiones autónomas.
 
 ## Objetivo Técnico Actual
 
-Cerrar la Etapa 0 restante con documentación de colaboración con IA en `docs/ai/`, dejando el terreno listo para iniciar metadata en Etapa 1.
+Iniciar la Etapa 1 implementando `Entity` y la metadata base en `mssql-orm-core`, ahora que la Etapa 0 quedó cerrada.
 
 ## Dirección Arquitectónica Vigente
 
@@ -27,11 +28,13 @@ Cerrar la Etapa 0 restante con documentación de colaboración con IA en `docs/a
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
 - La arquitectura ya quedó documentada y respaldada por ADRs para SQL Server primero, separación estricta por crates y API pública concentrada en `mssql-orm`.
+- La colaboración autónoma ya quedó formalizada en `docs/ai/`, por lo que las siguientes sesiones deben apoyarse en esa guía además de `docs/instructions.md`.
 
 ## Fuente de Verdad
 
 - Plan maestro: `docs/plan_orm_sqlserver_tiberius_code_first.md`
 - Operación del agente: `docs/instructions.md`
+- Colaboración con IA: `docs/ai/`
 - Trabajo pendiente: `docs/tasks.md`
 - Historial de sesiones: `docs/worklog.md`
 - Arquitectura y decisiones: `README.md`, `docs/architecture/overview.md`, `docs/adr/`
@@ -45,6 +48,6 @@ Cerrar la Etapa 0 restante con documentación de colaboración con IA en `docs/a
 
 ## Próximo Enfoque Recomendado
 
-1. Crear documentación de colaboración con IA en `docs/ai/`.
-2. Empezar `Entity` trait y metadata base en `mssql-orm-core` solo después de cerrar la Etapa 0.
-3. Mantener `README`, arquitectura y ADRs sincronizados si cambia algún límite entre crates.
+1. Empezar `Entity` trait y metadata base en `mssql-orm-core`.
+2. Diseñar `EntityMetadata`, `ColumnMetadata`, índices y foreign keys sin introducir dependencias hacia Tiberius.
+3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.
