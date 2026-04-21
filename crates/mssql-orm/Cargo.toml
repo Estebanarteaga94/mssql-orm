@@ -1,0 +1,13 @@
+[package]
+name = "mssql-orm"
+version.workspace = true
+edition.workspace = true
+description = "Public API crate for the mssql-orm workspace."
+
+[dependencies]
+mssql-orm-core.workspace = true
+mssql-orm-macros.workspace = true
+mssql-orm-query.workspace = true
+mssql-orm-sqlserver.workspace = true
+mssql-orm-tiberius.workspace = true
+mssql-orm-migrate.workspace = true

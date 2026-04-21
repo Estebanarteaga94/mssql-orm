@@ -1,0 +1,10 @@
+[package]
+name = "mssql-orm-tiberius"
+version.workspace = true
+edition.workspace = true
+description = "Tiberius execution adapter for mssql-orm."
+
+[dependencies]
+mssql-orm-core.workspace = true
+mssql-orm-query.workspace = true
+mssql-orm-sqlserver.workspace = true

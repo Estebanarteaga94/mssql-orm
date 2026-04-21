@@ -1,0 +1,8 @@
+[package]
+name = "mssql-orm-cli"
+version.workspace = true
+edition.workspace = true
+description = "Command-line tooling for mssql-orm."
+
+[dependencies]
+mssql-orm-migrate.workspace = true

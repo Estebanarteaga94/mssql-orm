@@ -1,0 +1,9 @@
+[package]
+name = "mssql-orm-migrate"
+version.workspace = true
+edition.workspace = true
+description = "Code-first migration support for mssql-orm."
+
+[dependencies]
+mssql-orm-core.workspace = true
+mssql-orm-sqlserver.workspace = true

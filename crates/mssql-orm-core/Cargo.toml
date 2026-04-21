@@ -1,0 +1,7 @@
+[package]
+name = "mssql-orm-core"
+version.workspace = true
+edition.workspace = true
+description = "Core contracts and shared types for the mssql-orm workspace."
+
+[dependencies]

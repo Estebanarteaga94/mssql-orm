@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "crates/mssql-orm",
+    "crates/mssql-orm-cli",
+    "crates/mssql-orm-core",
+    "crates/mssql-orm-macros",
+    "crates/mssql-orm-migrate",
+    "crates/mssql-orm-query",
+    "crates/mssql-orm-sqlserver",
+    "crates/mssql-orm-tiberius",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+mssql-orm = { path = "crates/mssql-orm" }
+mssql-orm-core = { path = "crates/mssql-orm-core" }
+mssql-orm-macros = { path = "crates/mssql-orm-macros" }
+mssql-orm-query = { path = "crates/mssql-orm-query" }
+mssql-orm-sqlserver = { path = "crates/mssql-orm-sqlserver" }
+mssql-orm-tiberius = { path = "crates/mssql-orm-tiberius" }
+mssql-orm-migrate = { path = "crates/mssql-orm-migrate" }
+mssql-orm-cli = { path = "crates/mssql-orm-cli" }

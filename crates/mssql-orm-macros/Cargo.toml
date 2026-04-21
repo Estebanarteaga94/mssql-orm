@@ -1,0 +1,10 @@
+[package]
+name = "mssql-orm-macros"
+version.workspace = true
+edition.workspace = true
+description = "Procedural macros for entity and context metadata generation."
+
+[lib]
+proc-macro = true
+
+[dependencies]
