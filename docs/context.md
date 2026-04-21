@@ -8,10 +8,11 @@ El backlog operativo de `docs/tasks.md` ya fue alineado con ese plan maestro y a
 
 Ya existe un workspace Rust inicial con crates separadas para `mssql-orm`, `core`, `macros`, `query`, `sqlserver`, `tiberius`, `migrate` y `cli`.
 El control de versiones quedó consolidado en un único repositorio Git en la raíz; no deben existir repositorios anidados dentro de `crates/`.
+También existe CI base en GitHub Actions para validar formato, compilación, pruebas y lint del workspace.
 
 ## Objetivo Técnico Actual
 
-Consolidar la Etapa 0 sobre la base ya creada: automatización de validaciones, documentación arquitectónica mínima y preparación del terreno para implementar metadata en Etapa 1.
+Completar la Etapa 0 restante con documentación arquitectónica mínima y guías operativas, dejando el terreno listo para iniciar metadata en Etapa 1.
 
 ## Dirección Arquitectónica Vigente
 
@@ -23,6 +24,7 @@ Consolidar la Etapa 0 sobre la base ya creada: automatización de validaciones, 
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
 - `mssql-orm-macros` quedó creada como crate `proc-macro`, pero sus derives siguen siendo placeholders sin generación real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
+- El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
 
 ## Fuente de Verdad
 
@@ -40,6 +42,6 @@ Consolidar la Etapa 0 sobre la base ya creada: automatización de validaciones, 
 
 ## Próximo Enfoque Recomendado
 
-1. Configurar CI base con `cargo check`, `cargo test`, `cargo fmt --check` y `cargo clippy`.
-2. Crear README principal y documentación arquitectónica mínima por crate para fijar límites antes de Etapa 1.
+1. Crear README principal y documentación arquitectónica mínima por crate para fijar límites antes de Etapa 1.
+2. Crear documentación de colaboración con IA en `docs/ai/`.
 3. Empezar `Entity` trait y metadata base en `mssql-orm-core` solo después de cerrar la Etapa 0.
