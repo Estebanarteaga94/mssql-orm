@@ -1,0 +1,5 @@
+error: rowversion requiere Vec<u8>
+ --> tests/ui/entity_rowversion_invalid_type.rs:9:18
+  |
+9 |     pub version: String,
+  |                  ^^^^^^

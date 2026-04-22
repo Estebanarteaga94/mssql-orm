@@ -11,3 +11,6 @@ mssql-orm-query.workspace = true
 mssql-orm-sqlserver.workspace = true
 mssql-orm-tiberius.workspace = true
 mssql-orm-migrate.workspace = true
+
+[dev-dependencies]
+trybuild = "1"

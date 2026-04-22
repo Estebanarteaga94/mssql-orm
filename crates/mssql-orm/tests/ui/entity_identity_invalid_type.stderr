@@ -1,0 +1,5 @@
+error: identity solo se soporta sobre tipos enteros
+ --> tests/ui/entity_identity_invalid_type.rs:7:13
+  |
+7 |     pub id: String,
+  |             ^^^^^^

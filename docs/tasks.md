@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 1: Agregar pruebas `trybuild` para casos válidos e inválidos de entidades
 - [ ] Etapa 2: Implementar `FromRow`, `Insertable`, `Changeset` y `SqlValue`
 - [ ] Etapa 2: Implementar derives `#[derive(Insertable)]` y `#[derive(Changeset)]`
 - [ ] Etapa 2: Definir mapeo base Rust -> SQL Server para tipos soportados
@@ -52,3 +51,4 @@
 - [x] Etapa 1: Implementar `#[derive(Entity)]` con parser de atributos `#[orm(...)]`
 - [x] Etapa 1: Soportar atributos base `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`
 - [x] Etapa 1: Generar columnas estáticas para el futuro query builder
+- [x] Etapa 1: Agregar pruebas `trybuild` para casos válidos e inválidos de entidades

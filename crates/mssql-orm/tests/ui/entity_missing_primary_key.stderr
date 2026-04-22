@@ -1,0 +1,5 @@
+error: Entity requiere al menos una primary key
+ --> tests/ui/entity_missing_primary_key.rs:4:12
+  |
+4 | pub struct AuditLog {
+  |            ^^^^^^^^
