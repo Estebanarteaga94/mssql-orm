@@ -1,8 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 1: Implementar `#[derive(Entity)]` con parser de atributos `#[orm(...)]`
-- [ ] Etapa 1: Soportar atributos base `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`
 - [ ] Etapa 1: Generar columnas estáticas para el futuro query builder
 - [ ] Etapa 1: Agregar pruebas `trybuild` para casos válidos e inválidos de entidades
 - [ ] Etapa 2: Implementar `FromRow`, `Insertable`, `Changeset` y `SqlValue`
@@ -52,3 +50,5 @@
 - [x] Etapa 0: Crear documentación de colaboración con IA en `docs/ai/`
 - [x] Etapa 1: Implementar `Entity` trait y metadata base (`EntityMetadata`, `ColumnMetadata`, índices y foreign keys)
 - [x] Operativo: Corregir desalineaciones contra el plan maestro en metadata base de entidades
+- [x] Etapa 1: Implementar `#[derive(Entity)]` con parser de atributos `#[orm(...)]`
+- [x] Etapa 1: Soportar atributos base `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`

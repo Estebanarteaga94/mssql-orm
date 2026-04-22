@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sobre la metadata base ya definida en `mssql-orm-core`.
+Continuar la Etapa 1 generando columnas estáticas para el futuro query builder, sobre el `#[derive(Entity)]` ya operativo en `mssql-orm-macros`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -28,7 +28,10 @@ Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sob
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
-- `mssql-orm-macros` sigue siendo una crate `proc-macro` con derives placeholder sin generación real.
+- `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
+- El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
+- El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
+- La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
 - La arquitectura ya quedó documentada y respaldada por ADRs para SQL Server primero, separación estricta por crates y API pública concentrada en `mssql-orm`.
@@ -45,14 +48,13 @@ Continuar la Etapa 1 implementando `#[derive(Entity)]` en `mssql-orm-macros` sob
 
 ## Riesgos Inmediatos
 
-- Aunque ya existe metadata base en `core`, todavía no se genera automáticamente desde modelos Rust.
-- Los derives actuales en `mssql-orm-macros` son stubs y no deben considerarse funcionalidad implementada.
+- Aunque ya existe metadata base en `core` y `derive(Entity)` la genera, todavía no existen columnas estáticas listas para el query builder ni pruebas `trybuild` para errores de compilación.
 - Aún no existe AST útil ni integración con SQL Server/Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `#[derive(Entity)]` en `mssql-orm-macros`.
-2. Hacer que el derive genere `EntityMetadata` estática y respete tanto los tipos de `core` como el shape definido en el plan maestro.
+1. Implementar columnas estáticas generadas por `#[derive(Entity)]` para el futuro query builder.
+2. Agregar pruebas `trybuild` para casos válidos e inválidos de entidades, cubriendo reglas del macro ya introducidas.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.
