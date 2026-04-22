@@ -11,7 +11,7 @@ pub use mssql_orm_tiberius as tiberius;
 
 pub mod prelude {
     pub use mssql_orm_core::{
-        ColumnMetadata, Entity, EntityMetadata, ForeignKeyMetadata, IdentityMetadata,
+        ColumnMetadata, Entity, EntityColumn, EntityMetadata, ForeignKeyMetadata, IdentityMetadata,
         IndexColumnMetadata, IndexMetadata, OrmError, PrimaryKeyMetadata, ReferentialAction,
         SqlServerType,
     };
@@ -21,7 +21,8 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Entity, EntityMetadata, IdentityMetadata, OrmError, PrimaryKeyMetadata, SqlServerType,
+        Entity, EntityColumn, EntityMetadata, IdentityMetadata, OrmError, PrimaryKeyMetadata,
+        SqlServerType,
     };
 
     struct PublicEntity;
@@ -143,5 +144,24 @@ mod tests {
         assert_eq!(payload.max_length, Some(255));
         assert!(payload.insertable);
         assert!(payload.updatable);
+    }
+
+    #[test]
+    fn exposes_static_columns_for_future_query_builder() {
+        let email: EntityColumn<DerivedUser> = DerivedUser::email;
+        let version = DerivedUser::version;
+        let payload = AuditEntry::payload;
+
+        assert_eq!(email.rust_field(), "email");
+        assert_eq!(email.column_name(), "email");
+        assert_eq!(email.entity_metadata().table, "users");
+        assert_eq!(email.metadata().max_length, Some(180));
+
+        assert_eq!(version.column_name(), "version");
+        assert_eq!(version.metadata().sql_type, SqlServerType::RowVersion);
+        assert!(!version.metadata().insertable);
+
+        assert_eq!(payload.entity_metadata().table, "audit_entries");
+        assert_eq!(payload.metadata().column_name, "payload");
     }
 }

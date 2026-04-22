@@ -54,6 +54,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let rust_name = LitStr::new(&ident.to_string(), ident.span());
 
     let mut columns = Vec::new();
+    let mut column_symbols = Vec::new();
     let mut primary_key_columns = Vec::new();
     let mut indexes = Vec::new();
 
@@ -138,6 +139,11 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             }
         });
 
+        column_symbols.push(quote! {
+            pub const #field_ident: ::mssql_orm::core::EntityColumn<#ident> =
+                ::mssql_orm::core::EntityColumn::new(#rust_field, #column_name);
+        });
+
         for index in config.indexes {
             let index_name = index.name.unwrap_or_else(|| {
                 generated_index_name(
@@ -184,6 +190,11 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             indexes: &[#(#indexes),*],
             foreign_keys: &[],
         };
+
+        #[allow(non_upper_case_globals)]
+        impl #ident {
+            #(#column_symbols)*
+        }
 
         impl ::mssql_orm::core::Entity for #ident {
             fn metadata() -> &'static ::mssql_orm::core::EntityMetadata {

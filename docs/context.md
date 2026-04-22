@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 1 generando columnas estáticas para el futuro query builder, sobre el `#[derive(Entity)]` ya operativo en `mssql-orm-macros`.
+Continuar la Etapa 1 agregando pruebas `trybuild` para casos válidos e inválidos de entidades, sobre el `#[derive(Entity)]` y los símbolos estáticos de columna ya operativos.
 
 ## Dirección Arquitectónica Vigente
 
@@ -31,6 +31,7 @@ Continuar la Etapa 1 generando columnas estáticas para el futuro query builder,
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
+- `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -48,13 +49,13 @@ Continuar la Etapa 1 generando columnas estáticas para el futuro query builder,
 
 ## Riesgos Inmediatos
 
-- Aunque ya existe metadata base en `core` y `derive(Entity)` la genera, todavía no existen columnas estáticas listas para el query builder ni pruebas `trybuild` para errores de compilación.
+- Aunque ya existen metadata base, `derive(Entity)` y símbolos estáticos de columna, todavía faltan pruebas `trybuild` para consolidar los errores de compilación esperados del macro.
 - Aún no existe AST útil ni integración con SQL Server/Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar columnas estáticas generadas por `#[derive(Entity)]` para el futuro query builder.
-2. Agregar pruebas `trybuild` para casos válidos e inválidos de entidades, cubriendo reglas del macro ya introducidas.
+1. Agregar pruebas `trybuild` para casos válidos e inválidos de entidades, cubriendo reglas del macro ya introducidas.
+2. Mantener las convenciones de `EntityColumn` y `Entity::campo` estables mientras se prepara la futura integración con el query builder.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.

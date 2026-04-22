@@ -1,6 +1,7 @@
 //! Core contracts and shared types for the ORM.
 
 use core::fmt;
+use core::marker::PhantomData;
 
 /// Common error type placeholder for the workspace foundations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +42,42 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 /// Stable contract implemented by persisted entities.
 pub trait Entity: Sized + Send + Sync + 'static {
     fn metadata() -> &'static EntityMetadata;
+}
+
+/// Static column symbol generated for entities and consumed later by the query builder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntityColumn<E: Entity> {
+    rust_field: &'static str,
+    column_name: &'static str,
+    _entity: PhantomData<fn() -> E>,
+}
+
+impl<E: Entity> EntityColumn<E> {
+    pub const fn new(rust_field: &'static str, column_name: &'static str) -> Self {
+        Self {
+            rust_field,
+            column_name,
+            _entity: PhantomData,
+        }
+    }
+
+    pub const fn rust_field(&self) -> &'static str {
+        self.rust_field
+    }
+
+    pub const fn column_name(&self) -> &'static str {
+        self.column_name
+    }
+
+    pub fn entity_metadata(&self) -> &'static EntityMetadata {
+        E::metadata()
+    }
+
+    pub fn metadata(&self) -> &'static ColumnMetadata {
+        E::metadata()
+            .field(self.rust_field)
+            .expect("generated entity column must reference existing metadata")
+    }
 }
 
 /// SQL Server types supported by the metadata layer.
@@ -203,7 +240,7 @@ impl EntityMetadata {
 #[cfg(test)]
 mod tests {
     use super::{
-        CRATE_IDENTITY, ColumnMetadata, Entity, EntityMetadata, ForeignKeyMetadata,
+        CRATE_IDENTITY, ColumnMetadata, Entity, EntityColumn, EntityMetadata, ForeignKeyMetadata,
         IdentityMetadata, IndexColumnMetadata, IndexMetadata, OrmError, PrimaryKeyMetadata,
         ReferentialAction, SqlServerType,
     };
@@ -392,5 +429,15 @@ mod tests {
         );
         assert!(descending.descending);
         assert_eq!(descending.column_name, "created_at");
+    }
+
+    #[test]
+    fn entity_column_resolves_back_to_column_metadata() {
+        let column = EntityColumn::<User>::new("email", "email");
+
+        assert_eq!(column.rust_field(), "email");
+        assert_eq!(column.column_name(), "email");
+        assert_eq!(column.entity_metadata().table, "users");
+        assert_eq!(column.metadata(), &USER_COLUMNS[2]);
     }
 }
