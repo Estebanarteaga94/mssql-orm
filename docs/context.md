@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Empezar la Etapa 2 implementando los contratos base `FromRow`, `Insertable`, `Changeset` y `SqlValue`, manteniendo la Etapa 1 ya cerrada para metadata y derives de entidad.
+Continuar la Etapa 2 definiendo el mapeo base Rust -> SQL Server para los tipos soportados, sobre los contratos `FromRow`, `Insertable`, `Changeset` y `SqlValue` ya incorporados en `core`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -33,6 +33,7 @@ Empezar la Etapa 2 implementando los contratos base `FromRow`, `Insertable`, `Ch
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
 - La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren un caso válido de entidad y errores de compilación esperados para ausencia de PK, `identity` inválido y `rowversion` inválido.
+- `mssql-orm-core` ya define `SqlValue`, `ColumnValue`, `Row`, `FromRow`, `Insertable<E>` y `Changeset<E>` como contratos base de mapping y persistencia.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -50,13 +51,13 @@ Empezar la Etapa 2 implementando los contratos base `FromRow`, `Insertable`, `Ch
 
 ## Riesgos Inmediatos
 
-- La Etapa 1 del derive de entidades ya está funcional y validada, pero la Etapa 2 todavía no tiene contratos definidos para mapping de filas ni modelos de inserción/actualización.
+- La Etapa 2 ya tiene contratos base, pero todavía falta fijar el mapeo estándar Rust -> SQL Server y conectar esos contratos con derives reales de `Insertable` y `Changeset`.
 - Aún no existe AST útil ni integración con SQL Server/Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar en `mssql-orm-core` los contratos base `FromRow`, `Insertable`, `Changeset` y `SqlValue`.
+1. Definir el mapeo base Rust -> SQL Server para tipos soportados sobre `SqlValue` y la metadata actual.
 2. Mantener las convenciones de `EntityColumn` y `Entity::campo` estables mientras se prepara la futura integración con el query builder.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.

@@ -11,9 +11,9 @@ pub use mssql_orm_tiberius as tiberius;
 
 pub mod prelude {
     pub use mssql_orm_core::{
-        ColumnMetadata, Entity, EntityColumn, EntityMetadata, ForeignKeyMetadata, IdentityMetadata,
-        IndexColumnMetadata, IndexMetadata, OrmError, PrimaryKeyMetadata, ReferentialAction,
-        SqlServerType,
+        Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
+        ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
+        Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlValue,
     };
     pub use mssql_orm_macros::Entity;
 }
@@ -21,8 +21,8 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Entity, EntityColumn, EntityMetadata, IdentityMetadata, OrmError, PrimaryKeyMetadata,
-        SqlServerType,
+        ColumnValue, Entity, EntityColumn, EntityMetadata, IdentityMetadata, OrmError,
+        PrimaryKeyMetadata, SqlServerType, SqlValue,
     };
 
     struct PublicEntity;
@@ -50,6 +50,13 @@ mod tests {
     fn exposes_public_prelude() {
         let error = OrmError::new("public-api");
         assert_eq!(error.message(), "public-api");
+        assert_eq!(
+            ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),
+            ColumnValue {
+                column_name: "email",
+                value: SqlValue::String("ana@example.com".to_string()),
+            }
+        );
     }
 
     #[test]

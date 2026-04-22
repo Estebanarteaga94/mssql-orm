@@ -1,7 +1,10 @@
 //! Core contracts and shared types for the ORM.
 
+use chrono::{NaiveDate, NaiveDateTime};
 use core::fmt;
 use core::marker::PhantomData;
+use rust_decimal::Decimal;
+use uuid::Uuid;
 
 /// Common error type placeholder for the workspace foundations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +45,60 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 /// Stable contract implemented by persisted entities.
 pub trait Entity: Sized + Send + Sync + 'static {
     fn metadata() -> &'static EntityMetadata;
+}
+
+/// Neutral SQL value representation shared across query compilation and execution layers.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SqlValue {
+    Null,
+    Bool(bool),
+    I32(i32),
+    I64(i64),
+    F64(f64),
+    String(String),
+    Bytes(Vec<u8>),
+    Uuid(Uuid),
+    Decimal(Decimal),
+    Date(NaiveDate),
+    DateTime(NaiveDateTime),
+}
+
+/// Column/value pair produced by insert and update models.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColumnValue {
+    pub column_name: &'static str,
+    pub value: SqlValue,
+}
+
+impl ColumnValue {
+    pub const fn new(column_name: &'static str, value: SqlValue) -> Self {
+        Self { column_name, value }
+    }
+}
+
+/// Row abstraction used by the core mapping contracts without depending on Tiberius.
+pub trait Row {
+    fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError>;
+
+    fn get_required(&self, column: &str) -> Result<SqlValue, OrmError> {
+        self.try_get(column)?
+            .ok_or_else(|| OrmError::new("required column value was not present"))
+    }
+}
+
+/// Stable contract for mapping a SQL row into a Rust type.
+pub trait FromRow: Sized {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError>;
+}
+
+/// Stable contract for extracting persisted values for inserts.
+pub trait Insertable<E: Entity> {
+    fn values(&self) -> Vec<ColumnValue>;
+}
+
+/// Stable contract for extracting changed values for updates.
+pub trait Changeset<E: Entity> {
+    fn changes(&self) -> Vec<ColumnValue>;
 }
 
 /// Static column symbol generated for entities and consumed later by the query builder.
@@ -240,10 +297,12 @@ impl EntityMetadata {
 #[cfg(test)]
 mod tests {
     use super::{
-        CRATE_IDENTITY, ColumnMetadata, Entity, EntityColumn, EntityMetadata, ForeignKeyMetadata,
-        IdentityMetadata, IndexColumnMetadata, IndexMetadata, OrmError, PrimaryKeyMetadata,
-        ReferentialAction, SqlServerType,
+        CRATE_IDENTITY, Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn,
+        EntityMetadata, ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata,
+        IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
+        SqlServerType, SqlValue,
     };
+    use std::collections::BTreeMap;
 
     const USER_COLUMNS: [ColumnMetadata; 4] = [
         ColumnMetadata {
@@ -348,6 +407,64 @@ mod tests {
         }
     }
 
+    struct TestRow {
+        values: BTreeMap<&'static str, SqlValue>,
+    }
+
+    impl Row for TestRow {
+        fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError> {
+            Ok(self.values.get(column).cloned())
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    struct UserRecord {
+        id: i64,
+        email: String,
+    }
+
+    impl FromRow for UserRecord {
+        fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+            let id = match row.get_required("id")? {
+                SqlValue::I64(value) => value,
+                _ => return Err(OrmError::new("expected i64 value")),
+            };
+
+            let email = match row.get_required("email")? {
+                SqlValue::String(value) => value,
+                _ => return Err(OrmError::new("expected string value")),
+            };
+
+            Ok(Self { id, email })
+        }
+    }
+
+    struct NewUser {
+        email: String,
+    }
+
+    impl Insertable<User> for NewUser {
+        fn values(&self) -> Vec<ColumnValue> {
+            vec![ColumnValue::new(
+                "email",
+                SqlValue::String(self.email.clone()),
+            )]
+        }
+    }
+
+    struct UpdateUser {
+        email: Option<String>,
+    }
+
+    impl Changeset<User> for UpdateUser {
+        fn changes(&self) -> Vec<ColumnValue> {
+            self.email
+                .clone()
+                .map(|email| vec![ColumnValue::new("email", SqlValue::String(email))])
+                .unwrap_or_default()
+        }
+    }
+
     #[test]
     fn exposes_foundation_identity() {
         assert_eq!(CRATE_IDENTITY.name, "mssql-orm-core");
@@ -439,5 +556,51 @@ mod tests {
         assert_eq!(column.column_name(), "email");
         assert_eq!(column.entity_metadata().table, "users");
         assert_eq!(column.metadata(), &USER_COLUMNS[2]);
+    }
+
+    #[test]
+    fn sql_value_and_row_contract_support_basic_mapping() {
+        let row = TestRow {
+            values: BTreeMap::from([
+                ("id", SqlValue::I64(7)),
+                ("email", SqlValue::String("ana@example.com".to_string())),
+            ]),
+        };
+
+        let record = UserRecord::from_row(&row).expect("row mapping should succeed");
+
+        assert_eq!(
+            record,
+            UserRecord {
+                id: 7,
+                email: "ana@example.com".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn insertable_and_changeset_return_column_values() {
+        let insert = NewUser {
+            email: "ana@example.com".to_string(),
+        };
+        let changes = UpdateUser {
+            email: Some("ana.maria@example.com".to_string()),
+        };
+
+        assert_eq!(
+            insert.values(),
+            vec![ColumnValue::new(
+                "email",
+                SqlValue::String("ana@example.com".to_string())
+            )]
+        );
+        assert_eq!(
+            changes.changes(),
+            vec![ColumnValue::new(
+                "email",
+                SqlValue::String("ana.maria@example.com".to_string())
+            )]
+        );
+        assert!(UpdateUser { email: None }.changes().is_empty());
     }
 }
