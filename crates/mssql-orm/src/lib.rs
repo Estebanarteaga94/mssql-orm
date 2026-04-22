@@ -13,7 +13,8 @@ pub mod prelude {
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
-        Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlValue,
+        Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType,
+        SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::Entity;
 }
@@ -22,7 +23,7 @@ pub mod prelude {
 mod tests {
     use super::prelude::{
         ColumnValue, Entity, EntityColumn, EntityMetadata, IdentityMetadata, OrmError,
-        PrimaryKeyMetadata, SqlServerType, SqlValue,
+        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
     };
 
     struct PublicEntity;
@@ -57,6 +58,7 @@ mod tests {
                 value: SqlValue::String("ana@example.com".to_string()),
             }
         );
+        assert_eq!(String::SQL_SERVER_TYPE, SqlServerType::NVarChar);
     }
 
     #[test]

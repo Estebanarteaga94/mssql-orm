@@ -47,6 +47,18 @@ pub trait Entity: Sized + Send + Sync + 'static {
     fn metadata() -> &'static EntityMetadata;
 }
 
+/// Base Rust <-> SQL Server mapping contract used by row readers and persistence models.
+pub trait SqlTypeMapping: Sized {
+    const SQL_SERVER_TYPE: SqlServerType;
+    const DEFAULT_MAX_LENGTH: Option<u32> = None;
+    const DEFAULT_PRECISION: Option<u8> = None;
+    const DEFAULT_SCALE: Option<u8> = None;
+
+    fn to_sql_value(self) -> SqlValue;
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError>;
+}
+
 /// Neutral SQL value representation shared across query compilation and execution layers.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SqlValue {
@@ -83,6 +95,14 @@ pub trait Row {
     fn get_required(&self, column: &str) -> Result<SqlValue, OrmError> {
         self.try_get(column)?
             .ok_or_else(|| OrmError::new("required column value was not present"))
+    }
+
+    fn try_get_typed<T: SqlTypeMapping>(&self, column: &str) -> Result<Option<T>, OrmError> {
+        self.try_get(column)?.map(T::from_sql_value).transpose()
+    }
+
+    fn get_required_typed<T: SqlTypeMapping>(&self, column: &str) -> Result<T, OrmError> {
+        T::from_sql_value(self.get_required(column)?)
     }
 }
 
@@ -155,6 +175,180 @@ pub enum SqlServerType {
     VarBinary,
     RowVersion,
     Custom(&'static str),
+}
+
+impl SqlTypeMapping for bool {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::Bit;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::Bool(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Bool(value) => Ok(value),
+            _ => Err(OrmError::new("expected bool value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for i32 {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::Int;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::I32(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::I32(value) => Ok(value),
+            _ => Err(OrmError::new("expected i32 value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for i64 {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::BigInt;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::I64(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::I64(value) => Ok(value),
+            _ => Err(OrmError::new("expected i64 value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for f64 {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::Float;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::F64(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::F64(value) => Ok(value),
+            _ => Err(OrmError::new("expected f64 value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for String {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::NVarChar;
+    const DEFAULT_MAX_LENGTH: Option<u32> = Some(255);
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::String(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::String(value) => Ok(value),
+            _ => Err(OrmError::new("expected string value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for Vec<u8> {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::VarBinary;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::Bytes(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Bytes(value) => Ok(value),
+            _ => Err(OrmError::new("expected bytes value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for Uuid {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::UniqueIdentifier;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::Uuid(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Uuid(value) => Ok(value),
+            _ => Err(OrmError::new("expected uuid value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for Decimal {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::Decimal;
+    const DEFAULT_PRECISION: Option<u8> = Some(18);
+    const DEFAULT_SCALE: Option<u8> = Some(2);
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::Decimal(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Decimal(value) => Ok(value),
+            _ => Err(OrmError::new("expected decimal value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for NaiveDate {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::Date;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::Date(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Date(value) => Ok(value),
+            _ => Err(OrmError::new("expected date value")),
+        }
+    }
+}
+
+impl SqlTypeMapping for NaiveDateTime {
+    const SQL_SERVER_TYPE: SqlServerType = SqlServerType::DateTime2;
+
+    fn to_sql_value(self) -> SqlValue {
+        SqlValue::DateTime(self)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::DateTime(value) => Ok(value),
+            _ => Err(OrmError::new("expected datetime value")),
+        }
+    }
+}
+
+impl<T> SqlTypeMapping for Option<T>
+where
+    T: SqlTypeMapping,
+{
+    const SQL_SERVER_TYPE: SqlServerType = T::SQL_SERVER_TYPE;
+    const DEFAULT_MAX_LENGTH: Option<u32> = T::DEFAULT_MAX_LENGTH;
+    const DEFAULT_PRECISION: Option<u8> = T::DEFAULT_PRECISION;
+    const DEFAULT_SCALE: Option<u8> = T::DEFAULT_SCALE;
+
+    fn to_sql_value(self) -> SqlValue {
+        self.map(T::to_sql_value).unwrap_or(SqlValue::Null)
+    }
+
+    fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
+        match value {
+            SqlValue::Null => Ok(None),
+            other => T::from_sql_value(other).map(Some),
+        }
+    }
 }
 
 /// Metadata for SQL Server identity columns.
@@ -300,9 +494,12 @@ mod tests {
         CRATE_IDENTITY, Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn,
         EntityMetadata, ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata,
         IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
-        SqlServerType, SqlValue,
+        SqlServerType, SqlTypeMapping, SqlValue,
     };
+    use chrono::{NaiveDate, NaiveDateTime};
+    use rust_decimal::Decimal;
     use std::collections::BTreeMap;
+    use uuid::Uuid;
 
     const USER_COLUMNS: [ColumnMetadata; 4] = [
         ColumnMetadata {
@@ -425,15 +622,8 @@ mod tests {
 
     impl FromRow for UserRecord {
         fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-            let id = match row.get_required("id")? {
-                SqlValue::I64(value) => value,
-                _ => return Err(OrmError::new("expected i64 value")),
-            };
-
-            let email = match row.get_required("email")? {
-                SqlValue::String(value) => value,
-                _ => return Err(OrmError::new("expected string value")),
-            };
+            let id = row.get_required_typed::<i64>("id")?;
+            let email = row.get_required_typed::<String>("email")?;
 
             Ok(Self { id, email })
         }
@@ -602,5 +792,55 @@ mod tests {
             )]
         );
         assert!(UpdateUser { email: None }.changes().is_empty());
+    }
+
+    #[test]
+    fn sql_type_mapping_exposes_default_sqlserver_conventions() {
+        assert_eq!(String::SQL_SERVER_TYPE, SqlServerType::NVarChar);
+        assert_eq!(String::DEFAULT_MAX_LENGTH, Some(255));
+        assert_eq!(bool::SQL_SERVER_TYPE, SqlServerType::Bit);
+        assert_eq!(i32::SQL_SERVER_TYPE, SqlServerType::Int);
+        assert_eq!(i64::SQL_SERVER_TYPE, SqlServerType::BigInt);
+        assert_eq!(Uuid::SQL_SERVER_TYPE, SqlServerType::UniqueIdentifier);
+        assert_eq!(NaiveDateTime::SQL_SERVER_TYPE, SqlServerType::DateTime2);
+        assert_eq!(Decimal::SQL_SERVER_TYPE, SqlServerType::Decimal);
+        assert_eq!(Decimal::DEFAULT_PRECISION, Some(18));
+        assert_eq!(Decimal::DEFAULT_SCALE, Some(2));
+        assert_eq!(Vec::<u8>::SQL_SERVER_TYPE, SqlServerType::VarBinary);
+        assert_eq!(Option::<String>::SQL_SERVER_TYPE, SqlServerType::NVarChar);
+        assert_eq!(Option::<String>::DEFAULT_MAX_LENGTH, Some(255));
+    }
+
+    #[test]
+    fn sql_type_mapping_roundtrips_supported_values() {
+        let uuid = Uuid::nil();
+        let date = NaiveDate::from_ymd_opt(2026, 4, 21).expect("valid date");
+        let datetime = date.and_hms_opt(14, 30, 0).expect("valid datetime");
+        let decimal = Decimal::new(12345, 2);
+
+        assert_eq!(bool::from_sql_value(true.to_sql_value()), Ok(true));
+        assert_eq!(i32::from_sql_value(42_i32.to_sql_value()), Ok(42));
+        assert_eq!(i64::from_sql_value(99_i64.to_sql_value()), Ok(99));
+        assert_eq!(f64::from_sql_value(10.5_f64.to_sql_value()), Ok(10.5));
+        assert_eq!(
+            String::from_sql_value("ana@example.com".to_string().to_sql_value()),
+            Ok("ana@example.com".to_string())
+        );
+        assert_eq!(
+            Vec::<u8>::from_sql_value(vec![1_u8, 2, 3].to_sql_value()),
+            Ok(vec![1, 2, 3])
+        );
+        assert_eq!(Uuid::from_sql_value(uuid.to_sql_value()), Ok(uuid));
+        assert_eq!(Decimal::from_sql_value(decimal.to_sql_value()), Ok(decimal));
+        assert_eq!(NaiveDate::from_sql_value(date.to_sql_value()), Ok(date));
+        assert_eq!(
+            NaiveDateTime::from_sql_value(datetime.to_sql_value()),
+            Ok(datetime)
+        );
+        assert_eq!(Option::<String>::from_sql_value(SqlValue::Null), Ok(None));
+        assert_eq!(
+            Option::<String>::from_sql_value(SqlValue::String("ana".to_string())),
+            Ok(Some("ana".to_string()))
+        );
     }
 }
