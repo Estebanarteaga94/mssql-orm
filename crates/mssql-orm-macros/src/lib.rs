@@ -20,13 +20,19 @@ pub fn derive_db_context(_input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Insertable, attributes(orm))]
-pub fn derive_insertable(_input: TokenStream) -> TokenStream {
-    TokenStream::new()
+pub fn derive_insertable(input: TokenStream) -> TokenStream {
+    match derive_insertable_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
 }
 
 #[proc_macro_derive(Changeset, attributes(orm))]
-pub fn derive_changeset(_input: TokenStream) -> TokenStream {
-    TokenStream::new()
+pub fn derive_changeset(input: TokenStream) -> TokenStream {
+    match derive_changeset_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
 }
 
 fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
@@ -204,6 +210,117 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     })
 }
 
+fn derive_insertable_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let model_config = parse_persistence_model_config(&input.attrs, "Insertable")?;
+    let entity = model_config
+        .entity
+        .as_ref()
+        .expect("validated persistence model must include entity");
+    let fields = extract_named_fields(&ident, input.data, "Insertable")?;
+
+    let values = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "Insertable requiere campos nombrados"))?;
+            let field_config = parse_persistence_field_config(field, "Insertable")?;
+            let field_ty = &field.ty;
+            let column_name =
+                persistence_column_name_expr(entity, field_ident, field_config.column.as_ref());
+
+            Ok(quote! {
+                ::mssql_orm::core::ColumnValue::new(
+                    #column_name,
+                    <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        ::core::clone::Clone::clone(&self.#field_ident)
+                    ),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl ::mssql_orm::core::Insertable<#entity> for #ident {
+            fn values(&self) -> ::std::vec::Vec<::mssql_orm::core::ColumnValue> {
+                ::std::vec![#(#values),*]
+            }
+        }
+    })
+}
+
+fn derive_changeset_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let model_config = parse_persistence_model_config(&input.attrs, "Changeset")?;
+    let entity = model_config
+        .entity
+        .as_ref()
+        .expect("validated persistence model must include entity");
+    let fields = extract_named_fields(&ident, input.data, "Changeset")?;
+
+    let changes = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "Changeset requiere campos nombrados"))?;
+            let field_config = parse_persistence_field_config(field, "Changeset")?;
+            let inner_ty = option_inner_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "Changeset requiere Option<T> en cada campo para distinguir campos omitidos",
+                )
+            })?;
+            let column_name =
+                persistence_column_name_expr(entity, field_ident, field_config.column.as_ref());
+
+            Ok(quote! {
+                if let ::core::option::Option::Some(value) = &self.#field_ident {
+                    changes.push(::mssql_orm::core::ColumnValue::new(
+                        #column_name,
+                        <#inner_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                            ::core::clone::Clone::clone(value)
+                        ),
+                    ));
+                }
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl ::mssql_orm::core::Changeset<#entity> for #ident {
+            fn changes(&self) -> ::std::vec::Vec<::mssql_orm::core::ColumnValue> {
+                let mut changes = ::std::vec::Vec::new();
+                #(#changes)*
+                changes
+            }
+        }
+    })
+}
+
+fn extract_named_fields(
+    ident: &Ident,
+    data: Data,
+    derive_name: &str,
+) -> Result<syn::punctuated::Punctuated<Field, syn::token::Comma>> {
+    match data {
+        Data::Struct(data) => match data.fields {
+            Fields::Named(fields) => Ok(fields.named),
+            _ => Err(Error::new_spanned(
+                ident,
+                format!("{derive_name} solo soporta structs con campos nombrados"),
+            )),
+        },
+        _ => Err(Error::new_spanned(
+            ident,
+            format!("{derive_name} solo soporta structs"),
+        )),
+    }
+}
+
 fn has_explicit_primary_key(
     fields: &syn::punctuated::Punctuated<Field, syn::token::Comma>,
 ) -> Result<bool> {
@@ -213,6 +330,42 @@ fn has_explicit_primary_key(
         }
     }
     Ok(false)
+}
+
+fn parse_persistence_model_config(
+    attrs: &[syn::Attribute],
+    derive_name: &str,
+) -> Result<PersistenceModelConfig> {
+    let mut config = PersistenceModelConfig::default();
+
+    for attr in attrs {
+        if !attr.path().is_ident("orm") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("entity") {
+                config.entity = Some(meta.value()?.parse()?);
+            } else {
+                return Err(meta.error(format!(
+                    "atributo orm no soportado a nivel de {derive_name}"
+                )));
+            }
+
+            Ok(())
+        })?;
+    }
+
+    let Some(entity) = config.entity else {
+        return Err(Error::new(
+            Span::call_site(),
+            format!("{derive_name} requiere #[orm(entity = MiEntidad)]"),
+        ));
+    };
+
+    Ok(PersistenceModelConfig {
+        entity: Some(entity),
+    })
 }
 
 fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
@@ -230,6 +383,33 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                 config.schema = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else {
                 return Err(meta.error("atributo orm no soportado a nivel de entidad"));
+            }
+
+            Ok(())
+        })?;
+    }
+
+    Ok(config)
+}
+
+fn parse_persistence_field_config(
+    field: &Field,
+    derive_name: &str,
+) -> Result<PersistenceFieldConfig> {
+    let mut config = PersistenceFieldConfig::default();
+
+    for attr in &field.attrs {
+        if !attr.path().is_ident("orm") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column") {
+                config.column = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else {
+                return Err(meta.error(format!(
+                    "atributo orm no soportado en campos de {derive_name}"
+                )));
             }
 
             Ok(())
@@ -354,6 +534,49 @@ fn option_lit_str(value: Option<LitStr>) -> TokenStream2 {
     match value {
         Some(value) => quote! { Some(#value) },
         None => quote! { None },
+    }
+}
+
+fn persistence_column_name_expr(
+    entity: &Type,
+    field_ident: &Ident,
+    explicit_column: Option<&LitStr>,
+) -> TokenStream2 {
+    let field_name = LitStr::new(&field_ident.to_string(), field_ident.span());
+
+    match explicit_column {
+        Some(column_name) => {
+            let error = LitStr::new(
+                &format!(
+                    "la columna '{}' no existe en la metadata de la entidad de destino",
+                    column_name.value()
+                ),
+                column_name.span(),
+            );
+
+            quote! {{
+                <#entity as ::mssql_orm::core::Entity>::metadata()
+                    .column(#column_name)
+                    .expect(#error)
+                    .column_name
+            }}
+        }
+        None => {
+            let error = LitStr::new(
+                &format!(
+                    "el campo '{}' no existe en la metadata de la entidad de destino",
+                    field_ident
+                ),
+                field_ident.span(),
+            );
+
+            quote! {{
+                <#entity as ::mssql_orm::core::Entity>::metadata()
+                    .field(#field_name)
+                    .expect(#error)
+                    .column_name
+            }}
+        }
     }
 }
 
@@ -584,6 +807,16 @@ fn generated_index_name(prefix: &str, table: &str, column: &str, span: Span) -> 
 struct EntityConfig {
     table: Option<LitStr>,
     schema: Option<LitStr>,
+}
+
+#[derive(Default)]
+struct PersistenceModelConfig {
+    entity: Option<Type>,
+}
+
+#[derive(Default)]
+struct PersistenceFieldConfig {
+    column: Option<LitStr>,
 }
 
 #[derive(Default)]

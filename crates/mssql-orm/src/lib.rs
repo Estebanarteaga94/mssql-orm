@@ -16,14 +16,14 @@ pub mod prelude {
         Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType,
         SqlTypeMapping, SqlValue,
     };
-    pub use mssql_orm_macros::Entity;
+    pub use mssql_orm_macros::{Changeset, Entity, Insertable};
 }
 
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        ColumnValue, Entity, EntityColumn, EntityMetadata, IdentityMetadata, OrmError,
-        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
+        Changeset, ColumnValue, Entity, EntityColumn, EntityMetadata, IdentityMetadata, Insertable,
+        OrmError, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
     };
 
     struct PublicEntity;
@@ -94,6 +94,24 @@ mod tests {
     struct AuditEntry {
         id: i64,
         payload: String,
+    }
+
+    #[derive(Insertable, Debug, Clone)]
+    #[orm(entity = DerivedUser)]
+    struct NewDerivedUser {
+        email: String,
+        display_name: Option<String>,
+        #[orm(column = "created_by")]
+        author: String,
+    }
+
+    #[derive(Changeset, Debug, Clone)]
+    #[orm(entity = DerivedUser)]
+    struct UpdateDerivedUser {
+        email: Option<String>,
+        display_name: Option<Option<String>>,
+        #[orm(column = "created_by")]
+        author: Option<String>,
     }
 
     #[test]
@@ -172,5 +190,47 @@ mod tests {
 
         assert_eq!(payload.entity_metadata().table, "audit_entries");
         assert_eq!(payload.metadata().column_name, "payload");
+    }
+
+    #[test]
+    fn derives_insertable_values_from_named_fields() {
+        let insertable = NewDerivedUser {
+            email: "ana@example.com".to_string(),
+            display_name: None,
+            author: "system".to_string(),
+        };
+
+        let values = <NewDerivedUser as Insertable<DerivedUser>>::values(&insertable);
+
+        assert_eq!(
+            values,
+            vec![
+                ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),
+                ColumnValue::new("display_name", SqlValue::Null),
+                ColumnValue::new("created_by", SqlValue::String("system".to_string())),
+            ]
+        );
+    }
+
+    #[test]
+    fn derives_changeset_with_outer_option_semantics() {
+        let changeset = UpdateDerivedUser {
+            email: Some("ana.maria@example.com".to_string()),
+            display_name: Some(None),
+            author: None,
+        };
+
+        let changes = <UpdateDerivedUser as Changeset<DerivedUser>>::changes(&changeset);
+
+        assert_eq!(
+            changes,
+            vec![
+                ColumnValue::new(
+                    "email",
+                    SqlValue::String("ana.maria@example.com".to_string())
+                ),
+                ColumnValue::new("display_name", SqlValue::Null),
+            ]
+        );
     }
 }

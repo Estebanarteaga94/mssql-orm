@@ -1,0 +1,7 @@
+error: Insertable requiere #[orm(entity = MiEntidad)]
+ --> tests/ui/insertable_missing_entity.rs:3:10
+  |
+3 | #[derive(Insertable, Debug, Clone)]
+  |          ^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `Insertable` (in Nightly builds, run with -Z macro-backtrace for more info)
