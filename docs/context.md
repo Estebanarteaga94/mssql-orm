@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 3 implementando el AST de queries y `CompiledQuery` dentro de `mssql-orm-query`, ahora que la Etapa 2 ya quedó cubierta con contratos, derives y pruebas de mapping/persistencia.
+Continuar la Etapa 3 implementando quoting seguro de identificadores y luego compilación SQL Server en `mssql-orm-sqlserver`, ahora que `mssql-orm-query` ya dispone de un AST real y del contrato `CompiledQuery`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -39,6 +39,9 @@ Iniciar la Etapa 3 implementando el AST de queries y `CompiledQuery` dentro de `
 - `Insertable` soporta `#[orm(column = "...")]` por campo y produce `Vec<ColumnValue>` resolviendo el nombre final de columna contra la metadata de la entidad objetivo.
 - `Changeset` exige `Option<T>` en el nivel externo de cada campo para mantener la semántica de omisión de cambios; esto permite también `Option<Option<T>>` para representar actualizaciones a `NULL`.
 - La crate pública `mssql-orm` ya incluye una prueba de integración de Etapa 2 sobre un `Row` neutral, con cobertura de lectura tipada exitosa, ausencia de columna requerida, mismatch de tipo, `NULL` opcional y extracción de `ColumnValue` desde modelos `Insertable` y `Changeset`.
+- `mssql-orm-query` ya dejó de ser un placeholder y ahora expone `Expr`, `Predicate`, `SelectQuery`, `CountQuery`, `InsertQuery`, `UpdateQuery`, `DeleteQuery`, `OrderBy`, `Pagination`, `TableRef`, `ColumnRef` y `CompiledQuery`.
+- El AST de `mssql-orm-query` reutiliza `EntityColumn<E>` y metadata estática de `core` para construir referencias de tabla y columna sin generar SQL directo.
+- `InsertQuery` y `UpdateQuery` ya se pueden construir desde `Insertable<E>` y `Changeset<E>`, conectando persistencia estructural con la futura compilación SQL Server.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -57,12 +60,13 @@ Iniciar la Etapa 3 implementando el AST de queries y `CompiledQuery` dentro de `
 
 ## Riesgos Inmediatos
 
-- La Etapa 2 ya quedó validada a nivel de contratos, derives y pruebas, pero todavía no existe AST útil ni integración con SQL Server/Tiberius.
+- Ya existe AST útil, pero todavía no existe quoting seguro de identificadores ni compilación SQL Server sobre ese AST.
+- `CompiledQuery` ya está definido, pero aún no hay una implementación que traduzca `Expr`/`Predicate`/operaciones a SQL parametrizado `@P1..@Pn`.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 3: Implementar AST de queries y CompiledQuery` dentro de `mssql-orm-query`, sin mezclar todavía compilación SQL.
-2. Mantener las convenciones de `EntityColumn`, `Entity::campo`, `Insertable` y `Changeset` estables mientras se construye el AST sobre esos símbolos.
-3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.
+1. Ejecutar `Etapa 3: Implementar quoting seguro de identificadores SQL Server` en `mssql-orm-sqlserver`.
+2. Continuar con `Etapa 3: Compilar select, insert, update, delete y count a SQL parametrizado @P1..@Pn`, reutilizando `CompiledQuery`.
+3. Mantener las convenciones de `EntityColumn`, `Insertable`, `Changeset` y el AST estables mientras se construye el compilador.
