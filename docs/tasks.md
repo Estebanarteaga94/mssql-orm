@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 2: Crear pruebas de mapping de filas y extracción de valores persistibles
 - [ ] Etapa 3: Implementar AST de queries y `CompiledQuery`
 - [ ] Etapa 3: Implementar quoting seguro de identificadores SQL Server
 - [ ] Etapa 3: Compilar `select`, `insert`, `update`, `delete` y `count` a SQL parametrizado `@P1..@Pn`
@@ -52,3 +51,4 @@
 - [x] Etapa 2: Implementar `FromRow`, `Insertable`, `Changeset` y `SqlValue`
 - [x] Etapa 2: Definir mapeo base Rust -> SQL Server para tipos soportados
 - [x] Etapa 2: Implementar derives `#[derive(Insertable)]` y `#[derive(Changeset)]`
+- [x] Etapa 2: Crear pruebas de mapping de filas y extracción de valores persistibles

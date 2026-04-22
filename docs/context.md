@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 2 fortaleciendo las pruebas de mapping de filas y extracción de valores persistibles, ahora que `#[derive(Insertable)]` y `#[derive(Changeset)]` ya están implementados sobre los contratos base de `core`.
+Iniciar la Etapa 3 implementando el AST de queries y `CompiledQuery` dentro de `mssql-orm-query`, ahora que la Etapa 2 ya quedó cubierta con contratos, derives y pruebas de mapping/persistencia.
 
 ## Dirección Arquitectónica Vigente
 
@@ -38,6 +38,7 @@ Continuar la Etapa 2 fortaleciendo las pruebas de mapping de filas y extracción
 - `mssql-orm-macros` ya implementa `#[derive(Insertable)]` y `#[derive(Changeset)]` para structs con campos nombrados usando `#[orm(entity = MiEntidad)]`.
 - `Insertable` soporta `#[orm(column = "...")]` por campo y produce `Vec<ColumnValue>` resolviendo el nombre final de columna contra la metadata de la entidad objetivo.
 - `Changeset` exige `Option<T>` en el nivel externo de cada campo para mantener la semántica de omisión de cambios; esto permite también `Option<Option<T>>` para representar actualizaciones a `NULL`.
+- La crate pública `mssql-orm` ya incluye una prueba de integración de Etapa 2 sobre un `Row` neutral, con cobertura de lectura tipada exitosa, ausencia de columna requerida, mismatch de tipo, `NULL` opcional y extracción de `ColumnValue` desde modelos `Insertable` y `Changeset`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -56,13 +57,12 @@ Continuar la Etapa 2 fortaleciendo las pruebas de mapping de filas y extracción
 
 ## Riesgos Inmediatos
 
-- La Etapa 2 ya tiene derives reales de `Insertable` y `Changeset`, pero todavía falta ampliar la cobertura de pruebas alrededor de `FromRow` y de la extracción de valores persistibles en escenarios más cercanos al uso real.
-- Aún no existe AST útil ni integración con SQL Server/Tiberius.
+- La Etapa 2 ya quedó validada a nivel de contratos, derives y pruebas, pero todavía no existe AST útil ni integración con SQL Server/Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 2: Crear pruebas de mapping de filas y extracción de valores persistibles`, ampliando cobertura sobre modelos derivados y casos nulos.
-2. Mantener las convenciones de `EntityColumn`, `Entity::campo`, `Insertable` y `Changeset` estables mientras se prepara la futura integración con query builder y capa de ejecución.
+1. Ejecutar `Etapa 3: Implementar AST de queries y CompiledQuery` dentro de `mssql-orm-query`, sin mezclar todavía compilación SQL.
+2. Mantener las convenciones de `EntityColumn`, `Entity::campo`, `Insertable` y `Changeset` estables mientras se construye el AST sobre esos símbolos.
 3. Mantener `README`, arquitectura, ADRs y `docs/ai/` sincronizados si cambia el proceso operativo o algún límite entre crates.
