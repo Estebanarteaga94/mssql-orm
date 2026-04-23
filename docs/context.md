@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Avanzar desde la capa base ya validada de Active Record hacia la subtarea de `entity.delete(&db)`, manteniendo la API pública concentrada en `mssql-orm` y dejando `save(&db)` como último frente de Etapa 10.
+Avanzar desde `entity.delete(&db)` ya cerrado hacia la última subtarea de Etapa 10, `entity.save(&db)`, manteniendo la API pública concentrada en `mssql-orm`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -140,6 +140,7 @@ Avanzar desde la capa base ya validada de Active Record hacia la subtarea de `en
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
 - La crate pública `mssql-orm` ahora también expone `ActiveRecord`, implementado blanket sobre toda `Entity`; su superficie mínima actual es `Entity::query(&db)` y `Entity::find(&db, id)`, delegando estrictamente a `DbContextEntitySet<E>` y `DbSet<E>`.
 - La cobertura de Active Record base ya quedó separada de la batería genérica: existe `tests/active_record_trybuild.rs` para contratos de compilación y `tests/stage10_public_active_record.rs` para roundtrip real de `query/find` contra SQL Server.
+- `entity.delete(&db)` ya quedó implementado sobre Active Record reutilizando `DbSet::delete` a través de un helper oculto de PK simple generado por `#[derive(Entity)]`; para PK compuesta sigue retornando error explícito de etapa.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -167,8 +168,8 @@ Avanzar desde la capa base ya validada de Active Record hacia la subtarea de `en
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
-- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; Etapa 10 ya tiene tanto su base de resolución tipada `DbContext -> DbSet<T>` como la surface mínima `ActiveRecord::query/find` con cobertura dedicada.
-- `save/delete` siguen fuera del alcance activo porque requieren una estrategia más explícita para PK y persistencia de instancias.
+- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; Etapa 10 ya tiene resolución tipada `DbContext -> DbSet<T>`, `ActiveRecord::query/find`, cobertura dedicada y `entity.delete(&db)`.
+- El único frente restante de Etapa 10 es `entity.save(&db)`, que requiere una estrategia explícita para PK y persistencia de instancias sin duplicar `DbSet::update`.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -179,6 +180,6 @@ Avanzar desde la capa base ya validada de Active Record hacia la subtarea de `en
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 10: Diseñar e implementar entity.delete(&db) sobre Active Record sin duplicar la lógica de DbSet`.
-2. Mantener `ActiveRecord::query/find` como simple capa de conveniencia sobre `DbContextEntitySet<E>` y `DbSet<E>`, y aplicar el mismo criterio a `delete`.
+1. Implementar `Etapa 10: Diseñar e implementar entity.save(&db) sobre Active Record con estrategia explícita de PK y persistencia`.
+2. Reutilizar la misma filosofía aplicada a `delete(&db)`: `save(&db)` debe apoyarse en `DbSet` y en helpers generados por macro, sin otra ruta de ejecución paralela.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

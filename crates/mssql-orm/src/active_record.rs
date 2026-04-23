@@ -1,6 +1,11 @@
 use crate::{DbContextEntitySet, DbSetQuery};
 use core::future::Future;
-use mssql_orm_core::{Entity, FromRow, OrmError, SqlTypeMapping};
+use mssql_orm_core::{Entity, FromRow, OrmError, SqlTypeMapping, SqlValue};
+
+#[doc(hidden)]
+pub trait EntityPrimaryKey: Entity {
+    fn primary_key_value(&self) -> Result<SqlValue, OrmError>;
+}
 
 pub trait ActiveRecord: Entity + Sized {
     fn query<C>(db: &C) -> DbSetQuery<Self>
@@ -18,13 +23,23 @@ pub trait ActiveRecord: Entity + Sized {
     {
         db.db_set().find(key)
     }
+
+    fn delete<C>(&self, db: &C) -> impl Future<Output = Result<bool, OrmError>> + Send
+    where
+        C: DbContextEntitySet<Self> + Sync,
+        Self: EntityPrimaryKey,
+    {
+        let key = <Self as EntityPrimaryKey>::primary_key_value(self);
+
+        async move { db.db_set().delete_by_sql_value(key?).await }
+    }
 }
 
 impl<E: Entity> ActiveRecord for E {}
 
 #[cfg(test)]
 mod tests {
-    use super::ActiveRecord;
+    use super::{ActiveRecord, EntityPrimaryKey};
     use crate::{DbContext, DbContextEntitySet, DbSet};
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row,
@@ -74,6 +89,12 @@ mod tests {
     impl FromRow for TestEntity {
         fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
             Ok(Self)
+        }
+    }
+
+    impl EntityPrimaryKey for TestEntity {
+        fn primary_key_value(&self) -> Result<mssql_orm_core::SqlValue, OrmError> {
+            Ok(mssql_orm_core::SqlValue::I64(7))
         }
     }
 
@@ -133,6 +154,27 @@ mod tests {
         assert_eq!(
             error,
             OrmError::new("DbSetQuery requires an initialized shared connection")
+        );
+    }
+
+    #[test]
+    fn active_record_delete_reuses_dbset_error_contract() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let entity = TestEntity;
+
+        let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let error = match runtime.block_on(entity.delete(&context)) {
+            Ok(value) => {
+                panic!("expected disconnected ActiveRecord::delete to fail, got {value:?}")
+            }
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error,
+            OrmError::new("DbSet requires an initialized shared connection")
         );
     }
 }

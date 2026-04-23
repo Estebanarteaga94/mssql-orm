@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: `entity.delete(&db)` para Active Record
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como referencia para la subtarea de borrado Active Record.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 10: Diseñar e implementar entity.delete(&db) sobre Active Record sin duplicar la lógica de DbSet` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió en `crates/mssql-orm/src/active_record.rs` el método `delete(&db)` sobre `ActiveRecord`, delegando a `DbSet::delete_by_sql_value(...)` y manteniendo toda la ejecución real dentro de la capa ya existente.
+- Se introdujo el helper oculto `EntityPrimaryKey` en la crate pública y `crates/mssql-orm-macros/src/lib.rs` ahora implementa ese contrato automáticamente para `#[derive(Entity)]`, extrayendo la PK simple como `SqlValue` y rechazando PK compuesta con error explícito de etapa.
+- `crates/mssql-orm/src/context.rs` ahora también expone internamente la ruta `delete_by_sql_value(...)`, reutilizando la misma compilación SQL y el mismo contrato de borrado por PK ya existente en `DbSet`.
+- Se amplió `crates/mssql-orm/tests/active_record_trybuild.rs` con `active_record_delete_public_valid.rs` y se extendió `crates/mssql-orm/tests/stage10_public_active_record.rs` con una integración real que valida borrado exitoso y borrado repetido devolviendo `false`.
+- Durante la validación se corrigió además la ruta de conexión requerida para evitar `panic` en `DbSet` desconectado durante tests unitarios, devolviendo `OrmError` en las operaciones async que realmente necesitan conexión.
+
+### Resultado
+
+- La Etapa 10 ya soporta `entity.delete(&db)` sobre Active Record para entidades con PK simple, reutilizando `DbSet` y sin introducir una segunda ruta de ejecución o borrado.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test active_record_trybuild`
+- `cargo test -p mssql-orm --test stage10_public_active_record`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `entity.delete(&db)` mantiene el mismo límite funcional que `DbSet::delete`: hoy solo soporta PK simple; entidades con PK compuesta siguen recibiendo error explícito de etapa.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Diseñar e implementar entity.save(&db) sobre Active Record con estrategia explícita de PK y persistencia`.
+
 ### Sesión: Cobertura dedicada para Active Record base
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como referencia para cerrar la subtarea de cobertura de Active Record.

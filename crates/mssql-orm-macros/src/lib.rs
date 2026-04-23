@@ -65,6 +65,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut columns = Vec::new();
     let mut column_symbols = Vec::new();
     let mut primary_key_columns = Vec::new();
+    let mut primary_key_value_expr = None;
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
 
@@ -86,6 +87,14 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             || (field_ident == &Ident::new("id", field_ident.span()) && !has_explicit_primary_key);
         if primary_key {
             primary_key_columns.push(column_name.clone());
+            if primary_key_value_expr.is_none() {
+                let field_ty = &field.ty;
+                primary_key_value_expr = Some(quote! {
+                    Ok(<#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        ::core::clone::Clone::clone(&self.#field_ident)
+                    ))
+                });
+            }
         }
 
         let sql_type = match config.sql_type {
@@ -224,6 +233,15 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         &format!("__MSSQL_ORM_ENTITY_METADATA_FOR_{}", ident),
         Span::call_site(),
     );
+    let primary_key_value_impl = if primary_key_columns.len() == 1 {
+        primary_key_value_expr.expect("single primary key must produce key extraction")
+    } else {
+        quote! {
+            Err(::mssql_orm::core::OrmError::new(
+                "ActiveRecord currently supports delete only for entities with a single primary key column",
+            ))
+        }
+    };
 
     Ok(quote! {
         static #metadata_ident: ::mssql_orm::core::EntityMetadata = ::mssql_orm::core::EntityMetadata {
@@ -253,6 +271,12 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         impl ::mssql_orm::core::Entity for #ident {
             fn metadata() -> &'static ::mssql_orm::core::EntityMetadata {
                 &#metadata_ident
+            }
+        }
+
+        impl ::mssql_orm::EntityPrimaryKey for #ident {
+            fn primary_key_value(&self) -> Result<::mssql_orm::core::SqlValue, ::mssql_orm::core::OrmError> {
+                #primary_key_value_impl
             }
         }
     })

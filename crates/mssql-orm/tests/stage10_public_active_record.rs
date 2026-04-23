@@ -127,6 +127,47 @@ async fn public_active_record_find_roundtrips_and_returns_none_when_missing() ->
     result
 }
 
+#[tokio::test]
+async fn public_active_record_delete_roundtrips_and_returns_false_when_missing()
+-> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping Active Record delete integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = ActiveRecordDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewActiveRecordUser {
+                name: "Delete Me".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let deleted = inserted.delete(&db).await?;
+        assert!(deleted);
+
+        let missing_after_delete = ActiveRecordUser::find(&db, inserted.id).await?;
+        assert_eq!(missing_after_delete, None);
+
+        let deleted_again = inserted.delete(&db).await?;
+        assert!(!deleted_again);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+    result
+}
+
 fn test_connection_string() -> Option<String> {
     std::env::var(TEST_CONNECTION_ENV)
         .ok()
