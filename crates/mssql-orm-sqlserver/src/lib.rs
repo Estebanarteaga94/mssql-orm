@@ -1,6 +1,7 @@
 //! SQL Server compilation layer.
 
 mod compiler;
+mod migration;
 mod quoting;
 
 use mssql_orm_core::CrateIdentity;

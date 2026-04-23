@@ -1,0 +1,438 @@
+use crate::quoting::{quote_identifier, quote_qualified_identifier};
+use mssql_orm_core::{OrmError, SqlServerType};
+use mssql_orm_migrate::{
+    AddColumn, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn, DropSchema,
+    DropTable, MigrationOperation,
+};
+
+const MIGRATIONS_HISTORY_SCHEMA: &str = "dbo";
+const MIGRATIONS_HISTORY_TABLE: &str = "__mssql_orm_migrations";
+
+impl crate::SqlServerCompiler {
+    pub fn compile_migration_operations(
+        operations: &[MigrationOperation],
+    ) -> Result<Vec<String>, OrmError> {
+        operations.iter().map(compile_operation).collect()
+    }
+
+    pub fn compile_migrations_history_table() -> Result<String, OrmError> {
+        let table =
+            quote_qualified_identifier(MIGRATIONS_HISTORY_SCHEMA, MIGRATIONS_HISTORY_TABLE)?;
+
+        Ok(format!(
+            "IF OBJECT_ID(N'{schema}.{table_name}', N'U') IS NULL\nBEGIN\n    CREATE TABLE {table} (\n        [id] nvarchar(150) NOT NULL PRIMARY KEY,\n        [name] nvarchar(255) NOT NULL,\n        [applied_at] datetime2 NOT NULL DEFAULT SYSUTCDATETIME(),\n        [checksum] nvarchar(128) NOT NULL,\n        [orm_version] nvarchar(50) NOT NULL\n    );\nEND",
+            schema = MIGRATIONS_HISTORY_SCHEMA,
+            table_name = MIGRATIONS_HISTORY_TABLE,
+        ))
+    }
+}
+
+fn compile_operation(operation: &MigrationOperation) -> Result<String, OrmError> {
+    match operation {
+        MigrationOperation::CreateSchema(operation) => compile_create_schema(operation),
+        MigrationOperation::DropSchema(operation) => compile_drop_schema(operation),
+        MigrationOperation::CreateTable(operation) => compile_create_table(operation),
+        MigrationOperation::DropTable(operation) => compile_drop_table(operation),
+        MigrationOperation::AddColumn(operation) => compile_add_column(operation),
+        MigrationOperation::DropColumn(operation) => compile_drop_column(operation),
+        MigrationOperation::AlterColumn(operation) => compile_alter_column(operation),
+    }
+}
+
+fn compile_create_schema(operation: &CreateSchema) -> Result<String, OrmError> {
+    let schema = crate::quote_identifier(&operation.schema_name)?;
+    Ok(format!(
+        "IF SCHEMA_ID(N'{name}') IS NULL EXEC(N'CREATE SCHEMA {schema}')",
+        name = operation.schema_name,
+    ))
+}
+
+fn compile_drop_schema(operation: &DropSchema) -> Result<String, OrmError> {
+    Ok(format!(
+        "DROP SCHEMA {}",
+        quote_identifier(&operation.schema_name)?
+    ))
+}
+
+fn compile_create_table(operation: &CreateTable) -> Result<String, OrmError> {
+    let table_name = quote_qualified_identifier(&operation.schema_name, &operation.table.name)?;
+    let mut definitions = operation
+        .table
+        .columns
+        .iter()
+        .map(compile_column_definition)
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if !operation.table.primary_key_columns.is_empty() {
+        let columns = operation
+            .table
+            .primary_key_columns
+            .iter()
+            .map(|column| crate::quote_identifier(column))
+            .collect::<Result<Vec<_>, _>>()?
+            .join(", ");
+
+        definitions.push(match &operation.table.primary_key_name {
+            Some(name) => format!(
+                "CONSTRAINT {} PRIMARY KEY ({columns})",
+                crate::quote_identifier(name)?
+            ),
+            None => format!("PRIMARY KEY ({columns})"),
+        });
+    }
+
+    Ok(format!(
+        "CREATE TABLE {table_name} (\n    {}\n)",
+        definitions.join(",\n    ")
+    ))
+}
+
+fn compile_drop_table(operation: &DropTable) -> Result<String, OrmError> {
+    Ok(format!(
+        "DROP TABLE {}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?
+    ))
+}
+
+fn compile_add_column(operation: &AddColumn) -> Result<String, OrmError> {
+    Ok(format!(
+        "ALTER TABLE {} ADD {}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+        compile_column_definition(&operation.column)?,
+    ))
+}
+
+fn compile_drop_column(operation: &DropColumn) -> Result<String, OrmError> {
+    Ok(format!(
+        "ALTER TABLE {} DROP COLUMN {}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+        crate::quote_identifier(&operation.column_name)?,
+    ))
+}
+
+fn compile_alter_column(operation: &AlterColumn) -> Result<String, OrmError> {
+    if operation.previous.name != operation.next.name {
+        return Err(OrmError::new(
+            "SQL Server alter column compilation does not support renaming columns",
+        ));
+    }
+
+    if operation.previous.default_sql != operation.next.default_sql
+        || operation.previous.computed_sql != operation.next.computed_sql
+        || operation.previous.identity != operation.next.identity
+        || operation.previous.primary_key != operation.next.primary_key
+        || operation.previous.rowversion != operation.next.rowversion
+    {
+        return Err(OrmError::new(
+            "SQL Server alter column compilation only supports type and nullability changes in this stage",
+        ));
+    }
+
+    Ok(format!(
+        "ALTER TABLE {} ALTER COLUMN {}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+        compile_alter_column_definition(&operation.next)?,
+    ))
+}
+
+fn compile_column_definition(column: &ColumnSnapshot) -> Result<String, OrmError> {
+    if let Some(computed_sql) = &column.computed_sql {
+        return Ok(format!(
+            "{} AS ({computed_sql})",
+            crate::quote_identifier(&column.name)?,
+        ));
+    }
+
+    if column.rowversion || column.sql_type == SqlServerType::RowVersion {
+        return Ok(format!(
+            "{} rowversion",
+            crate::quote_identifier(&column.name)?
+        ));
+    }
+
+    let mut definition = format!(
+        "{} {}",
+        crate::quote_identifier(&column.name)?,
+        render_sql_type(column),
+    );
+
+    if let Some(identity) = column.identity {
+        definition.push_str(&format!(
+            " IDENTITY({}, {})",
+            identity.seed, identity.increment
+        ));
+    }
+
+    definition.push_str(if column.nullable {
+        " NULL"
+    } else {
+        " NOT NULL"
+    });
+
+    if let Some(default_sql) = &column.default_sql {
+        definition.push_str(&format!(" DEFAULT {default_sql}"));
+    }
+
+    Ok(definition)
+}
+
+fn compile_alter_column_definition(column: &ColumnSnapshot) -> Result<String, OrmError> {
+    if column.computed_sql.is_some()
+        || column.rowversion
+        || column.sql_type == SqlServerType::RowVersion
+    {
+        return Err(OrmError::new(
+            "SQL Server alter column compilation does not support computed or rowversion columns in this stage",
+        ));
+    }
+
+    Ok(format!(
+        "{} {} {}",
+        crate::quote_identifier(&column.name)?,
+        render_sql_type(column),
+        if column.nullable { "NULL" } else { "NOT NULL" }
+    ))
+}
+
+fn render_sql_type(column: &ColumnSnapshot) -> String {
+    match column.sql_type {
+        SqlServerType::BigInt => "bigint".to_string(),
+        SqlServerType::Int => "int".to_string(),
+        SqlServerType::SmallInt => "smallint".to_string(),
+        SqlServerType::TinyInt => "tinyint".to_string(),
+        SqlServerType::Bit => "bit".to_string(),
+        SqlServerType::UniqueIdentifier => "uniqueidentifier".to_string(),
+        SqlServerType::Date => "date".to_string(),
+        SqlServerType::DateTime2 => "datetime2".to_string(),
+        SqlServerType::Decimal => format!(
+            "decimal({}, {})",
+            column.precision.unwrap_or(18),
+            column.scale.unwrap_or(2)
+        ),
+        SqlServerType::Float => "float".to_string(),
+        SqlServerType::Money => "money".to_string(),
+        SqlServerType::NVarChar => format!("nvarchar({})", column.max_length.unwrap_or(255)),
+        SqlServerType::VarBinary => match column.max_length {
+            Some(length) => format!("varbinary({length})"),
+            None => "varbinary(max)".to_string(),
+        },
+        SqlServerType::RowVersion => "rowversion".to_string(),
+        SqlServerType::Custom(name) => name.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::SqlServerCompiler;
+    use mssql_orm_core::{IdentityMetadata, SqlServerType};
+    use mssql_orm_migrate::{
+        AddColumn, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn, DropSchema,
+        DropTable, MigrationOperation, TableSnapshot,
+    };
+
+    fn customer_table() -> TableSnapshot {
+        TableSnapshot::new(
+            "customers",
+            vec![
+                ColumnSnapshot::new(
+                    "id",
+                    SqlServerType::BigInt,
+                    false,
+                    true,
+                    Some(IdentityMetadata::new(1, 1)),
+                    None,
+                    None,
+                    false,
+                    false,
+                    false,
+                    None,
+                    None,
+                    None,
+                ),
+                ColumnSnapshot::new(
+                    "email",
+                    SqlServerType::NVarChar,
+                    false,
+                    false,
+                    None,
+                    None,
+                    None,
+                    false,
+                    true,
+                    true,
+                    Some(180),
+                    None,
+                    None,
+                ),
+                ColumnSnapshot::new(
+                    "created_at",
+                    SqlServerType::DateTime2,
+                    false,
+                    false,
+                    None,
+                    Some("SYSUTCDATETIME()".to_string()),
+                    None,
+                    false,
+                    true,
+                    true,
+                    None,
+                    None,
+                    None,
+                ),
+            ],
+            Some("pk_customers".to_string()),
+            vec!["id".to_string()],
+            vec![],
+        )
+    }
+
+    #[test]
+    fn compiles_stage_seven_migration_operations_to_sql() {
+        let operations = vec![
+            MigrationOperation::CreateSchema(CreateSchema::new("sales")),
+            MigrationOperation::CreateTable(CreateTable::new("sales", customer_table())),
+            MigrationOperation::AddColumn(AddColumn::new(
+                "sales",
+                "customers",
+                ColumnSnapshot::new(
+                    "version",
+                    SqlServerType::RowVersion,
+                    false,
+                    false,
+                    None,
+                    None,
+                    None,
+                    true,
+                    false,
+                    false,
+                    None,
+                    None,
+                    None,
+                ),
+            )),
+            MigrationOperation::DropColumn(DropColumn::new("sales", "customers", "phone")),
+            MigrationOperation::DropTable(DropTable::new("sales", "customers_archive")),
+            MigrationOperation::DropSchema(DropSchema::new("legacy")),
+        ];
+
+        let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "IF SCHEMA_ID(N'sales') IS NULL EXEC(N'CREATE SCHEMA [sales]')"
+        );
+        assert!(sql[1].contains("CREATE TABLE [sales].[customers]"));
+        assert!(sql[1].contains("[id] bigint IDENTITY(1, 1) NOT NULL"));
+        assert!(sql[1].contains("CONSTRAINT [pk_customers] PRIMARY KEY ([id])"));
+        assert_eq!(
+            sql[2],
+            "ALTER TABLE [sales].[customers] ADD [version] rowversion"
+        );
+        assert_eq!(
+            sql[3],
+            "ALTER TABLE [sales].[customers] DROP COLUMN [phone]"
+        );
+        assert_eq!(sql[4], "DROP TABLE [sales].[customers_archive]");
+        assert_eq!(sql[5], "DROP SCHEMA [legacy]");
+    }
+
+    #[test]
+    fn compiles_migrations_history_table_sql() {
+        let sql = SqlServerCompiler::compile_migrations_history_table().unwrap();
+
+        assert!(sql.contains("IF OBJECT_ID(N'dbo.__mssql_orm_migrations', N'U') IS NULL"));
+        assert!(sql.contains("CREATE TABLE [dbo].[__mssql_orm_migrations]"));
+        assert!(sql.contains("[applied_at] datetime2 NOT NULL DEFAULT SYSUTCDATETIME()"));
+        assert!(sql.contains("[orm_version] nvarchar(50) NOT NULL"));
+    }
+
+    #[test]
+    fn rejects_unsupported_alter_column_default_changes() {
+        let operation = MigrationOperation::AlterColumn(AlterColumn::new(
+            "sales",
+            "customers",
+            ColumnSnapshot::new(
+                "email",
+                SqlServerType::NVarChar,
+                false,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                Some(180),
+                None,
+                None,
+            ),
+            ColumnSnapshot::new(
+                "email",
+                SqlServerType::NVarChar,
+                false,
+                false,
+                None,
+                Some("'unknown'".to_string()),
+                None,
+                false,
+                true,
+                true,
+                Some(180),
+                None,
+                None,
+            ),
+        ));
+
+        let error = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server alter column compilation only supports type and nullability changes in this stage"
+        );
+    }
+
+    #[test]
+    fn compiles_basic_alter_column_type_and_nullability_change() {
+        let operation = MigrationOperation::AlterColumn(AlterColumn::new(
+            "sales",
+            "customers",
+            ColumnSnapshot::new(
+                "email",
+                SqlServerType::NVarChar,
+                false,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                Some(180),
+                None,
+                None,
+            ),
+            ColumnSnapshot::new(
+                "email",
+                SqlServerType::NVarChar,
+                true,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                Some(255),
+                None,
+                None,
+            ),
+        ));
+
+        let sql = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "ALTER TABLE [sales].[customers] ALTER COLUMN [email] nvarchar(255) NULL"
+        );
+    }
+}

@@ -2,6 +2,35 @@
 
 ## 2026-04-23
 
+### Sesión: Generación SQL de migraciones e historial base
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar generación SQL y tabla __mssql_orm_migrations` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm-sqlserver/src/migration.rs` para compilar `MigrationOperation` a DDL SQL Server y para exponer el SQL idempotente de creación de `dbo.__mssql_orm_migrations`.
+- La implementación actual compila `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn` a sentencias SQL Server concretas.
+- `CreateTable` reutiliza `TableSnapshot` completo para emitir columnas y primary key; `AddColumn` y `AlterColumn` reutilizan `ColumnSnapshot` para renderizar el tipo SQL Server, identidad, nullability, defaults y rowversion cuando aplica.
+- `AlterColumn` quedó acotado intencionalmente a cambios básicos de tipo y nullability; cambios de default, computed SQL, identity, PK o rowversion siguen rechazándose con error explícito hasta que existan operaciones dedicadas.
+- Fue necesario invertir una dependencia entre crates: `mssql-orm-migrate` ya no depende de `mssql-orm-sqlserver`, y `mssql-orm-sqlserver` ahora depende de `mssql-orm-migrate`, eliminando un ciclo que violaba la separación de responsabilidades.
+- Se añadieron pruebas unitarias en `crates/mssql-orm-sqlserver/src/migration.rs` para el SQL de operaciones base, la tabla `__mssql_orm_migrations`, un `AlterColumn` soportado y el rechazo explícito de un `AlterColumn` no soportado.
+
+### Resultado
+
+- El workspace ya dispone de una ruta completa y verificable desde snapshots/diff/operaciones hasta SQL Server DDL, incluyendo la tabla interna de historial de migraciones.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Implementar CLI mínima con migration add, database update y migration list`.
+
 ### Sesión: Batería unitaria dedicada del diff engine
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 implementando la generación SQL de migraciones y la base de historial `__mssql_orm_migrations`, ahora que snapshots, operaciones y diff engine básico ya quedaron cubiertos con pruebas unitarias dedicadas.
+Continuar la Etapa 7 con la CLI mínima de migraciones (`migration add`, `database update`, `migration list`) y luego la validación real contra SQL Server, ahora que snapshots, diff engine y generación SQL básica ya quedaron implementados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -93,6 +93,10 @@ Continuar la Etapa 7 implementando la generación SQL de migraciones y la base d
 - La cobertura del diff engine ya quedó centralizada en pruebas unitarias dedicadas dentro de `crates/mssql-orm-migrate/src/diff.rs`, en lugar de estar dispersa en `lib.rs`.
 - Esa batería ya fija casos mínimos de orden seguro, no-op sobre snapshots iguales, altas/bajas de tablas, altas/bajas de columnas, alteraciones básicas y una composición completa de diff sobre snapshots mínimos.
 - `lib.rs` quedó otra vez enfocado en reexports, boundaries y shape base de snapshots/operaciones, reduciendo ruido y duplicación en la capa pública de la crate.
+- `mssql-orm-sqlserver` ahora compila `MigrationOperation` a DDL SQL Server mediante un módulo dedicado de migraciones, reutilizando `MigrationOperation` y `ColumnSnapshot`/`TableSnapshot` definidos en `mssql-orm-migrate`.
+- La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
+- La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
+- `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -136,6 +140,6 @@ Continuar la Etapa 7 implementando la generación SQL de migraciones y la base d
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Implementar generación SQL y tabla __mssql_orm_migrations`.
-2. Mantener la generación SQL exclusivamente en la capa SQL Server y usar `MigrationOperation` como entrada, sin mezclar CLI todavía.
-3. Dejar la validación real contra SQL Server para después de contar con SQL generado y registro de historial básico.
+1. Implementar `Etapa 7: Implementar CLI mínima con migration add, database update y migration list`.
+2. Reutilizar directamente `ModelSnapshot`, el diff engine y la compilación SQL ya disponibles, sin duplicar lógica de migraciones dentro del CLI.
+3. Después de eso, ejecutar `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real`.

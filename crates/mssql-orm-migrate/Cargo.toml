@@ -6,4 +6,3 @@ description = "Code-first migration support for mssql-orm."
 
 [dependencies]
 mssql-orm-core.workspace = true
-mssql-orm-sqlserver.workspace = true

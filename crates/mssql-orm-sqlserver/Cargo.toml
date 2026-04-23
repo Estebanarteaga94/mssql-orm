@@ -6,6 +6,7 @@ description = "SQL Server query compilation for mssql-orm."
 
 [dependencies]
 mssql-orm-core.workspace = true
+mssql-orm-migrate.workspace = true
 mssql-orm-query.workspace = true
 
 [dev-dependencies]
