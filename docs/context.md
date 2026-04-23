@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 exponiendo joins explícitos mínimos en la crate pública, ahora que el AST y la compilación SQL Server ya soportan el caso base.
+Continuar la Etapa 9 reforzando cobertura con pruebas de integración y snapshots para joins y foreign keys, ahora que la surface pública mínima ya existe.
 
 ## Dirección Arquitectónica Vigente
 
@@ -116,6 +116,7 @@ Continuar la Etapa 9 exponiendo joins explícitos mínimos en la crate pública,
 - `mssql-orm-query` ahora modela joins explícitos en `SelectQuery` mediante `JoinType`, `Join`, `join(...)`, `inner_join::<E>(...)` y `left_join::<E>(...)`, manteniendo el AST libre de SQL directo.
 - `mssql-orm-sqlserver` ya compila joins explícitos a `INNER JOIN` y `LEFT JOIN` para el caso base sin aliases, preservando el orden de joins y de parámetros en el SQL parametrizado final.
 - Mientras no exista aliasing en el AST, la compilación SQL Server rechaza explícitamente self-joins o joins repetidos sobre la misma tabla.
+- La crate pública `mssql-orm` ya expone `DbSetQuery::join(...)`, `inner_join::<T>(...)` y `left_join::<T>(...)`, además de reexportar `Join` y `JoinType` desde la `prelude`.
 - Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
@@ -161,7 +162,7 @@ Continuar la Etapa 9 exponiendo joins explícitos mínimos en la crate pública,
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, y joins explícitos ya existen tanto en AST como en compilación SQL Server; el siguiente frente real de Etapa 9 pasa a ser la surface pública mínima y luego pruebas/snapshots dedicados.
+- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, y joins explícitos ya existen en AST, compilación SQL Server y surface pública mínima; el siguiente frente real de Etapa 9 pasa a ser cobertura de pruebas y snapshots dedicados.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -172,6 +173,6 @@ Continuar la Etapa 9 exponiendo joins explícitos mínimos en la crate pública,
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Exponer joins explícitos mínimos en la crate pública`.
-2. Mantener esa surface alineada con el AST existente y sin abrir todavía soporte de aliases o eager loading.
-3. Después de exponerla, agregar pruebas de integración y snapshots dedicados para joins y foreign keys.
+1. Implementar `Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys`.
+2. Cubrir tanto el SQL observable como la surface pública mínima ya expuesta, sin reabrir todavía soporte de aliases.
+3. Dejar el rediseño estructurado de `foreign_key` como siguiente frente funcional después de cerrar esa cobertura.

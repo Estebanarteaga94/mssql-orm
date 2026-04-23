@@ -1,6 +1,6 @@
 use mssql_orm::prelude::*;
 use mssql_orm::query::{
-    Expr, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
+    Expr, JoinType, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
 };
 
 #[allow(dead_code)]
@@ -13,6 +13,17 @@ struct QueryUser {
     #[orm(length = 180)]
     email: String,
     active: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "query_builder_orders", schema = "dbo")]
+struct QueryOrder {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+    user_id: i64,
+    total_cents: i64,
 }
 
 #[test]
@@ -72,5 +83,36 @@ fn public_predicate_composition_flattens_logical_groups() {
             ]),
             Predicate::gt(Expr::from(QueryUser::id), Expr::value(SqlValue::I64(10))),
         ])
+    );
+}
+
+#[test]
+fn public_dbset_query_exposes_join_helpers() {
+    let query = SelectQuery::from_entity::<QueryUser>()
+        .inner_join::<QueryOrder>(Predicate::eq(
+            Expr::from(QueryUser::id),
+            Expr::from(QueryOrder::user_id),
+        ))
+        .left_join::<QueryOrder>(QueryOrder::total_cents.gt(0_i64))
+        .order_by(QueryOrder::total_cents.desc());
+
+    assert_eq!(query.joins.len(), 2);
+    assert_eq!(query.joins[0].join_type, JoinType::Inner);
+    assert_eq!(
+        query.joins[0].table,
+        TableRef::new("dbo", "query_builder_orders")
+    );
+    assert_eq!(query.joins[1].join_type, JoinType::Left);
+    assert_eq!(
+        query.joins[1].table,
+        TableRef::new("dbo", "query_builder_orders")
+    );
+    assert_eq!(
+        query.order_by,
+        vec![OrderBy::new(
+            TableRef::new("dbo", "query_builder_orders"),
+            "total_cents",
+            SortDirection::Desc,
+        )]
     );
 }

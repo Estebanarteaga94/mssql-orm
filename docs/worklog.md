@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: Surface pública mínima para joins explícitos
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Exponer joins explícitos mínimos en la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/dbset_query.rs` para que `DbSetQuery` exponga `join(...)`, `inner_join::<T>(...)` y `left_join::<T>(...)`, delegando directamente al `SelectQuery` interno sin crear un AST paralelo en la crate pública.
+- `crates/mssql-orm/src/lib.rs` ahora reexporta también `Join` y `JoinType` en la `prelude`, de modo que el consumidor tenga acceso al shape público mínimo de joins desde la crate principal.
+- Se ampliaron las pruebas internas de `DbSetQuery` para fijar que los nuevos helpers construyen el `SelectQuery` esperado y conservan la tabla de destino y el tipo de join.
+- Se actualizó `crates/mssql-orm/tests/stage6_public_query_builder.rs` para cubrir joins explícitos en el AST observable desde la crate pública y `crates/mssql-orm/tests/ui/query_builder_public_valid.rs` para fijar por compilación que un consumidor puede escribir `db.users.query().inner_join::<Order>(...)` y `left_join::<Order>(...)`.
+- La verificación pública de joins columna-columna usa `Predicate::eq(Expr::from(...), Expr::from(...))`, manteniendo sin cambios las extensiones tipadas de columnas que siguen modeladas para comparaciones contra valores.
+
+### Resultado
+
+- La crate pública `mssql-orm` ya expone joins explícitos mínimos sobre `DbSetQuery`, apoyándose en el AST y la compilación SQL Server ya existentes y sin adelantar todavía aliases ni eager loading.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage6_public_query_builder`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La API pública mínima todavía no resuelve joins repetidos sobre la misma tabla, porque esa limitación sigue determinada por la ausencia de aliases en el AST base.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys`.
+
 ### Sesión: Compilación SQL Server de joins explícitos
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Compilar joins explícitos a SQL Server parametrizado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

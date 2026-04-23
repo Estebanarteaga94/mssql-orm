@@ -36,6 +36,7 @@ pub mod prelude {
         SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::{Changeset, DbContext, Entity, Insertable};
+    pub use mssql_orm_query::{Join, JoinType};
 }
 
 #[cfg(test)]

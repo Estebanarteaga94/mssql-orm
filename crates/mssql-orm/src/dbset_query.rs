@@ -1,7 +1,7 @@
 use crate::context::SharedConnection;
 use crate::page_request::PageRequest;
 use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
-use mssql_orm_query::{CountQuery, OrderBy, Pagination, Predicate, SelectQuery};
+use mssql_orm_query::{CountQuery, Join, OrderBy, Pagination, Predicate, SelectQuery};
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[derive(Clone)]
@@ -27,6 +27,21 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub fn filter(mut self, predicate: Predicate) -> Self {
         self.select_query = self.select_query.filter(predicate);
+        self
+    }
+
+    pub fn join(mut self, join: Join) -> Self {
+        self.select_query = self.select_query.join(join);
+        self
+    }
+
+    pub fn inner_join<J: Entity>(mut self, on: Predicate) -> Self {
+        self.select_query = self.select_query.inner_join::<J>(on);
+        self
+    }
+
+    pub fn left_join<J: Entity>(mut self, on: Predicate) -> Self {
+        self.select_query = self.select_query.left_join::<J>(on);
         self
     }
 
@@ -140,10 +155,11 @@ mod tests {
         Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
     };
     use mssql_orm_query::{
-        Expr, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
+        Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
     };
 
     struct TestEntity;
+    struct JoinedEntity;
 
     static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "TestEntity",
@@ -161,6 +177,25 @@ mod tests {
     impl Entity for TestEntity {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
+        }
+    }
+
+    static JOINED_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "JoinedEntity",
+        schema: "dbo",
+        table: "joined_entities",
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for JoinedEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &JOINED_ENTITY_METADATA
         }
     }
 
@@ -224,6 +259,55 @@ mod tests {
                 "created_at",
                 SortDirection::Desc,
             ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_join_builds_on_internal_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let join = Join::left(
+            TableRef::new("dbo", "joined_entities"),
+            Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            ),
+        );
+
+        let query = dbset.query().join(join.clone());
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>().join(join)
+        );
+    }
+
+    #[test]
+    fn dbset_query_exposes_entity_targeted_join_helpers() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset
+            .query()
+            .inner_join::<JoinedEntity>(Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            ))
+            .left_join::<JoinedEntity>(Predicate::eq(
+                Expr::value(SqlValue::Bool(false)),
+                Expr::value(SqlValue::Bool(false)),
+            ));
+
+        let select = query.into_select_query();
+
+        assert_eq!(select.joins.len(), 2);
+        assert_eq!(select.joins[0].join_type, JoinType::Inner);
+        assert_eq!(
+            select.joins[0].table,
+            TableRef::new("dbo", "joined_entities")
+        );
+        assert_eq!(select.joins[1].join_type, JoinType::Left);
+        assert_eq!(
+            select.joins[1].table,
+            TableRef::new("dbo", "joined_entities")
         );
     }
 
