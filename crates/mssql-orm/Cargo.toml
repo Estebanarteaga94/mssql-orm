@@ -14,5 +14,6 @@ mssql-orm-migrate.workspace = true
 tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
+insta = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 trybuild = "1"

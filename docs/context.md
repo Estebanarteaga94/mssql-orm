@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 6 con la siguiente subtarea detallada: agregar pruebas snapshot y de seguridad de parámetros para el query builder público, ahora que la superficie pública y su batería unitaria básica ya quedaron consolidadas.
+Iniciar la Etapa 7 implementando `ModelSnapshot`, el diff engine y las operaciones básicas de migración, ahora que la Etapa 6 del query builder público quedó completada y validada.
 
 ## Dirección Arquitectónica Vigente
 
@@ -74,6 +74,7 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: agregar pruebas snapsh
 - La crate pública `mssql-orm` ahora también expone `PredicateCompositionExt`, habilitando `and`, `or` y `not` sobre `Predicate` sin introducir un DSL lógico paralelo.
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `limit`, `take`, `paginate`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ahora también cuenta con una batería específica de pruebas públicas del query builder: una prueba de integración sobre la forma del AST y un caso `trybuild` que valida el encadenamiento desde código consumidor.
+- La crate pública `mssql-orm` ahora también cuenta con snapshots del SQL generado desde el query builder público y con una prueba explícita de seguridad para confirmar que valores no confiables quedan parametrizados y no se interpolan en el SQL.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -117,6 +118,6 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: agregar pruebas snapsh
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público`.
-2. Reutilizar `DbSetQuery<T>`, el AST de `mssql-orm-query` y el compilador de `mssql-orm-sqlserver` como base, sin introducir una segunda ruta de compilación.
-3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
+1. Implementar `Etapa 7: ModelSnapshot, diff engine y operaciones básicas de migración`.
+2. Reutilizar la metadata code-first ya disponible en `mssql-orm-core` y mantener la generación SQL exclusivamente en las crates correspondientes.
+3. Mantener estable la superficie pública ya validada de Etapa 5 y Etapa 6 mientras entra la base de migraciones.

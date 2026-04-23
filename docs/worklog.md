@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Snapshots y seguridad de parámetros del query builder público
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `insta` como `dev-dependency` de `crates/mssql-orm` para congelar el contrato observable del builder público sin afectar dependencias runtime.
+- Se creó `crates/mssql-orm/tests/stage6_public_query_builder_snapshots.rs` para compilar queries construidas desde la superficie pública y fijar tanto el SQL generado como el orden de parámetros.
+- Se añadió el snapshot `crates/mssql-orm/tests/snapshots/stage6_public_query_builder_snapshots__public_query_builder_compiled_select.snap`.
+- Se añadió además una prueba explícita de seguridad que verifica que un valor malicioso no aparece interpolado en el SQL generado y que solo viaja en `compiled.params`, preservando además el orden de parámetros para filtro y paginación.
+- Durante la validación, `insta` generó inicialmente un `.snap.new`; se revisó el contenido, se materializó el snapshot definitivo y se eliminó el archivo temporal antes de repetir la validación completa.
+
+### Resultado
+
+- La Etapa 6 quedó cerrada con cobertura pública completa: API fluida, pruebas unitarias del AST y snapshots/seguridad de parámetros sobre el SQL compilado desde el query builder público.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Iniciar `Etapa 7: Implementar ModelSnapshot, diff engine y operaciones básicas de migración`.
+
 ### Sesión: Pruebas unitarias públicas del query builder
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
