@@ -2,6 +2,46 @@
 
 ## 2026-04-23
 
+### Sesión: ampliación de validación real de Etapa 13 con foreign keys
+
+- A pedido del usuario se amplió la validación real previa de Etapa 13 para no quedarse solo en la ejecución del script, sino revisar también el resultado efectivo dentro de SQL Server sobre datos reales.
+- Se levantó un esquema temporal adicional `qa_stage13_fk_real_1776987291814399221` en `tempdb` con un escenario más completo:
+  `customers` con PK compuesta y columna renombrada a `email_address`,
+  `orders` con FK compuesta hacia `customers` (`NO ACTION` / `CASCADE` en update),
+  `order_allocations` con computed column `line_total`, índice compuesto sobre esa computed column y FK compuesta hacia `customers` (`SET DEFAULT` / `CASCADE`),
+  `order_notes` con FK a `orders` (`ON DELETE CASCADE`) y FK nullable a `users` (`ON DELETE SET NULL`).
+- Se inspeccionó el resultado físico en catálogos de SQL Server (`sys.tables`, `sys.columns`, `sys.computed_columns`, `sys.indexes`, `sys.index_columns`, `sys.foreign_keys`) y se confirmó:
+  existencia de las 5 tablas esperadas,
+  rename efectivo de `email` a `email_address`,
+  definición persistida de `line_total`,
+  índice `ix_order_allocations_customer_line_total` con `customer_id ASC` y `line_total DESC`,
+  foreign keys con acciones `SET_DEFAULT`, `SET_NULL`, `CASCADE` y `NO_ACTION` según lo esperado.
+- Además se verificó comportamiento real sobre datos:
+  al borrar `users.id = 10`, `order_notes.reviewer_id` pasó a `NULL` (`SET NULL`);
+  al borrar `orders.id = 200`, la nota asociada se eliminó (`CASCADE`);
+  el intento de borrar `customers.(1,1)` mientras seguía referenciado por `orders` falló como corresponde por la FK `NO ACTION`;
+  tras eliminar primero `orders.id = 100`, borrar `customers.(1,1)` hizo que `order_allocations.(1000)` cambiara a `customer_id = 0, branch_id = 1` (`SET DEFAULT`);
+  la computed column siguió materializando `45.00` tras el cambio de FK local, mostrando que el rename y las acciones referenciales no la degradaron.
+
+### Resultado
+
+- La validación real de Etapa 13 ya no cubre solo DDL y migración aplicada: también confirma semántica observable de foreign keys, rename de columna, computed columns e índices compuestos directamente sobre SQL Server.
+
+### Validación
+
+- Aplicación real de migraciones en `tempdb` con `mssql-orm-cli database update` y `sqlcmd`
+- Consultas reales a catálogos `sys.*`
+- Inserciones y borrados reales para observar `SET NULL`, `CASCADE`, `NO ACTION` y `SET DEFAULT`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La validación mostró explícitamente la interacción entre FKs: una FK `NO ACTION` puede impedir observar `SET DEFAULT` en otra FK hasta liberar primero la referencia bloqueante, lo cual es comportamiento correcto de SQL Server.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Soportar RenameTable explícito en snapshots, diff y DDL SQL Server`.
+
 ### Sesión: validación real de Etapa 13 contra SQL Server
 
 - Se ejecutó una validación real de migraciones de Etapa 13 sobre SQL Server local (`tempdb`) usando `sqlcmd` y un proyecto temporal aislado fuera del repo.

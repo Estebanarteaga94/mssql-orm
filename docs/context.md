@@ -214,6 +214,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El tracking experimental sigue limitado a entidades con primary key simple en las rutas que reutilizan `find`, `update`, `delete` o `save_changes()`.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - La validación real de Etapa 13 confirmó en SQL Server local la creación de computed columns, índices compuestos, foreign keys avanzadas y `RenameColumn`, además de la idempotencia por historial/checksum del script acumulado.
+- Una validación real adicional confirmó también el comportamiento efectivo de las foreign keys sobre datos: `SET NULL`, `CASCADE`, `NO ACTION` y `SET DEFAULT` se observaron directamente en `tempdb`, no solo en metadata o DDL generado.
 - En SQL Server, `SET DEFAULT` sobre foreign keys requiere defaults válidos en las columnas locales; hoy esa precondición no se valida todavía de forma estructural antes de compilar el DDL.
 - `crates/mssql-orm/tests/stage5_public_crud.rs` comparte nombres de tabla fijos entre tests; para evitar interferencia entre casos, su ejecución fiable sigue siendo serial (`-- --test-threads=1`) mientras no se aíslen los recursos por prueba.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
