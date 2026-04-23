@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: Infraestructura transaccional base en el adaptador Tiberius
+
+- Se detectó que el archivo del plan maestro no estaba en la raíz pedida inicialmente; la ruta real usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- La tarea original de Etapa 8 se dividió en `docs/tasks.md` para mantener entregables pequeños y verificables: infraestructura transaccional del adaptador, exposición pública de `db.transaction(...)` y pruebas explícitas de commit/rollback.
+- Se movió a `En Progreso` y luego a `Completadas` la subtarea `Etapa 8: Implementar infraestructura transaccional en mssql-orm-tiberius con BEGIN, COMMIT y ROLLBACK`.
+- Se añadió `crates/mssql-orm-tiberius/src/transaction.rs` con `MssqlTransaction<'a, S>`, inicio explícito de transacción y cierre explícito mediante `commit()` y `rollback()`, sin depender de `Drop` async.
+- `MssqlConnection<S>` ahora expone `begin_transaction()`, devolviendo el wrapper transaccional sobre el mismo `Client<S>`.
+- Se refactorizó `crates/mssql-orm-tiberius/src/executor.rs` para compartir helpers internos de ejecución parametrizada (`execute`, `query_raw`, `fetch_one`, `fetch_all`) entre conexión normal y transacción, y se implementó `Executor` también para `MssqlTransaction`.
+- `crates/mssql-orm-tiberius/src/lib.rs` ahora reexporta `MssqlTransaction`, alineando la boundary pública del adaptador con la arquitectura definida en el plan.
+
+### Resultado
+
+- El adaptador Tiberius ya dispone de una infraestructura transaccional explícita y reutilizable, lista para que la siguiente subtarea exponga `db.transaction(...)` en la crate pública sobre esta base.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Todavía no existe la API pública `db.transaction(...)`; esa capa quedó separada como siguiente subtarea para no mezclar infraestructura interna con surface pública en la misma sesión.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 8: Exponer db.transaction(...) en la crate pública reutilizando la infraestructura transaccional`.
+
 ### Sesión: Revalidación local de migraciones creadas en la raíz
 
 - A petición del usuario, se repitió la validación real de migraciones creando temporalmente `./migrations/` en la raíz del repositorio para inspeccionar resultados locales en vez de usar un directorio temporal externo.

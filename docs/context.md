@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Comenzar la Etapa 8 implementando transacciones con commit en `Ok` y rollback en `Err`, ahora que la Etapa 7 de migraciones code-first MVP quedó validada de extremo a extremo.
+Continuar la Etapa 8 exponiendo `db.transaction(...)` en la crate pública, reutilizando la infraestructura transaccional explícita que ya existe en `mssql-orm-tiberius`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -52,6 +52,8 @@ Comenzar la Etapa 8 implementando transacciones con commit en `Ok` y rollback en
 - `MssqlConnectionConfig` ya parsea ADO connection strings mediante `tiberius::Config`, conserva el string original y rechaza entradas vacías o sin host usable.
 - `MssqlConnection::connect` ya abre `TcpStream`, configura `TCP_NODELAY` e inicializa `tiberius::Client`, sin adelantar todavía ejecución de `CompiledQuery` ni mapeo de filas.
 - `mssql-orm-tiberius` ya expone `ExecuteResult`, el trait `Executor` y los métodos `execute`/`query_raw` sobre `MssqlConnection<S>`.
+- `mssql-orm-tiberius` ahora también expone `MssqlTransaction<'a, S>` y `MssqlConnection::begin_transaction()`, iniciando transacciones con `BEGIN TRANSACTION` y cerrándolas explícitamente mediante `commit()` o `rollback()`.
+- La capa de ejecución del adaptador ahora comparte helpers internos entre conexión normal y transacción, por lo que `MssqlTransaction` también implementa `Executor` y puede reutilizar `execute`, `query_raw`, `fetch_one` y `fetch_all` sin duplicar binding ni mapeo.
 - El adaptador ya prepara `CompiledQuery`, valida conteo de placeholders y realiza binding real de `SqlValue` hacia `tiberius::Query`.
 - El binding de `Decimal` ya se resuelve a `tiberius::numeric::Numeric`; el caso `SqlValue::Null` sigue siendo provisional y hoy se envía como `Option::<String>::None`.
 - `mssql-orm-tiberius` ya expone `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, implementa el contrato neutral `Row` del core y convierte tipos soportados de SQL Server a `SqlValue`.
@@ -147,6 +149,6 @@ Comenzar la Etapa 8 implementando transacciones con commit en `Ok` y rollback en
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 8: transacciones con commit en Ok y rollback en Err`.
-2. Reutilizar la infraestructura de conexión y ejecución actual en `mssql-orm-tiberius`, sin mover responsabilidades al `core` ni a la crate pública.
+1. Implementar `Etapa 8: Exponer db.transaction(...) en la crate pública reutilizando la infraestructura transaccional`.
+2. Mantener la responsabilidad de `BEGIN`/`COMMIT`/`ROLLBACK` dentro de `mssql-orm-tiberius`, sin mover ejecución al `core`.
 3. Después de eso, agregar pruebas explícitas de commit y rollback contra SQL Server real.

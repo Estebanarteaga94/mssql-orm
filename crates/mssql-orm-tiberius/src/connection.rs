@@ -1,5 +1,6 @@
 use crate::config::MssqlConnectionConfig;
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
+use crate::transaction::MssqlTransaction;
 use futures_io::{AsyncRead, AsyncWrite};
 use mssql_orm_core::OrmError;
 use tiberius::Client;
@@ -50,6 +51,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
 
     pub fn client_mut(&mut self) -> &mut Client<S> {
         &mut self.client
+    }
+
+    pub async fn begin_transaction<'a>(&'a mut self) -> Result<MssqlTransaction<'a, S>, OrmError> {
+        MssqlTransaction::begin(self.client_mut()).await
     }
 
     pub fn into_inner(self) -> Client<S> {
