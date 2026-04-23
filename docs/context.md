@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 4 con pruebas de integración contra SQL Server real, ahora que `mssql-orm-tiberius` ya dispone de conexión, executor, `MssqlRow`, `fetch_one` y `fetch_all`.
+Iniciar la Etapa 5 con `DbContext`, `DbSet<T>` y el derive asociado, ahora que la Etapa 4 ya quedó cerrada con validación real contra SQL Server.
 
 ## Dirección Arquitectónica Vigente
 
@@ -57,6 +57,9 @@ Continuar la Etapa 4 con pruebas de integración contra SQL Server real, ahora q
 - `mssql-orm-tiberius` ya expone `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, implementa el contrato neutral `Row` del core y convierte tipos soportados de SQL Server a `SqlValue`.
 - El adaptador ya encapsula errores de Tiberius en `OrmError` mediante una capa interna de mapeo contextual, incluyendo lectura de filas y detección básica de deadlock.
 - `MssqlConnection<S>` ya implementa `fetch_one<T: FromRow>` y `fetch_all<T: FromRow>` apoyándose en `query_raw`, `MssqlRow` y el contrato `FromRow` del core.
+- `mssql-orm-tiberius` ya cuenta con pruebas de integración reales en `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs`, activables mediante `MSSQL_ORM_TEST_CONNECTION_STRING`.
+- Las pruebas reales usan tablas efímeras únicas en `tempdb.dbo` en lugar de `#temp tables`, porque la ejecución RPC usada por Tiberius no preserva tablas temporales locales entre llamadas separadas.
+- La validación manual de esta sesión confirmó conectividad real con SQL Server local usando el login `sa`; la cadena original con `Database=test` no fue usable porque esa base no estaba accesible, así que la verificación se ejecutó contra `master`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -75,14 +78,14 @@ Continuar la Etapa 4 con pruebas de integración contra SQL Server real, ahora q
 
 ## Riesgos Inmediatos
 
-- Ya existe lectura base de filas, pero todavía no hay pruebas de integración contra SQL Server real que validen el recorrido completo `compile -> bind -> execute -> row mapping`.
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La Etapa 4 debe mantener la separación de responsabilidades: conexión, ejecución y filas en `mssql-orm-tiberius`, compilación SQL solo en `mssql-orm-sqlserver`.
+- Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 4: Agregar pruebas de integración contra SQL Server real`, cubriendo `execute`, `fetch_one` y `fetch_all`.
-2. Validar el comportamiento real del binding provisional de `SqlValue::Null` y de los tipos soportados en `MssqlRow`.
-3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y los snapshots del compilador mientras entra validación end-to-end del adaptador.
+1. Implementar `Etapa 5: DbContext trait, DbSet<T> y #[derive(DbContext)]`.
+2. Reutilizar la infraestructura ya validada de `MssqlConnection`, `Executor`, `fetch_one` y `fetch_all` como base de la API pública de contexto.
+3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y las pruebas de integración mientras entra la capa de contexto y CRUD básico.

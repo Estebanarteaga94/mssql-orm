@@ -2,6 +2,32 @@
 
 ## 2026-04-23
 
+### Sesión: Pruebas de integración reales contra SQL Server
+
+- Se movió en `docs/tasks.md` la tarea `Etapa 4: Agregar pruebas de integración contra SQL Server real` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió la prueba de integración `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs` para cubrir conexión real, `execute`, `fetch_one` y `fetch_all` contra SQL Server.
+- Las pruebas nuevas usan `MSSQL_ORM_TEST_CONNECTION_STRING` como fuente de configuración para no hardcodear secretos en el repositorio y permitir ejecución opt-in en otros entornos.
+- Se añadió un fixture `IntegrationUser` con implementación manual de `FromRow`, verificando mapping real desde `MssqlRow` hacia tipos del core.
+- La prueba principal crea una tabla efímera real, inserta filas usando `CompiledQuery` y `SqlValue`, valida `rows_affected()`, lee un registro con `fetch_one` y luego materializa la colección completa con `fetch_all`.
+- Se añadió una segunda prueba para confirmar que `fetch_one` retorna `None` cuando la consulta no produce filas.
+- Durante la primera validación real apareció una particularidad importante de SQL Server/Tiberius: las `#temp tables` creadas en una llamada RPC no persistieron entre ejecuciones separadas, por lo que las pruebas se rediseñaron para usar tablas únicas en `tempdb.dbo`.
+- La connection string proporcionada originalmente (`Database=test`) no fue usable porque la base `test` no estaba accesible para el login `sa`; se comprobó esto con `sqlcmd` y la validación real se ejecutó con la misma credencial sobre `master`.
+- Se verificó conectividad TCP a `localhost:1433` y autenticación real con `sqlcmd` antes de cerrar la implementación, para separar problemas de infraestructura de problemas del adaptador.
+- Se validó de forma explícita la prueba real con `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=master;User Id=SA;Password=...;' cargo test -p mssql-orm-tiberius --test sqlserver_integration -- --nocapture`.
+- También se validó el workspace con `cargo check --workspace`, `cargo fmt --all --check`, `cargo test --workspace` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La Etapa 4 quedó cerrada con cobertura de integración real sobre SQL Server, confirmando el recorrido de conexión, ejecución y materialización de filas del adaptador Tiberius.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo aparecieron dos hallazgos operativos durante la sesión: la base `test` del connection string inicial no estaba disponible, y las `#temp tables` no servían para este patrón de ejecución RPC entre llamadas separadas.
+
+### Próximo paso recomendado
+
+- Empezar `Etapa 5: Implementar DbContext trait, DbSet<T> y #[derive(DbContext)]`, reutilizando la infraestructura del adaptador ya validada en real.
+
 ### Sesión: `MssqlRow`, `fetch_one`/`fetch_all` y conversión de errores
 
 - Se confirmó otra vez que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.

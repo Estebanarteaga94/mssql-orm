@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 4: Agregar pruebas de integración contra SQL Server real
 - [ ] Etapa 5: Implementar `DbContext` trait, `DbSet<T>` y `#[derive(DbContext)]`
 - [ ] Etapa 5: Exponer API CRUD base `find`, `insert`, `update`, `delete`, `query`
 - [ ] Etapa 5: Crear ejemplo funcional `basic-crud`
@@ -52,3 +51,4 @@
 - [x] Etapa 4: Implementar `MssqlConnection` y configuración desde connection string
 - [x] Etapa 4: Implementar `Executor` sobre Tiberius con binding de parámetros
 - [x] Etapa 4: Implementar wrapper `MssqlRow` y conversión de errores a `OrmError`
+- [x] Etapa 4: Agregar pruebas de integración contra SQL Server real
