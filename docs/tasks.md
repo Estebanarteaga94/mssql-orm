@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 5: Crear ejemplo funcional `basic-crud`
 - [ ] Etapa 6: Implementar query builder público con filtros, composición lógica, ordenamiento, limit y paginación
 - [ ] Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público
 - [ ] Etapa 7: Implementar `ModelSnapshot`, diff engine y operaciones básicas de migración
@@ -25,6 +24,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 5: Crear ejemplo funcional `basic-crud`
 - [x] Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública
 - [x] Etapa 5: Implementar `DbSet::delete` por primary key simple
 - [x] Etapa 5: Implementar `DbSet::update` por primary key simple sobre `Changeset`

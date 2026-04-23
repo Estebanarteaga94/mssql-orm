@@ -2,6 +2,59 @@
 
 ## 2026-04-23
 
+### Sesión: Ejemplo funcional `basic-crud`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Crear ejemplo funcional basic-crud` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se creó `examples/basic-crud/` como crate ejecutable mínima y autocontenida.
+- Se añadieron `examples/basic-crud/src/main.rs`, `examples/basic-crud/Cargo.toml` y `examples/basic-crud/README.md`.
+- El ejemplo reutiliza exactamente la superficie pública ya validada: `Entity`, `Insertable`, `Changeset`, `DbContext`, `DbSet::insert`, `DbSet::find`, `DbSet::query`, `DbSet::update` y `DbSet::delete`.
+- El ejemplo prepara y limpia `dbo.basic_crud_users` con `MssqlConnection` solo como soporte de setup/cleanup, manteniendo el flujo CRUD en la crate pública.
+- Fue necesario añadir un `[workspace]` vacío al `Cargo.toml` del ejemplo para aislarlo del workspace raíz sin incorporarlo a `workspace.members`.
+- Se validó el ejemplo con `cargo check --manifest-path examples/basic-crud/Cargo.toml`, `cargo run --manifest-path examples/basic-crud/Cargo.toml` usando `DATABASE_URL` contra `tempdb`, y `cargo clippy --manifest-path examples/basic-crud/Cargo.toml -- -D warnings`.
+- También se mantuvo validado el workspace principal con `cargo test --workspace` durante la misma sesión.
+
+### Resultado
+
+- La Etapa 5 quedó cerrada con un ejemplo ejecutable real que refleja la API pública actual y el flujo CRUD básico sobre SQL Server.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo fue necesario aislar el ejemplo del workspace raíz para que Cargo aceptara `--manifest-path` sin añadirlo a `workspace.members`.
+
+### Próximo paso recomendado
+
+- Empezar `Etapa 6: Implementar query builder público con filtros, composición lógica, ordenamiento, limit y paginación`, reutilizando `DbSetQuery<T>` como base y evitando duplicar el AST ya existente.
+
+### Sesión: Modo `KEEP_TEST_ROWS` para CRUD público
+
+- Se ajustó `crates/mssql-orm/tests/stage5_public_crud.rs` para aceptar la variable de entorno `KEEP_TEST_ROWS=1`.
+- Cuando esa variable está activa, la prueba pública conserva la tabla y también deja una fila final persistida tras el flujo CRUD para inspección manual.
+- Con `KEEP_TEST_ROWS=1`, la prueba omite el borrado final del registro y evita el cleanup de la tabla, escribiendo en la salida que dejó la fila en `dbo.mssql_orm_public_crud`.
+- Se validó el ajuste con `cargo fmt --all --check`, `cargo test -p mssql-orm --test stage5_public_crud` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- Ahora existe un flujo opt-in para inspeccionar manualmente no solo la tabla sino también una fila real generada por la API pública de CRUD.
+
+### Próximo paso recomendado
+
+- Ejecutar `KEEP_TEST_ROWS=1` junto con `MSSQL_ORM_TEST_CONNECTION_STRING=... cargo test -p mssql-orm --test stage5_public_crud -- --nocapture` cuando se quiera inspección manual con datos persistidos, y borrar luego la tabla explícitamente.
+
+### Sesión: Modo `KEEP_TEST_TABLES` para CRUD público
+
+- Se ajustó `crates/mssql-orm/tests/stage5_public_crud.rs` para aceptar la variable de entorno `KEEP_TEST_TABLES=1`.
+- Cuando esa variable está activa, la prueba pública conserva la tabla `dbo.mssql_orm_public_crud` y escribe en la salida el nombre exacto de la tabla preservada.
+- El comportamiento por defecto no cambió: si `KEEP_TEST_TABLES` no está activa, la prueba sigue eliminando la tabla al finalizar.
+- Se validó el ajuste con `cargo fmt --all --check`, `cargo test -p mssql-orm --test stage5_public_crud` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- Ahora existe un flujo opt-in para inspeccionar manualmente en SQL Server la tabla usada por la integración pública de CRUD sin editar el archivo de tests.
+
+### Próximo paso recomendado
+
+- Ejecutar `KEEP_TEST_TABLES=1` junto con `MSSQL_ORM_TEST_CONNECTION_STRING=... cargo test -p mssql-orm --test stage5_public_crud -- --nocapture` cuando se quiera inspección manual, y borrar luego la tabla explícitamente.
+
 ### Sesión: Pruebas de integración públicas para CRUD base
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

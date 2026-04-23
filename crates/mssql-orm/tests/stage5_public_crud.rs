@@ -3,6 +3,8 @@ use mssql_orm::query::{CompiledQuery, Expr, Predicate, SelectQuery};
 use mssql_orm::tiberius::MssqlConnection;
 
 const TEST_CONNECTION_ENV: &str = "MSSQL_ORM_TEST_CONNECTION_STRING";
+const KEEP_TABLES_ENV: &str = "KEEP_TEST_TABLES";
+const KEEP_ROWS_ENV: &str = "KEEP_TEST_ROWS";
 const TEST_TABLE_NAME: &str = "dbo.mssql_orm_public_crud";
 
 #[derive(Entity, Debug, Clone, PartialEq)]
@@ -52,7 +54,11 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
         return Ok(());
     };
 
+    let keep_tables = keep_test_tables();
+    let keep_rows = keep_test_rows();
+
     reset_test_table(&connection_string).await?;
+    announce_test_table(keep_tables, keep_rows);
 
     let result = async {
         let db = PublicCrudDb::connect(&connection_string).await?;
@@ -112,21 +118,27 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
         let updated_found = db.users.find(inserted.id).await?;
         assert_eq!(updated_found, updated);
 
-        let deleted = db.users.delete(inserted.id).await?;
-        assert!(deleted);
+        if keep_rows {
+            let persisted = db.users.find(inserted.id).await?;
+            assert_eq!(persisted, updated);
+            assert_eq!(db.users.query().count().await?, 1);
+        } else {
+            let deleted = db.users.delete(inserted.id).await?;
+            assert!(deleted);
 
-        let after_delete = db.users.find(inserted.id).await?;
-        assert_eq!(after_delete, None);
-        assert_eq!(db.users.query().count().await?, 0);
+            let after_delete = db.users.find(inserted.id).await?;
+            assert_eq!(after_delete, None);
+            assert_eq!(db.users.query().count().await?, 0);
 
-        let deleted_again = db.users.delete(inserted.id).await?;
-        assert!(!deleted_again);
+            let deleted_again = db.users.delete(inserted.id).await?;
+            assert!(!deleted_again);
+        }
 
         Ok(())
     }
     .await;
 
-    cleanup_test_table(&connection_string).await?;
+    cleanup_test_table(&connection_string, keep_tables || keep_rows).await?;
 
     result
 }
@@ -136,6 +148,40 @@ fn test_connection_string() -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn keep_test_tables() -> bool {
+    matches!(
+        std::env::var(KEEP_TABLES_ENV)
+            .ok()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+fn keep_test_rows() -> bool {
+    matches!(
+        std::env::var(KEEP_ROWS_ENV)
+            .ok()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+fn announce_test_table(keep_tables: bool, keep_rows: bool) {
+    if keep_rows {
+        eprintln!(
+            "keeping public CRUD integration row in `{TEST_TABLE_NAME}` because {KEEP_ROWS_ENV}=1"
+        );
+    } else if keep_tables {
+        eprintln!(
+            "keeping public CRUD integration table `{TEST_TABLE_NAME}` because {KEEP_TABLES_ENV}=1"
+        );
+    } else {
+        eprintln!("created public CRUD integration table `{TEST_TABLE_NAME}`");
+    }
 }
 
 async fn reset_test_table(connection_string: &str) -> Result<(), OrmError> {
@@ -166,7 +212,11 @@ async fn reset_test_table(connection_string: &str) -> Result<(), OrmError> {
     Ok(())
 }
 
-async fn cleanup_test_table(connection_string: &str) -> Result<(), OrmError> {
+async fn cleanup_test_table(connection_string: &str, keep_tables: bool) -> Result<(), OrmError> {
+    if keep_tables {
+        return Ok(());
+    }
+
     let mut connection = MssqlConnection::connect(connection_string).await?;
 
     connection

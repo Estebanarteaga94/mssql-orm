@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 5 cerrando el ejemplo funcional `basic-crud`, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]`, `DbSet::query()`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` ya existen en la superficie pública y ya fueron validados contra SQL Server real.
+Iniciar la Etapa 6 implementando el query builder público con filtros, composición lógica, ordenamiento, limit y paginación, ahora que la Etapa 5 ya dejó CRUD base validado y un ejemplo funcional ejecutable.
 
 ## Dirección Arquitectónica Vigente
 
@@ -70,6 +70,10 @@ Continuar la Etapa 5 cerrando el ejemplo funcional `basic-crud`, ahora que `DbCo
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
+- La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
+- La misma prueba pública ahora también acepta `KEEP_TEST_ROWS=1` para conservar la tabla y dejar una fila final persistida, facilitando inspección manual con datos reales.
+- El repositorio ahora también incluye `examples/basic-crud/` como ejemplo ejecutable fuera del workspace principal, validado con `cargo run --manifest-path`.
+- Ese ejemplo usa `DATABASE_URL`, prepara `dbo.basic_crud_users`, recorre `insert`, `find`, `query`, `update` y `delete`, y limpia la tabla al final.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
@@ -90,7 +94,7 @@ Continuar la Etapa 5 cerrando el ejemplo funcional `basic-crud`, ahora que `DbCo
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
-- `DbSet<T>` ya sostiene una conexión compartida y la base CRUD fundamental completa, y ya existe validación pública real; el siguiente riesgo inmediato es dejar un ejemplo `basic-crud` coherente con esa superficie para usuarios externos.
+- La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
 - `delete` tampoco soporta primary key compuesta en esta etapa y retorna `bool` para distinguir entre fila eliminada y ausencia de fila, reservando conflictos de concurrencia para la Etapa 11.
@@ -100,6 +104,6 @@ Continuar la Etapa 5 cerrando el ejemplo funcional `basic-crud`, ahora que `DbCo
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 5: Crear ejemplo funcional basic-crud`.
-2. Reutilizar exactamente la superficie pública ya validada en `crates/mssql-orm/tests/stage5_public_crud.rs` para evitar divergencia entre ejemplo y comportamiento real.
-3. Mantener estables los contratos actuales de `DbSetQuery<T>`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` mientras entra el ejemplo y luego la Etapa 6.
+1. Implementar `Etapa 6: query builder público con filtros, composición lógica, ordenamiento, limit y paginación`.
+2. Reutilizar `DbSetQuery<T>` y el AST de `mssql-orm-query` como base, en lugar de introducir una segunda representación paralela.
+3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
