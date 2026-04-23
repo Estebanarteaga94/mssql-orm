@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 3: Implementar quoting seguro de identificadores SQL Server
 - [ ] Etapa 3: Compilar `select`, `insert`, `update`, `delete` y `count` a SQL parametrizado `@P1..@Pn`
 - [ ] Etapa 3: Agregar snapshot tests para SQL y orden de parámetros
 - [ ] Etapa 4: Implementar `MssqlConnection` y configuración desde connection string
@@ -52,3 +51,4 @@
 - [x] Etapa 2: Implementar derives `#[derive(Insertable)]` y `#[derive(Changeset)]`
 - [x] Etapa 2: Crear pruebas de mapping de filas y extracción de valores persistibles
 - [x] Etapa 3: Implementar AST de queries y `CompiledQuery`
+- [x] Etapa 3: Implementar quoting seguro de identificadores SQL Server
