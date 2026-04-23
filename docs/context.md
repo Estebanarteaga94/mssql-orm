@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Completar la Etapa 8 agregando pruebas explícitas de commit y rollback sobre la API pública `db.transaction(...)`.
+Iniciar la Etapa 9 implementando metadata de relaciones, foreign keys, joins explícitos e índices asociados, ahora que la Etapa 8 de transacciones quedó cerrada y validada.
 
 ## Dirección Arquitectónica Vigente
 
@@ -112,6 +112,7 @@ Completar la Etapa 8 agregando pruebas explícitas de commit y rollback sobre la
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
 - La misma prueba pública ahora también acepta `KEEP_TEST_ROWS=1` para conservar la tabla y dejar una fila final persistida, facilitando inspección manual con datos reales.
+- La misma batería pública ahora también cubre `db.transaction(...)` contra SQL Server real, validando persistencia con `COMMIT` y reversión con `ROLLBACK`.
 - El repositorio ahora también incluye `examples/basic-crud/` como ejemplo ejecutable fuera del workspace principal, validado con `cargo run --manifest-path`.
 - Ese ejemplo usa `DATABASE_URL`, prepara `dbo.basic_crud_users`, recorre `insert`, `find`, `query`, `update` y `delete`, y limpia la tabla al final.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
@@ -152,6 +153,6 @@ Completar la Etapa 8 agregando pruebas explícitas de commit y rollback sobre la
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 8: Agregar pruebas de commit y rollback`.
-2. Reutilizar la API pública `db.transaction(...)` ya expuesta, validando tanto persistencia en `Ok` como reversión en `Err`.
-3. Mantener la responsabilidad de `BEGIN`/`COMMIT`/`ROLLBACK` dentro de `mssql-orm-tiberius`, sin mover ejecución al `core`.
+1. Implementar `Etapa 9: metadata de relaciones, foreign keys, joins explícitos e índices asociados`.
+2. Mantener `core` como fuente de metadata y dejar la generación SQL de relaciones exclusivamente en la capa SQL Server cuando corresponda.
+3. Evitar adelantar `delete behavior` o features de Active Record antes de fijar primero el contrato base de relaciones.

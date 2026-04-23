@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: Pruebas reales de commit y rollback
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 8: Agregar pruebas de commit y rollback` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/tests/stage5_public_crud.rs` con dos pruebas de integración reales adicionales sobre la API pública `db.transaction(...)`.
+- `public_dbcontext_transaction_commits_on_ok` verifica que una inserción realizada dentro del closure transaccional queda persistida y visible luego del `COMMIT`.
+- `public_dbcontext_transaction_rolls_back_on_err` fuerza un `Err` dentro del closure y valida que la fila insertada no permanezca en la tabla tras el `ROLLBACK`.
+- Ambas pruebas reutilizan la misma tabla real `dbo.mssql_orm_public_crud` y el mismo setup/cleanup ya existente, evitando introducir otro fixture paralelo para la Etapa 8.
+
+### Resultado
+
+- La Etapa 8 quedó cerrada de extremo a extremo: infraestructura transaccional en el adaptador, exposición pública de `db.transaction(...)` y pruebas reales de commit/rollback sobre SQL Server.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test --test stage5_public_crud`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+
+### Próximo paso recomendado
+
+- Iniciar `Etapa 9: Implementar metadata de relaciones, foreign keys, joins explícitos e índices asociados`.
+
 ### Sesión: Exposición pública de `db.transaction(...)`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 8: Exponer db.transaction(...) en la crate pública reutilizando la infraestructura transaccional` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

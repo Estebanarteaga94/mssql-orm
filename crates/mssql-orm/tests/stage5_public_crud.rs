@@ -143,6 +143,105 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
     result
 }
 
+#[tokio::test]
+async fn public_dbcontext_transaction_commits_on_ok() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public transaction commit test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+    announce_test_table(keep_tables, false);
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .transaction(|tx| async move {
+                tx.users
+                    .insert(NewPublicCrudUser {
+                        name: "Committed".to_string(),
+                        active: true,
+                    })
+                    .await
+            })
+            .await?;
+
+        assert!(inserted.id > 0);
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(
+            persisted,
+            Some(PublicCrudUser {
+                id: inserted.id,
+                name: "Committed".to_string(),
+                active: true,
+            })
+        );
+        assert_eq!(db.users.query().count().await?, 1);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_transaction_rolls_back_on_err() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public transaction rollback test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+    announce_test_table(keep_tables, false);
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+
+        let error = db
+            .transaction(|tx| async move {
+                tx.users
+                    .insert(NewPublicCrudUser {
+                        name: "Rolled Back".to_string(),
+                        active: false,
+                    })
+                    .await?;
+
+                Err::<(), OrmError>(OrmError::new(
+                    "forcing transaction rollback for integration test",
+                ))
+            })
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "forcing transaction rollback for integration test"
+        );
+        assert_eq!(db.users.query().count().await?, 0);
+
+        let all = db.users.query().all().await?;
+        assert!(all.is_empty());
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
 fn test_connection_string() -> Option<String> {
     std::env::var(TEST_CONNECTION_ENV)
         .ok()
