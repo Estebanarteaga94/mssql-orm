@@ -1,8 +1,8 @@
 use crate::quoting::{quote_identifier, quote_table_ref};
 use mssql_orm_core::{ColumnValue, OrmError, SqlValue};
 use mssql_orm_query::{
-    BinaryOp, CompiledQuery, CountQuery, DeleteQuery, Expr, InsertQuery, OrderBy, Pagination,
-    Predicate, Query, SelectQuery, SortDirection, UnaryOp, UpdateQuery,
+    BinaryOp, CompiledQuery, CountQuery, DeleteQuery, Expr, InsertQuery, Join, JoinType, OrderBy,
+    Pagination, Predicate, Query, SelectQuery, SortDirection, TableRef, UnaryOp, UpdateQuery,
 };
 
 #[derive(Debug, Default)]
@@ -33,15 +33,10 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_select(query: &SelectQuery) -> Result<CompiledQuery, OrmError> {
-        if !query.joins.is_empty() {
-            return Err(OrmError::new(
-                "SQL Server join compilation is not supported in this stage",
-            ));
-        }
-
         let mut parameters = ParameterBuilder::default();
         let projection = compile_projection(&query.projection, &mut parameters)?;
         let mut sql = format!("SELECT {projection} FROM {}", quote_table_ref(&query.from)?);
+        sql.push_str(&compile_joins(&query.from, &query.joins, &mut parameters)?);
 
         if let Some(predicate) = &query.predicate {
             let predicate = compile_predicate(predicate, &mut parameters)?;
@@ -137,6 +132,35 @@ impl crate::SqlServerCompiler {
 
         Ok(parameters.finish(sql))
     }
+}
+
+fn compile_joins(
+    from: &TableRef,
+    joins: &[Join],
+    parameters: &mut ParameterBuilder,
+) -> Result<String, OrmError> {
+    let mut compiled = String::new();
+    let mut seen_tables = vec![*from];
+
+    for join in joins {
+        if seen_tables.contains(&join.table) {
+            return Err(OrmError::new(
+                "SQL Server join compilation requires unique tables until alias support exists",
+            ));
+        }
+
+        seen_tables.push(join.table);
+        compiled.push(' ');
+        compiled.push_str(match join.join_type {
+            JoinType::Inner => "INNER JOIN ",
+            JoinType::Left => "LEFT JOIN ",
+        });
+        compiled.push_str(&quote_table_ref(&join.table)?);
+        compiled.push_str(" ON ");
+        compiled.push_str(&compile_predicate(&join.on, parameters)?);
+    }
+
+    Ok(compiled)
 }
 
 fn compile_projection(
@@ -334,6 +358,9 @@ mod tests {
     #[allow(dead_code)]
     struct Customer;
 
+    #[allow(dead_code)]
+    struct Order;
+
     static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
         ColumnMetadata {
             rust_field: "id",
@@ -417,12 +444,85 @@ mod tests {
         }
     }
 
+    static ORDER_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: Some(IdentityMetadata::new(1, 1)),
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "customer_id",
+            column_name: "customer_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "total_cents",
+            column_name: "total_cents",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static ORDER_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "Order",
+        schema: "sales",
+        table: "orders",
+        columns: &ORDER_COLUMNS,
+        primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &["id"]),
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for Order {
+        fn metadata() -> &'static EntityMetadata {
+            &ORDER_METADATA
+        }
+    }
+
     #[allow(non_upper_case_globals)]
     impl Customer {
         const id: EntityColumn<Customer> = EntityColumn::new("id", "id");
         const email: EntityColumn<Customer> = EntityColumn::new("email", "email");
         const active: EntityColumn<Customer> = EntityColumn::new("active", "active");
         const created_at: EntityColumn<Customer> = EntityColumn::new("created_at", "created_at");
+    }
+
+    #[allow(non_upper_case_globals)]
+    impl Order {
+        const customer_id: EntityColumn<Order> = EntityColumn::new("customer_id", "customer_id");
+        const total_cents: EntityColumn<Order> = EntityColumn::new("total_cents", "total_cents");
     }
 
     struct NewCustomer {
@@ -515,7 +615,37 @@ mod tests {
     }
 
     #[test]
-    fn rejects_joins_until_stage_nine_sql_compilation() {
+    fn compiles_explicit_joins_to_sql() {
+        let query = SelectQuery::from_entity::<Customer>()
+            .select(vec![
+                Expr::from(Customer::email),
+                Expr::from(Order::total_cents),
+            ])
+            .inner_join::<Order>(Predicate::eq(
+                Expr::from(Customer::id),
+                Expr::from(Order::customer_id),
+            ))
+            .filter(Predicate::gt(
+                Expr::from(Order::total_cents),
+                Expr::value(SqlValue::I64(1000)),
+            ))
+            .order_by(OrderBy::desc(Order::total_cents))
+            .paginate(Pagination::page(1, 10));
+
+        let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "SELECT [sales].[customers].[email], [sales].[orders].[total_cents] FROM [sales].[customers] INNER JOIN [sales].[orders] ON ([sales].[customers].[id] = [sales].[orders].[customer_id]) WHERE ([sales].[orders].[total_cents] > @P1) ORDER BY [sales].[orders].[total_cents] DESC OFFSET @P2 ROWS FETCH NEXT @P3 ROWS ONLY"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![SqlValue::I64(1000), SqlValue::I64(0), SqlValue::I64(10)]
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_joined_tables_until_alias_support_exists() {
         let error = SqlServerCompiler::compile_select(
             &SelectQuery::from_entity::<Customer>().inner_join::<Customer>(Predicate::eq(
                 Expr::from(Customer::id),
@@ -526,7 +656,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "SQL Server join compilation is not supported in this stage"
+            "SQL Server join compilation requires unique tables until alias support exists"
         );
     }
 

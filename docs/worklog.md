@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: Compilación SQL Server de joins explícitos
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Compilar joins explícitos a SQL Server parametrizado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-sqlserver/src/compiler.rs` para compilar `SelectQuery::joins` a `INNER JOIN` y `LEFT JOIN`, reutilizando `quote_table_ref`, `Predicate` y el mismo `ParameterBuilder` ya usado por filtros y paginación.
+- La compilación preserva orden de joins y orden global de parámetros, de modo que valores usados en condiciones `ON`, `WHERE` y `OFFSET/FETCH` siguen numerándose en secuencia `@P1..@Pn`.
+- Dado que el AST todavía no soporta aliases, la compilación ahora rechaza explícitamente joins repetidos sobre la misma tabla o self-joins con el error `SQL Server join compilation requires unique tables until alias support exists`.
+- Se añadieron pruebas unitarias en `mssql-orm-sqlserver` para cubrir compilación de joins explícitos y rechazo de tablas duplicadas sin aliasing.
+- Esta sesión no agregó aún surface pública nueva ni snapshots dedicados de joins; eso queda para las subtareas posteriores ya separadas en el backlog.
+
+### Resultado
+
+- La Etapa 9 ya cuenta con joins explícitos compilables en la crate SQL Server para el caso mínimo soportado actualmente: joins entre tablas distintas sin aliasing.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La ausencia de aliases en el AST impide todavía soportar self-joins o múltiples joins sobre la misma tabla; ese límite quedó documentado y validado con error explícito.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Exponer joins explícitos mínimos en la crate pública`.
+
 ### Sesión: Joins explícitos en el AST de queries
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Incorporar joins explícitos al AST de mssql-orm-query` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

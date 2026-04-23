@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 compilando joins explícitos a SQL Server, ahora que el AST de `mssql-orm-query` ya los modela de forma explícita.
+Continuar la Etapa 9 exponiendo joins explícitos mínimos en la crate pública, ahora que el AST y la compilación SQL Server ya soportan el caso base.
 
 ## Dirección Arquitectónica Vigente
 
@@ -114,7 +114,8 @@ Continuar la Etapa 9 compilando joins explícitos a SQL Server, ahora que el AST
 - `ReferentialAction::SetDefault` sigue rechazado explícitamente en DDL, porque todavía no forma parte del alcance activo.
 - `mssql-orm-sqlserver` ya compila `CreateIndex` y `DropIndex` a DDL SQL Server usando `CREATE [UNIQUE] INDEX ... ON ...` y `DROP INDEX ... ON ...`, preservando orden `ASC`/`DESC` desde el snapshot.
 - `mssql-orm-query` ahora modela joins explícitos en `SelectQuery` mediante `JoinType`, `Join`, `join(...)`, `inner_join::<E>(...)` y `left_join::<E>(...)`, manteniendo el AST libre de SQL directo.
-- Mientras la subtarea de compilación no se implemente, `mssql-orm-sqlserver` rechaza explícitamente `SelectQuery` con joins no vacíos para no degradar silenciosamente el comportamiento.
+- `mssql-orm-sqlserver` ya compila joins explícitos a `INNER JOIN` y `LEFT JOIN` para el caso base sin aliases, preservando el orden de joins y de parámetros en el SQL parametrizado final.
+- Mientras no exista aliasing en el AST, la compilación SQL Server rechaza explícitamente self-joins o joins repetidos sobre la misma tabla.
 - Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
@@ -160,7 +161,7 @@ Continuar la Etapa 9 compilando joins explícitos a SQL Server, ahora que el AST
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, y el AST de joins explícitos ya existe; el siguiente frente real de Etapa 9 pasa a ser su compilación SQL Server y luego la surface pública mínima.
+- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, y joins explícitos ya existen tanto en AST como en compilación SQL Server; el siguiente frente real de Etapa 9 pasa a ser la surface pública mínima y luego pruebas/snapshots dedicados.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -171,6 +172,6 @@ Continuar la Etapa 9 compilando joins explícitos a SQL Server, ahora que el AST
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Compilar joins explícitos a SQL Server parametrizado`.
-2. Reutilizar el AST ya agregado en `mssql-orm-query` y mantener toda generación SQL exclusivamente dentro de `mssql-orm-sqlserver`.
-3. Exponer joins en la crate pública solo después de fijar primero la semántica SQL observable y sus pruebas.
+1. Implementar `Etapa 9: Exponer joins explícitos mínimos en la crate pública`.
+2. Mantener esa surface alineada con el AST existente y sin abrir todavía soporte de aliases o eager loading.
+3. Después de exponerla, agregar pruebas de integración y snapshots dedicados para joins y foreign keys.
