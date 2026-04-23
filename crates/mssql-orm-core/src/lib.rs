@@ -454,6 +454,36 @@ pub struct ForeignKeyMetadata {
     pub on_update: ReferentialAction,
 }
 
+impl ForeignKeyMetadata {
+    pub const fn new(
+        name: &'static str,
+        columns: &'static [&'static str],
+        referenced_schema: &'static str,
+        referenced_table: &'static str,
+        referenced_columns: &'static [&'static str],
+        on_delete: ReferentialAction,
+        on_update: ReferentialAction,
+    ) -> Self {
+        Self {
+            name,
+            columns,
+            referenced_schema,
+            referenced_table,
+            referenced_columns,
+            on_delete,
+            on_update,
+        }
+    }
+
+    pub fn references_table(&self, schema: &str, table: &str) -> bool {
+        self.referenced_schema == schema && self.referenced_table == table
+    }
+
+    pub fn includes_column(&self, column_name: &str) -> bool {
+        self.columns.contains(&column_name)
+    }
+}
+
 /// Static metadata describing an entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntityMetadata {
@@ -484,6 +514,30 @@ impl EntityMetadata {
             .columns
             .iter()
             .filter_map(|column_name| self.column(column_name))
+            .collect()
+    }
+
+    pub fn foreign_key(&self, name: &str) -> Option<&'static ForeignKeyMetadata> {
+        self.foreign_keys
+            .iter()
+            .find(|foreign_key| foreign_key.name == name)
+    }
+
+    pub fn foreign_keys_for_column(&self, column_name: &str) -> Vec<&'static ForeignKeyMetadata> {
+        self.foreign_keys
+            .iter()
+            .filter(|foreign_key| foreign_key.includes_column(column_name))
+            .collect()
+    }
+
+    pub fn foreign_keys_referencing(
+        &self,
+        schema: &str,
+        table: &str,
+    ) -> Vec<&'static ForeignKeyMetadata> {
+        self.foreign_keys
+            .iter()
+            .filter(|foreign_key| foreign_key.references_table(schema, table))
             .collect()
     }
 }
@@ -576,15 +630,15 @@ mod tests {
         unique: true,
     }];
 
-    const USER_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata {
-        name: "fk_users_tenants",
-        columns: &["tenant_id"],
-        referenced_schema: "dbo",
-        referenced_table: "tenants",
-        referenced_columns: &["id"],
-        on_delete: ReferentialAction::NoAction,
-        on_update: ReferentialAction::NoAction,
-    }];
+    const USER_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_users_tenants",
+        &["tenant_id"],
+        "dbo",
+        "tenants",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
 
     const USER_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "User",
@@ -690,6 +744,43 @@ mod tests {
             Some(SqlServerType::RowVersion)
         );
         assert!(metadata.column("missing").is_none());
+    }
+
+    #[test]
+    fn foreign_key_metadata_supports_relationship_lookups() {
+        let metadata = User::metadata();
+        let foreign_key = metadata
+            .foreign_key("fk_users_tenants")
+            .expect("foreign key metadata");
+
+        assert_eq!(foreign_key.columns, &["tenant_id"]);
+        assert_eq!(foreign_key.referenced_schema, "dbo");
+        assert_eq!(foreign_key.referenced_table, "tenants");
+        assert_eq!(foreign_key.referenced_columns, &["id"]);
+        assert!(foreign_key.references_table("dbo", "tenants"));
+        assert!(!foreign_key.references_table("sales", "tenants"));
+        assert!(foreign_key.includes_column("tenant_id"));
+        assert!(!foreign_key.includes_column("email"));
+    }
+
+    #[test]
+    fn metadata_can_filter_foreign_keys_by_column_and_target_table() {
+        let metadata = User::metadata();
+
+        let by_column = metadata.foreign_keys_for_column("tenant_id");
+        assert_eq!(by_column.len(), 1);
+        assert_eq!(by_column[0].name, "fk_users_tenants");
+
+        let by_table = metadata.foreign_keys_referencing("dbo", "tenants");
+        assert_eq!(by_table.len(), 1);
+        assert_eq!(by_table[0].name, "fk_users_tenants");
+
+        assert!(metadata.foreign_keys_for_column("email").is_empty());
+        assert!(
+            metadata
+                .foreign_keys_referencing("sales", "customers")
+                .is_empty()
+        );
     }
 
     #[test]

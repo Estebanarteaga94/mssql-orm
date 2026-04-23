@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 9 implementando metadata de relaciones, foreign keys, joins explícitos e índices asociados, ahora que la Etapa 8 de transacciones quedó cerrada y validada.
+Continuar la Etapa 9 implementando soporte de `#[orm(foreign_key = ...)]` en `#[derive(Entity)]`, reutilizando la metadata base de relaciones ya fijada en `mssql-orm-core`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -27,6 +27,7 @@ Iniciar la Etapa 9 implementando metadata de relaciones, foreign keys, joins exp
 - El MVP debe enfocarse en metadata, macros de entidad, CRUD básico, query builder simple, `DbContext`, `DbSet` y migraciones básicas.
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
+- `mssql-orm-core` ahora también expone helpers explícitos de metadata relacional sobre `ForeignKeyMetadata` y `EntityMetadata`, incluyendo búsqueda por nombre, por columna local y por tabla referenciada.
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
@@ -143,6 +144,7 @@ Iniciar la Etapa 9 implementando metadata de relaciones, foreign keys, joins exp
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no hay cobertura específica de commit/rollback real en SQL Server.
+- La metadata base de relaciones ya quedó fijada, pero todavía no existe parsing/generación automática desde `#[orm(foreign_key = ...)]`; hasta que eso exista, las relaciones siguen dependiendo de metadata escrita manualmente en pruebas.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -153,6 +155,6 @@ Iniciar la Etapa 9 implementando metadata de relaciones, foreign keys, joins exp
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: metadata de relaciones, foreign keys, joins explícitos e índices asociados`.
-2. Mantener `core` como fuente de metadata y dejar la generación SQL de relaciones exclusivamente en la capa SQL Server cuando corresponda.
-3. Evitar adelantar `delete behavior` o features de Active Record antes de fijar primero el contrato base de relaciones.
+1. Implementar `Etapa 9: Soportar atributos foreign_key en #[derive(Entity)] y generar metadata correspondiente`.
+2. Reutilizar la metadata base ya fijada en `core`, evitando crear un segundo contrato paralelo para relaciones.
+3. Mantener joins, DDL y `delete behavior` fuera de alcance hasta que el derive genere metadata consistente.

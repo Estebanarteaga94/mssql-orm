@@ -1,8 +1,16 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 9: Implementar metadata de relaciones, foreign keys, joins explícitos e índices asociados
-- [ ] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`)
+- [ ] Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos
+- [ ] Etapa 9: Soportar atributos `foreign_key` en `#[derive(Entity)]` y generar metadata correspondiente
+- [ ] Etapa 9: Agregar pruebas `trybuild` y unitarias de metadata de relaciones
+- [ ] Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados
+- [ ] Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys
+- [ ] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`) en metadata y DDL
+- [ ] Etapa 9: Incorporar joins explícitos al AST de `mssql-orm-query`
+- [ ] Etapa 9: Compilar joins explícitos a SQL Server parametrizado
+- [ ] Etapa 9: Exponer joins explícitos mínimos en la crate pública
+- [ ] Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys
 - [ ] Etapa 10: Implementar capa opcional Active Record sobre `DbSet`
 - [ ] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
 - [ ] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
@@ -16,6 +24,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos
 - [x] Etapa 8: Agregar pruebas de commit y rollback
 - [x] Etapa 8: Exponer `db.transaction(...)` en la crate pública reutilizando la infraestructura transaccional
 - [x] Etapa 8: Implementar infraestructura transaccional en `mssql-orm-tiberius` con `BEGIN`, `COMMIT` y `ROLLBACK`

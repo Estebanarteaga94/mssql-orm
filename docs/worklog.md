@@ -2,6 +2,35 @@
 
 ## 2026-04-23
 
+### Sesión: Metadata base de relaciones uno-a-muchos
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se reforzó `crates/mssql-orm-core/src/lib.rs` manteniendo `ForeignKeyMetadata` como contrato base, pero agregando un constructor `const` y helpers explícitos para consultas de metadata de relaciones.
+- `ForeignKeyMetadata` ahora expone `new(...)`, `references_table(...)` e `includes_column(...)`, permitiendo que macros, migraciones y futuras capas de joins reutilicen el mismo shape sin duplicar lógica auxiliar.
+- `EntityMetadata` ahora también expone `foreign_key(name)`, `foreign_keys_for_column(column_name)` y `foreign_keys_referencing(schema, table)` como surface base para resolver relaciones uno-a-muchos desde metadata estática.
+- Se ampliaron las pruebas unitarias de `mssql-orm-core` para fijar búsqueda por nombre, filtrado por columna local y filtrado por tabla referenciada.
+
+### Resultado
+
+- La base de metadata de relaciones quedó más explícita y utilizable sin alterar todavía macros, AST de joins ni generación SQL; eso deja una base estable para la siguiente subtarea del derive.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-core`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El atributo `#[orm(foreign_key = ...)]` todavía no está implementado en `#[derive(Entity)]`; esa parte quedó explícitamente fuera del alcance de esta sesión.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Soportar atributos foreign_key en #[derive(Entity)] y generar metadata correspondiente`.
+
 ### Sesión: Pruebas reales de commit y rollback
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 8: Agregar pruebas de commit y rollback` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
