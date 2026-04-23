@@ -135,7 +135,7 @@ fn migration_timestamp() -> Result<String, OrmError> {
     let duration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| OrmError::new("system clock is before UNIX_EPOCH"))?;
-    Ok(duration.as_secs().to_string())
+    Ok(duration.as_nanos().to_string())
 }
 
 fn slugify(name: &str) -> String {

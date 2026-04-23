@@ -2,6 +2,31 @@
 
 ## 2026-04-23
 
+### Sesión: Revalidación local de migraciones creadas en la raíz
+
+- A petición del usuario, se repitió la validación real de migraciones creando temporalmente `./migrations/` en la raíz del repositorio para inspeccionar resultados locales en vez de usar un directorio temporal externo.
+- La primera repetición detectó un segundo gap real: dos llamadas consecutivas a `migration add` podían producir ids con el mismo segundo base, dejando el orden final dependiente del slug y no del orden real de creación.
+- Se corrigió `crates/mssql-orm-migrate/src/filesystem.rs` para generar ids con resolución de nanosegundos, eliminando la colisión observada durante la prueba.
+- Tras el fix, se recrearon dos migraciones locales en secuencia (`QaCreateCustomers` y `QaAddPhone`), se generó `database update`, se aplicó el script en `tempdb` y se verificó de nuevo la tabla `qa_real_stage7.customers`, la columna incremental `phone` y la idempotencia del historial.
+- Al finalizar, se eliminó otra vez `./migrations/` de la raíz para no dejar artefactos de validación dentro del repositorio.
+
+### Resultado
+
+- La validación local en raíz también quedó correcta y confirmó tanto el fix de batching en `database update` como el fix de orden/colisión en ids de migración.
+
+### Validación
+
+- `cargo test -q -p mssql-orm-migrate -p mssql-orm-cli`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add QaCreateCustomers`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add QaAddPhone`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update`
+- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i /tmp/mssql_orm_stage7_retry.sql`
+- Consultas `sqlcmd` sobre `sys.tables`, `sys.columns` y `dbo.__mssql_orm_migrations`
+
+### Próximo paso recomendado
+
+- Continuar con `Etapa 8: transacciones con commit en Ok y rollback en Err`.
+
 ### Sesión: Validación real de migraciones sobre SQL Server
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real` a `En Progreso` antes de ejecutar la validación y luego a `Completadas` tras cerrarla.
