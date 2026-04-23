@@ -2,8 +2,12 @@ use crate::dbset_query::DbSetQuery;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use mssql_orm_core::{Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping};
-use mssql_orm_query::{ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef};
+use mssql_orm_core::{
+    Changeset, Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping,
+};
+use mssql_orm_query::{
+    ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
+};
 use mssql_orm_sqlserver::SqlServerCompiler;
 use mssql_orm_tiberius::{MssqlConnection, TokioConnectionStream};
 
@@ -71,6 +75,18 @@ impl<E: Entity> DbSet<E> {
         inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
     }
 
+    pub async fn update<K, C>(&self, key: K, changeset: C) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + Send,
+        K: SqlTypeMapping,
+        C: Changeset<E>,
+    {
+        let compiled = SqlServerCompiler::compile_update(&self.update_query(key, &changeset)?)?;
+        let shared_connection = self.shared_connection();
+        let mut connection = shared_connection.lock().await;
+        connection.fetch_one(compiled).await
+    }
+
     pub fn shared_connection(&self) -> SharedConnection {
         Arc::clone(
             self.connection
@@ -94,26 +110,7 @@ impl<E: Entity> DbSet<E> {
     where
         K: SqlTypeMapping,
     {
-        let metadata = E::metadata();
-        let primary_key = metadata.primary_key_columns();
-
-        if primary_key.len() != 1 {
-            return Err(OrmError::new(
-                "DbSet::find currently supports only entities with a single primary key column",
-            ));
-        }
-
-        let column = primary_key[0];
-        let predicate = Predicate::eq(
-            Expr::Column(ColumnRef::new(
-                TableRef::for_entity::<E>(),
-                column.rust_field,
-                column.column_name,
-            )),
-            Expr::Value(key.to_sql_value()),
-        );
-
-        Ok(SelectQuery::from_entity::<E>().filter(predicate))
+        Ok(SelectQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?))
     }
 
     fn insert_query<I>(&self, insertable: &I) -> InsertQuery
@@ -121,6 +118,39 @@ impl<E: Entity> DbSet<E> {
         I: Insertable<E>,
     {
         InsertQuery::for_entity::<E, I>(insertable)
+    }
+
+    fn update_query<K, C>(&self, key: K, changeset: &C) -> Result<UpdateQuery, OrmError>
+    where
+        K: SqlTypeMapping,
+        C: Changeset<E>,
+    {
+        Ok(UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?))
+    }
+
+    fn primary_key_predicate<K>(&self, key: K) -> Result<Predicate, OrmError>
+    where
+        K: SqlTypeMapping,
+    {
+        let metadata = E::metadata();
+        let primary_key = metadata.primary_key_columns();
+
+        if primary_key.len() != 1 {
+            return Err(OrmError::new(
+                "DbSet currently supports this operation only for entities with a single primary key column",
+            ));
+        }
+
+        let column = primary_key[0];
+
+        Ok(Predicate::eq(
+            Expr::Column(ColumnRef::new(
+                TableRef::for_entity::<E>(),
+                column.rust_field,
+                column.column_name,
+            )),
+            Expr::Value(key.to_sql_value()),
+        ))
     }
 }
 
@@ -136,13 +166,19 @@ mod tests {
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
         SqlValue,
     };
-    use mssql_orm_query::{ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef};
+    use mssql_orm_query::{
+        ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
+    };
 
     struct TestEntity;
     struct CompositeKeyEntity;
     struct NewTestEntity {
         name: String,
         active: bool,
+    }
+    struct UpdateTestEntity {
+        name: Option<String>,
+        active: Option<bool>,
     }
 
     static TEST_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
@@ -278,6 +314,28 @@ mod tests {
         }
     }
 
+    impl mssql_orm_core::Changeset<TestEntity> for UpdateTestEntity {
+        fn changes(&self) -> Vec<ColumnValue> {
+            let mut values = Vec::new();
+
+            if let Some(name) = &self.name {
+                values.push(ColumnValue::new("name", SqlValue::String(name.clone())));
+            }
+
+            if let Some(active) = self.active {
+                values.push(ColumnValue::new("active", SqlValue::Bool(active)));
+            }
+
+            values
+        }
+    }
+
+    impl mssql_orm_core::Changeset<CompositeKeyEntity> for UpdateTestEntity {
+        fn changes(&self) -> Vec<ColumnValue> {
+            <Self as mssql_orm_core::Changeset<TestEntity>>::changes(self)
+        }
+    }
+
     #[test]
     fn dbset_exposes_entity_metadata() {
         let dbset = DbSet::<TestEntity>::disconnected();
@@ -340,7 +398,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "DbSet::find currently supports only entities with a single primary key column"
+            "DbSet currently supports this operation only for entities with a single primary key column"
         );
     }
 
@@ -363,6 +421,45 @@ mod tests {
                     ColumnValue::new("active", SqlValue::Bool(true)),
                 ],
             }
+        );
+    }
+
+    #[test]
+    fn dbset_update_builds_update_query_for_entity_and_primary_key() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let changeset = UpdateTestEntity {
+            name: Some("ana maria".to_string()),
+            active: Some(false),
+        };
+
+        let query = dbset.update_query(7_i64, &changeset).unwrap();
+
+        assert_eq!(
+            query,
+            UpdateQuery::for_entity::<TestEntity, _>(&changeset).filter(Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("dbo", "test_entities"),
+                    "id",
+                    "id",
+                )),
+                Expr::Value(SqlValue::I64(7)),
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_update_rejects_composite_primary_keys() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let changeset = UpdateTestEntity {
+            name: Some("ana".to_string()),
+            active: None,
+        };
+
+        let error = dbset.update_query(7_i64, &changeset).unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "DbSet currently supports this operation only for entities with a single primary key column"
         );
     }
 }

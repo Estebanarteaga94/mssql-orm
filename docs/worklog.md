@@ -2,6 +2,31 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::update` por primary key simple
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::update por primary key simple sobre Changeset` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/context.rs` para exponer `DbSet::update<K, C>() -> Result<Option<E>, OrmError>`.
+- `update` reutiliza `UpdateQuery`, `SqlServerCompiler::compile_update` y `MssqlConnection::fetch_one`, apoyándose en `OUTPUT INSERTED.*` ya emitido por la compilación SQL Server.
+- Se factoró un helper interno `primary_key_predicate` para compartir la construcción del filtro por PK simple entre `find` y `update`.
+- Se añadió el helper interno `update_query(&C)` para mantener la forma del `UpdateQuery` testeable sin depender de una conexión real.
+- En esta etapa, `update` sigue soportando solo primary key simple; para PK compuesta retorna un `OrmError` explícito.
+- Se eligió `Result<Option<E>, OrmError>` como retorno para conservar la posibilidad de “fila no encontrada” sin inventar aún semántica de conflicto de concurrencia previa a la Etapa 11.
+- Se añadieron pruebas unitarias para verificar la forma exacta del `UpdateQuery` generado y para rechazar PK compuesta.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- `DbSet<T>` ya expone actualización base por primary key simple y deja lista la última operación CRUD fundamental de Etapa 5: `delete`.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo apareció un ajuste menor de imports en el módulo de tests durante la validación.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Implementar DbSet::delete por primary key simple`, reutilizando metadata de PK simple, `DeleteQuery`, `SqlServerCompiler::compile_delete` y `ExecuteResult`.
+
 ### Sesión: `DbSet::insert` con retorno materializado
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::insert sobre modelos Insertable con retorno materializado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
