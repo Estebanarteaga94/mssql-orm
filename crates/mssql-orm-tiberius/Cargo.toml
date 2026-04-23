@@ -5,6 +5,13 @@ edition.workspace = true
 description = "Tiberius execution adapter for mssql-orm."
 
 [dependencies]
+futures-io = "0.3"
 mssql-orm-core.workspace = true
 mssql-orm-query.workspace = true
 mssql-orm-sqlserver.workspace = true
+tiberius = { version = "0.12.3", default-features = false, features = ["rustls", "tds73", "tokio", "tokio-util"] }
+tokio = { version = "1", features = ["net"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

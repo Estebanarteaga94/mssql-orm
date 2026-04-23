@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 4 implementando `MssqlConnection` y configuración desde connection string en `mssql-orm-tiberius`, ahora que la salida SQL de `mssql-orm-sqlserver` ya quedó estabilizada con snapshots.
+Continuar la Etapa 4 implementando `Executor` sobre Tiberius y binding de parámetros para `CompiledQuery`, ahora que `mssql-orm-tiberius` ya dispone de configuración y conexión base.
 
 ## Dirección Arquitectónica Vigente
 
@@ -48,6 +48,9 @@ Iniciar la Etapa 4 implementando `MssqlConnection` y configuración desde connec
 - La compilación actual emite `OUTPUT INSERTED.*` para `insert` y `update`, usa `*` cuando `select` no tiene proyección explícita y exige `ORDER BY` antes de `OFFSET/FETCH`.
 - `mssql-orm-sqlserver` ya cuenta con snapshots versionados para `select`, `insert`, `update`, `delete` y `count`, fijando el SQL generado y la secuencia observable de parámetros.
 - La crate `mssql-orm-sqlserver` ahora usa `insta` solo como `dev-dependency` para congelar el contrato del compilador sin introducir dependencia runtime nueva.
+- `mssql-orm-tiberius` ya integra la dependencia real `tiberius` y expone `MssqlConnectionConfig`, `MssqlConnection` y `TokioConnectionStream`.
+- `MssqlConnectionConfig` ya parsea ADO connection strings mediante `tiberius::Config`, conserva el string original y rechaza entradas vacías o sin host usable.
+- `MssqlConnection::connect` ya abre `TcpStream`, configura `TCP_NODELAY` e inicializa `tiberius::Client`, sin adelantar todavía ejecución de `CompiledQuery` ni mapeo de filas.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -66,13 +69,13 @@ Iniciar la Etapa 4 implementando `MssqlConnection` y configuración desde connec
 
 ## Riesgos Inmediatos
 
-- La salida SQL ya está estabilizada por snapshots, pero todavía no existe la capa de conexión y configuración sobre Tiberius para consumir `CompiledQuery`.
-- La Etapa 4 deberá cuidar la separación de responsabilidades: conexión y ejecución en `mssql-orm-tiberius`, sin mover lógica de compilación fuera de `mssql-orm-sqlserver`.
+- Ya existe conexión y configuración base, pero todavía no existe `Executor` ni binding de `SqlValue` hacia parámetros reales de Tiberius.
+- La Etapa 4 debe mantener la separación de responsabilidades: conexión, ejecución y filas en `mssql-orm-tiberius`, compilación SQL solo en `mssql-orm-sqlserver`.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 4: MssqlConnection y configuración desde connection string` en `mssql-orm-tiberius`.
-2. Continuar con `Executor` sobre Tiberius consumiendo `CompiledQuery` sin duplicar lógica de SQL.
+1. Implementar `Etapa 4: Executor sobre Tiberius con binding de parámetros` consumiendo `CompiledQuery`.
+2. Continuar con `MssqlRow` y conversión de errores a `OrmError` sin exponer `tiberius::error::Error` en la API principal.
 3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y los snapshots del compilador mientras entra la capa de ejecución.
