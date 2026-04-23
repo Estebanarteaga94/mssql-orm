@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 3 implementando la compilación SQL Server en `mssql-orm-sqlserver`, ahora que `mssql-orm-query` ya dispone de un AST real, del contrato `CompiledQuery` y de quoting seguro de identificadores.
+Consolidar la Etapa 3 con snapshot tests de SQL y orden de parámetros en `mssql-orm-sqlserver`, ahora que el AST ya compila a `CompiledQuery` con placeholders `@P1..@Pn`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -44,6 +44,8 @@ Continuar la Etapa 3 implementando la compilación SQL Server en `mssql-orm-sqls
 - `InsertQuery` y `UpdateQuery` ya se pueden construir desde `Insertable<E>` y `Changeset<E>`, conectando persistencia estructural con la futura compilación SQL Server.
 - `mssql-orm-sqlserver` ya implementa quoting seguro de identificadores mediante `quote_identifier`, `quote_qualified_identifier`, `quote_table_ref` y `quote_column_ref`.
 - El quoting actual usa corchetes SQL Server, escapa `]` como `]]` y rechaza identificadores vacíos, con caracteres de control o multipartes pasados como una sola cadena.
+- `mssql-orm-sqlserver` ya implementa compilación de `select`, `insert`, `update`, `delete` y `count` a `CompiledQuery`, incluyendo placeholders `@P1..@Pn` y preservación de orden de parámetros.
+- La compilación actual emite `OUTPUT INSERTED.*` para `insert` y `update`, usa `*` cuando `select` no tiene proyección explícita y exige `ORDER BY` antes de `OFFSET/FETCH`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -62,13 +64,13 @@ Continuar la Etapa 3 implementando la compilación SQL Server en `mssql-orm-sqls
 
 ## Riesgos Inmediatos
 
-- Ya existe AST útil y ya existe quoting seguro de identificadores, pero todavía no hay compilación SQL Server sobre ese AST.
-- `CompiledQuery` ya está definido, pero aún no hay una implementación que traduzca `Expr`/`Predicate`/operaciones a SQL parametrizado `@P1..@Pn`.
+- Ya existe compilación SQL Server funcional, pero todavía no hay snapshot tests que congelen el formato exacto del SQL ni el orden de parámetros frente a cambios futuros.
+- La salida actual del compilador ya es usable, pero sigue siendo una primera iteración y conviene fijarla con cobertura más declarativa antes de avanzar a Tiberius.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 3: Compilar select, insert, update, delete y count a SQL parametrizado @P1..@Pn` en `mssql-orm-sqlserver`, reutilizando `CompiledQuery` y los helpers de quoting.
-2. Agregar snapshot tests para SQL y orden de parámetros una vez que exista el compilador base.
-3. Mantener las convenciones de `EntityColumn`, `Insertable`, `Changeset` y el AST estables mientras se construye el compilador.
+1. Agregar snapshot tests para SQL y orden de parámetros sobre `select`, `insert`, `update`, `delete` y `count`.
+2. Mantener las convenciones de `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y el AST estables antes de entrar en la capa Tiberius.
+3. Empezar la Etapa 4 con `MssqlConnection` y configuración desde connection string una vez fijada la salida del compilador.

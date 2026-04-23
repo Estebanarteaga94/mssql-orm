@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 3: Compilar `select`, `insert`, `update`, `delete` y `count` a SQL parametrizado `@P1..@Pn`
 - [ ] Etapa 3: Agregar snapshot tests para SQL y orden de parámetros
 - [ ] Etapa 4: Implementar `MssqlConnection` y configuración desde connection string
 - [ ] Etapa 4: Implementar `Executor` sobre Tiberius con binding de parámetros
@@ -52,3 +51,4 @@
 - [x] Etapa 2: Crear pruebas de mapping de filas y extracción de valores persistibles
 - [x] Etapa 3: Implementar AST de queries y `CompiledQuery`
 - [x] Etapa 3: Implementar quoting seguro de identificadores SQL Server
+- [x] Etapa 3: Compilar `select`, `insert`, `update`, `delete` y `count` a SQL parametrizado `@P1..@Pn`
