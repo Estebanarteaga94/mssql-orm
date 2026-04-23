@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 5: Implementar `DbSet::find` por primary key simple
 - [ ] Etapa 5: Implementar `DbSet::insert` sobre modelos `Insertable` con retorno materializado
 - [ ] Etapa 5: Implementar `DbSet::update` por primary key simple sobre `Changeset`
 - [ ] Etapa 5: Implementar `DbSet::delete` por primary key simple
@@ -30,6 +29,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 5: Implementar `DbSet::find` por primary key simple
 - [x] Etapa 5: Exponer `DbSet::query()` y query runner base (`all`, `first`, `count`) sobre `SelectQuery`
 - [x] Inicialización del sistema autónomo
 - [x] Crear base documental operativa en `docs/`

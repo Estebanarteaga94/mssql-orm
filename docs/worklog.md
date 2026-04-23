@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::find` por primary key simple
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::find por primary key simple` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/context.rs` para exponer `DbSet::find<K>() -> Result<Option<E>, OrmError>`.
+- `find` reutiliza `DbSet::query_with(...)` y genera internamente un `SelectQuery` filtrado por la metadata de primary key de la entidad.
+- En esta etapa, `find` soporta solo primary key simple; si la entidad tiene PK compuesta, retorna un `OrmError` explícito.
+- La construcción del predicado usa `TableRef`, `ColumnRef`, `Expr` y `Predicate` del AST existente, sin mover generación SQL a la crate pública.
+- Se añadieron pruebas unitarias para verificar la forma exacta del `SelectQuery` generado por `find` y para rechazar PK compuesta.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- `DbSet<T>` ya expone `find` sobre primary key simple y queda alineado con la progresión prevista de la Etapa 5, apoyándose en el runner base introducido en la sesión anterior.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo apareció un ajuste menor de formato antes de cerrar la validación final.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Implementar DbSet::insert sobre modelos Insertable con retorno materializado`, reutilizando `InsertQuery`, `SqlServerCompiler::compile_insert` y `fetch_one`.
+
 ### Sesión: `DbSet::query()` y query runner base
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Exponer DbSet::query() y query runner base (all, first, count) sobre SelectQuery` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
