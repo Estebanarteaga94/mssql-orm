@@ -1,6 +1,8 @@
 use crate::config::MssqlConnectionConfig;
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
-use crate::transaction::MssqlTransaction;
+use crate::transaction::{
+    MssqlTransaction, begin_transaction_scope, commit_transaction_scope, rollback_transaction_scope,
+};
 use futures_io::{AsyncRead, AsyncWrite};
 use mssql_orm_core::OrmError;
 use tiberius::Client;
@@ -55,6 +57,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
 
     pub async fn begin_transaction<'a>(&'a mut self) -> Result<MssqlTransaction<'a, S>, OrmError> {
         MssqlTransaction::begin(self.client_mut()).await
+    }
+
+    pub async fn begin_transaction_scope(&mut self) -> Result<(), OrmError> {
+        begin_transaction_scope(self.client_mut()).await
+    }
+
+    pub async fn commit_transaction(&mut self) -> Result<(), OrmError> {
+        commit_transaction_scope(self.client_mut()).await
+    }
+
+    pub async fn rollback_transaction(&mut self) -> Result<(), OrmError> {
+        rollback_transaction_scope(self.client_mut()).await
     }
 
     pub fn into_inner(self) -> Client<S> {

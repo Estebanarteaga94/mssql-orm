@@ -216,6 +216,15 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
 fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
     let ident = input.ident;
     let fields = extract_named_fields(&ident, input.data, "DbContext")?;
+    let shared_connection_field = fields
+        .first()
+        .and_then(|field| field.ident.as_ref())
+        .ok_or_else(|| {
+            Error::new_spanned(
+                &ident,
+                "DbContext requiere al menos un campo DbSet<Entidad>",
+            )
+        })?;
 
     let initializers = fields
         .iter()
@@ -246,6 +255,10 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                     #(#initializers),*
                 }
             }
+
+            fn shared_connection(&self) -> ::mssql_orm::SharedConnection {
+                self.#shared_connection_field.shared_connection()
+            }
         }
 
         impl #ident {
@@ -267,6 +280,15 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 let connection = ::mssql_orm::tiberius::MssqlConnection::connect(connection_string)
                     .await?;
                 Ok(Self::from_connection(connection))
+            }
+
+            pub async fn transaction<F, Fut, T>(&self, operation: F) -> Result<T, ::mssql_orm::core::OrmError>
+            where
+                F: FnOnce(Self) -> Fut + Send,
+                Fut: ::core::future::Future<Output = Result<T, ::mssql_orm::core::OrmError>> + Send,
+                T: Send,
+            {
+                <Self as ::mssql_orm::DbContext>::transaction(self, operation).await
             }
         }
     })

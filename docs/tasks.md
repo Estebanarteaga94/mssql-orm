@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 8: Exponer `db.transaction(...)` en la crate pública reutilizando la infraestructura transaccional
 - [ ] Etapa 8: Agregar pruebas de commit y rollback
 - [ ] Etapa 9: Implementar metadata de relaciones, foreign keys, joins explícitos e índices asociados
 - [ ] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`)
@@ -18,6 +17,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 8: Exponer `db.transaction(...)` en la crate pública reutilizando la infraestructura transaccional
 - [x] Etapa 8: Implementar infraestructura transaccional en `mssql-orm-tiberius` con `BEGIN`, `COMMIT` y `ROLLBACK`
 - [x] Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real
 - [x] Etapa 7: Implementar CLI mínima con `migration add`, `database update` y `migration list`

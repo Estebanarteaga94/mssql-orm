@@ -21,7 +21,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     pub(crate) async fn begin(client: &'a mut Client<S>) -> Result<Self, OrmError> {
-        run_transaction_command(client, BEGIN_TRANSACTION_SQL).await?;
+        begin_transaction_scope(client).await?;
 
         Ok(Self {
             client,
@@ -78,7 +78,28 @@ where
     }
 }
 
-async fn run_transaction_command<S>(
+pub(crate) async fn begin_transaction_scope<S>(client: &mut Client<S>) -> Result<(), OrmError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    run_transaction_command(client, BEGIN_TRANSACTION_SQL).await
+}
+
+pub(crate) async fn commit_transaction_scope<S>(client: &mut Client<S>) -> Result<(), OrmError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    run_transaction_command(client, COMMIT_TRANSACTION_SQL).await
+}
+
+pub(crate) async fn rollback_transaction_scope<S>(client: &mut Client<S>) -> Result<(), OrmError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    run_transaction_command(client, ROLLBACK_TRANSACTION_SQL).await
+}
+
+pub(crate) async fn run_transaction_command<S>(
     client: &mut Client<S>,
     sql: &'static str,
 ) -> Result<(), OrmError>
@@ -100,6 +121,7 @@ where
 mod tests {
     use super::{
         BEGIN_TRANSACTION_SQL, COMMIT_TRANSACTION_SQL, MssqlTransaction, ROLLBACK_TRANSACTION_SQL,
+        begin_transaction_scope, commit_transaction_scope, rollback_transaction_scope,
     };
 
     #[test]
@@ -116,5 +138,15 @@ mod tests {
         >();
 
         assert!(wrapper > 0);
+    }
+
+    #[test]
+    fn exposes_scope_level_transaction_helpers() {
+        let begin = begin_transaction_scope::<tokio_util::compat::Compat<tokio::net::TcpStream>>;
+        let commit = commit_transaction_scope::<tokio_util::compat::Compat<tokio::net::TcpStream>>;
+        let rollback =
+            rollback_transaction_scope::<tokio_util::compat::Compat<tokio::net::TcpStream>>;
+
+        let _ = (begin, commit, rollback);
     }
 }

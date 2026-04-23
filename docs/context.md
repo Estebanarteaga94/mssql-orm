@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 8 exponiendo `db.transaction(...)` en la crate pública, reutilizando la infraestructura transaccional explícita que ya existe en `mssql-orm-tiberius`.
+Completar la Etapa 8 agregando pruebas explícitas de commit y rollback sobre la API pública `db.transaction(...)`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -64,6 +64,8 @@ Continuar la Etapa 8 exponiendo `db.transaction(...)` en la crate pública, reut
 - La validación manual de esta sesión confirmó conectividad real con SQL Server local usando el login `sa`; la cadena original con `Database=test` no fue usable porque esa base no estaba accesible, así que la verificación se ejecutó contra `master`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
+- `DbContext` ahora también expone `shared_connection()` y `transaction(...)`, y `#[derive(DbContext)]` genera el método inherente `db.transaction(|tx| async move { ... })` construyendo un contexto transaccional sobre la misma conexión compartida.
+- La implementación pública actual abre `BEGIN TRANSACTION`, ejecuta el closure con un nuevo contexto del mismo tipo, hace `COMMIT` en `Ok` y `ROLLBACK` en `Err`, sin depender de `Drop` async.
 - La crate pública `mssql-orm` ahora también expone el trait `EntityColumnPredicateExt` en su `prelude`, habilitando `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null` e `is_not_null` directamente sobre `EntityColumn`.
 - La misma extensión pública ahora también expone `contains`, `starts_with` y `ends_with`, reutilizando `Predicate::Like` con parámetros generados en la crate pública.
 - La crate pública `mssql-orm` ahora también expone `EntityColumnOrderExt`, habilitando `asc()` y `desc()` directamente sobre `EntityColumn` y produciendo `OrderBy` del AST existente.
@@ -139,6 +141,7 @@ Continuar la Etapa 8 exponiendo `db.transaction(...)` en la crate pública, reut
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
+- La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no hay cobertura específica de commit/rollback real en SQL Server.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -149,6 +152,6 @@ Continuar la Etapa 8 exponiendo `db.transaction(...)` en la crate pública, reut
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 8: Exponer db.transaction(...) en la crate pública reutilizando la infraestructura transaccional`.
-2. Mantener la responsabilidad de `BEGIN`/`COMMIT`/`ROLLBACK` dentro de `mssql-orm-tiberius`, sin mover ejecución al `core`.
-3. Después de eso, agregar pruebas explícitas de commit y rollback contra SQL Server real.
+1. Implementar `Etapa 8: Agregar pruebas de commit y rollback`.
+2. Reutilizar la API pública `db.transaction(...)` ya expuesta, validando tanto persistencia en `Ok` como reversión en `Err`.
+3. Mantener la responsabilidad de `BEGIN`/`COMMIT`/`ROLLBACK` dentro de `mssql-orm-tiberius`, sin mover ejecución al `core`.

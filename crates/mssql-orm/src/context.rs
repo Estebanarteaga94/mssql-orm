@@ -1,4 +1,5 @@
 use crate::dbset_query::DbSetQuery;
+use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -15,6 +16,41 @@ pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnecti
 
 pub trait DbContext: Sized {
     fn from_shared_connection(connection: SharedConnection) -> Self;
+    fn shared_connection(&self) -> SharedConnection;
+
+    fn transaction<F, Fut, T>(
+        &self,
+        operation: F,
+    ) -> impl Future<Output = Result<T, OrmError>> + Send
+    where
+        F: FnOnce(Self) -> Fut + Send,
+        Fut: Future<Output = Result<T, OrmError>> + Send,
+        T: Send,
+    {
+        let shared_connection = self.shared_connection();
+        async move {
+            {
+                let mut connection = shared_connection.lock().await;
+                connection.begin_transaction_scope().await?;
+            }
+
+            let transaction_context = Self::from_shared_connection(Arc::clone(&shared_connection));
+            let result = operation(transaction_context).await;
+
+            match result {
+                Ok(value) => {
+                    let mut connection = shared_connection.lock().await;
+                    connection.commit_transaction().await?;
+                    Ok(value)
+                }
+                Err(error) => {
+                    let mut connection = shared_connection.lock().await;
+                    connection.rollback_transaction().await?;
+                    Err(error)
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone)]

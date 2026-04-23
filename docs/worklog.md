@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: Exposición pública de `db.transaction(...)`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 8: Exponer db.transaction(...) en la crate pública reutilizando la infraestructura transaccional` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/context.rs` para que `DbContext` exponga `shared_connection()` y un método por defecto `transaction(...)` que:
+  inicia `BEGIN TRANSACTION`,
+  ejecuta el closure con un nuevo contexto construido sobre la misma conexión compartida,
+  hace `COMMIT` en `Ok`,
+  y hace `ROLLBACK` en `Err`.
+- Se actualizó `crates/mssql-orm-macros/src/lib.rs` para que `#[derive(DbContext)]` implemente `shared_connection()` y genere además el método inherente `transaction(...)`, manteniendo la experiencia de uso `db.transaction(|tx| async move { ... })`.
+- Se amplió `crates/mssql-orm-tiberius/src/transaction.rs` con helpers reutilizables de scope (`begin_transaction_scope`, `commit_transaction_scope`, `rollback_transaction_scope`) y `crates/mssql-orm-tiberius/src/connection.rs` ahora expone wrappers públicos mínimos para que la crate pública no tenga que emitir SQL ni tocar Tiberius directamente.
+- Se actualizó `crates/mssql-orm/tests/ui/dbcontext_valid.rs` para fijar por compilación que la surface pública del derive ahora incluye `transaction(...)`.
+
+### Resultado
+
+- La crate pública `mssql-orm` ya expone `db.transaction(...)` alineado con el plan maestro, sin mover responsabilidades de ejecución fuera del adaptador Tiberius.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Aún no existen pruebas específicas de commit y rollback sobre SQL Server real para esta API; quedaron como siguiente subtarea explícita del backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 8: Agregar pruebas de commit y rollback`.
+
 ### Sesión: Infraestructura transaccional base en el adaptador Tiberius
 
 - Se detectó que el archivo del plan maestro no estaba en la raíz pedida inicialmente; la ruta real usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
