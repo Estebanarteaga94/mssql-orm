@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 5 implementando las operaciones CRUD restantes sobre `DbSet<T>`, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]`, `DbSet::query()`, `DbSet::find()`, `DbSet::insert()` y `DbSet::update()` ya existen en la superficie pública.
+Continuar la Etapa 5 cerrando la validación pública de CRUD base, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]`, `DbSet::query()`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` ya existen en la superficie pública.
 
 ## Dirección Arquitectónica Vigente
 
@@ -66,6 +66,7 @@ Continuar la Etapa 5 implementando las operaciones CRUD restantes sobre `DbSet<T
 - `DbSet<T>` ahora también expone `find<K>()` para primary key simple, construyendo un `SelectQuery` filtrado desde la metadata de entidad y delegando la ejecución al runner base.
 - `DbSet<T>` ahora también expone `insert<I>()`, compilando un `InsertQuery` desde `Insertable<E>` y materializando la entidad devuelta por `OUTPUT INSERTED.*`.
 - `DbSet<T>` ahora también expone `update<K, C>() -> Result<Option<E>, OrmError>`, compilando un `UpdateQuery` desde `Changeset<E>` y materializando la fila actualizada cuando existe.
+- `DbSet<T>` ahora también expone `delete<K>() -> Result<bool, OrmError>`, compilando un `DeleteQuery` por primary key simple y devolviendo si hubo al menos una fila afectada.
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
@@ -87,15 +88,16 @@ Continuar la Etapa 5 implementando las operaciones CRUD restantes sobre `DbSet<T
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
-- `DbSet<T>` ya sostiene una conexión compartida, un runner base de query, `find` por primary key simple, `insert` con retorno materializado y `update` por primary key simple, pero todavía falta `delete`; las siguientes tareas deben reutilizar ese handle sin introducir lógica SQL fuera de `mssql-orm-sqlserver`.
+- `DbSet<T>` ya sostiene una conexión compartida y la base CRUD fundamental completa, pero todavía faltan pruebas de integración públicas que validen la superficie de Etapa 5 desde la crate `mssql-orm`.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
+- `delete` tampoco soporta primary key compuesta en esta etapa y retorna `bool` para distinguir entre fila eliminada y ausencia de fila, reservando conflictos de concurrencia para la Etapa 11.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 5: Implementar DbSet::delete por primary key simple`.
-2. Reutilizar metadata de PK simple, `DeleteQuery`, `SqlServerCompiler::compile_delete`, `Executor::execute` y el handle compartido de `DbSet<T>` como base inmediata.
-3. Mantener estable el contrato actual de `DbSetQuery<T>`, `DbSet::find()`, `DbSet::insert()` y `DbSet::update()` mientras entra `delete`.
+1. Implementar `Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública`.
+2. Reutilizar la infraestructura real de SQL Server ya disponible en `mssql-orm-tiberius/tests`, pero ejerciendo ahora la superficie pública `DbSet<T>` desde `mssql-orm`.
+3. Mantener estables los contratos actuales de `DbSetQuery<T>`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` mientras entran esas pruebas y el ejemplo `basic-crud`.

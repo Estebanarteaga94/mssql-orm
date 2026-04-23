@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::delete` por primary key simple
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::delete por primary key simple` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/context.rs` para exponer `DbSet::delete<K>() -> Result<bool, OrmError>`.
+- `delete` reutiliza `DeleteQuery`, `SqlServerCompiler::compile_delete` y `MssqlConnection::execute`, devolviendo `true` cuando SQL Server reporta al menos una fila afectada.
+- Se añadió el helper interno `delete_query` para mantener la forma del `DeleteQuery` testeable sin depender de una conexión real.
+- En esta etapa, `delete` sigue soportando solo primary key simple; para PK compuesta retorna un `OrmError` explícito.
+- Se eligió `Result<bool, OrmError>` como retorno para distinguir entre eliminación efectiva y ausencia de fila, sin adelantar todavía `OrmError::ConcurrencyConflict` de la Etapa 11.
+- Se añadieron pruebas unitarias para verificar la forma exacta del `DeleteQuery` generado y para rechazar PK compuesta.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La base CRUD de `DbSet<T>` para Etapa 5 quedó completa a nivel de operaciones fundamentales: `query`, `find`, `insert`, `update` y `delete`.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública`, cubriendo el recorrido real de `find`, `insert`, `update`, `delete` y `query` sobre SQL Server.
+
 ### Sesión: `DbSet::update` por primary key simple
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::update por primary key simple sobre Changeset` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

@@ -6,7 +6,7 @@ use mssql_orm_core::{
     Changeset, Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping,
 };
 use mssql_orm_query::{
-    ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
+    ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 use mssql_orm_tiberius::{MssqlConnection, TokioConnectionStream};
@@ -87,6 +87,18 @@ impl<E: Entity> DbSet<E> {
         connection.fetch_one(compiled).await
     }
 
+    pub async fn delete<K>(&self, key: K) -> Result<bool, OrmError>
+    where
+        K: SqlTypeMapping,
+    {
+        let compiled = SqlServerCompiler::compile_delete(&self.delete_query(key)?)?;
+        let shared_connection = self.shared_connection();
+        let mut connection = shared_connection.lock().await;
+        let result = connection.execute(compiled).await?;
+
+        Ok(result.total() > 0)
+    }
+
     pub fn shared_connection(&self) -> SharedConnection {
         Arc::clone(
             self.connection
@@ -128,6 +140,13 @@ impl<E: Entity> DbSet<E> {
         Ok(UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?))
     }
 
+    fn delete_query<K>(&self, key: K) -> Result<DeleteQuery, OrmError>
+    where
+        K: SqlTypeMapping,
+    {
+        Ok(DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?))
+    }
+
     fn primary_key_predicate<K>(&self, key: K) -> Result<Predicate, OrmError>
     where
         K: SqlTypeMapping,
@@ -167,7 +186,7 @@ mod tests {
         SqlValue,
     };
     use mssql_orm_query::{
-        ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
+        ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
     };
 
     struct TestEntity;
@@ -456,6 +475,37 @@ mod tests {
         };
 
         let error = dbset.update_query(7_i64, &changeset).unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "DbSet currently supports this operation only for entities with a single primary key column"
+        );
+    }
+
+    #[test]
+    fn dbset_delete_builds_delete_query_for_entity_and_primary_key() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset.delete_query(7_i64).unwrap();
+
+        assert_eq!(
+            query,
+            DeleteQuery::from_entity::<TestEntity>().filter(Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("dbo", "test_entities"),
+                    "id",
+                    "id",
+                )),
+                Expr::Value(SqlValue::I64(7)),
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_delete_rejects_composite_primary_keys() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+
+        let error = dbset.delete_query(7_i64).unwrap_err();
 
         assert_eq!(
             error.message(),

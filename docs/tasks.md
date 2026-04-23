@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 5: Implementar `DbSet::delete` por primary key simple
 - [ ] Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública
 - [ ] Etapa 5: Crear ejemplo funcional `basic-crud`
 - [ ] Etapa 6: Implementar query builder público con filtros, composición lógica, ordenamiento, limit y paginación
@@ -27,6 +26,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 5: Implementar `DbSet::delete` por primary key simple
 - [x] Etapa 5: Implementar `DbSet::update` por primary key simple sobre `Changeset`
 - [x] Etapa 5: Implementar `DbSet::insert` sobre modelos `Insertable` con retorno materializado
 - [x] Etapa 5: Implementar `DbSet::find` por primary key simple
