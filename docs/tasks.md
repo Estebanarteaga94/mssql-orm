@@ -1,7 +1,15 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 12: Implementar change tracking experimental con `Tracked<T>` y `save_changes`
+- [ ] Etapa 12: Definir surface experimental mínima de change tracking (`Tracked<T>`, `EntityState`, límites y exclusiones explícitas)
+- [ ] Etapa 12: Exponer `DbSet::find_tracked(id)` para PK simple reutilizando `find` y snapshot inicial
+- [ ] Etapa 12: Implementar `Tracked<T>` con `original/current/state` y acceso seguro a la entidad actual
+- [ ] Etapa 12: Detectar transición `Unchanged -> Modified` al mutar `Tracked<T>` sin exigir todavía tracking automático global
+- [ ] Etapa 12: Introducir colección interna mínima de entidades trackeadas dentro de `DbContext` experimental sin romper la API explícita existente
+- [ ] Etapa 12: Implementar `save_changes()` para entidades `Modified`, reutilizando `DbSet::update` y preservando `rowversion`/`ConcurrencyConflict`
+- [ ] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`
+- [ ] Etapa 12: Soportar estado `Deleted` con `remove(tracked)` o equivalente explícito y persistencia vía `delete`
+- [ ] Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking
 - [ ] Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async
@@ -10,6 +18,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Descomponer la Etapa 12 de change tracking en subtareas verificables y ordenadas
 - [x] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
 - [x] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
 - [x] Etapa 10: Diseñar e implementar `entity.save(&db)` sobre Active Record con estrategia explícita de PK y persistencia

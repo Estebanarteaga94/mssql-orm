@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: descomposición de la Etapa 12 de change tracking
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta para revisar el alcance real de `Tracked<T>`, `EntityState`, `find_tracked`, `add`, `remove` y `save_changes`.
+- Se concluyó que la tarea amplia `Etapa 12: Implementar change tracking experimental con Tracked<T> y save_changes` era demasiado grande para una sola sesión sin riesgo de mezclar contratos base, wiring de contexto, persistencia y cobertura en un único cambio difícil de validar.
+- Se reemplazó en `docs/tasks.md` la tarea amplia de Etapa 12 por subtareas ordenadas y verificables: definición de surface mínima, `find_tracked`, contrato de `Tracked<T>`, transición a `Modified`, colección interna trackeada en `DbContext`, `save_changes` para `Modified`, soporte de `Added`, soporte de `Deleted` y cobertura/documentación experimental.
+- La descomposición deja explícita una progresión segura: primero modelar y fijar límites, luego cargar entidades trackeadas, después persistir `Modified`, y recién más tarde incorporar `Added/Deleted`.
+
+### Resultado
+
+- La Etapa 12 quedó preparada para ejecución incremental, con backlog suficientemente detallado como para implementarse en sesiones pequeñas sin perder coherencia arquitectónica.
+
+### Validación
+
+- No aplicó validación con `cargo`: en esta sesión solo se actualizó backlog y documentación operativa; no hubo cambios de código.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- La principal sensibilidad sigue siendo arquitectónica: el tracking no debe duplicar la semántica CRUD ya existente ni introducir estado implícito opaco fuera de la crate pública.
+
+### Próximo paso recomendado
+
+- Empezar por `Etapa 12: Definir surface experimental mínima de change tracking (Tracked<T>, EntityState, límites y exclusiones explícitas)`.
+
 ### Sesión: `OrmError::ConcurrencyConflict` para conflictos de actualización y borrado
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó como referencia para cerrar la segunda subtarea de la Etapa 11.
