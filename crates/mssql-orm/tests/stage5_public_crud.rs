@@ -442,6 +442,52 @@ async fn public_dbcontext_save_changes_persists_modified_tracked_entities() -> R
 }
 
 #[tokio::test]
+async fn public_dbcontext_save_changes_returns_zero_for_unchanged_tracked_entities()
+-> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes unchanged integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewPublicCrudUser {
+                name: "Tracked Unchanged".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+
+        let saved = db.save_changes().await?;
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, Some(inserted));
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
 async fn public_dbcontext_save_changes_persists_added_tracked_entities() -> Result<(), OrmError> {
     let Some(connection_string) = test_connection_string() else {
         eprintln!(
@@ -638,6 +684,56 @@ async fn public_dbcontext_remove_tracked_cancels_pending_added_entity() -> Resul
         assert_eq!(registry.entry_count(), 0);
         assert_eq!(db.save_changes().await?, 0);
         assert_eq!(db.users.query().count().await?, 0);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_save_changes_ignores_dropped_tracked_wrappers() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes dropped-wrapper integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+
+        let inserted = db
+            .users
+            .insert(NewPublicCrudUser {
+                name: "Tracked Drop".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let mut tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+        tracked.name = "Dropped Mutation".to_string();
+
+        assert_eq!(registry.entry_count(), 1);
+        drop(tracked);
+        assert_eq!(registry.entry_count(), 0);
+
+        let saved = db.save_changes().await?;
+        assert_eq!(saved, 0);
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, Some(inserted));
 
         Ok(())
     }

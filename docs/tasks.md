@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking
 - [ ] Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async
@@ -10,6 +9,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking
 - [x] Etapa 12: Soportar estado `Deleted` con `remove(tracked)` o equivalente explícito y persistencia vía `delete`
 - [x] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`
 - [x] Etapa 12: Implementar `save_changes()` para entidades `Modified`, reutilizando `DbSet::update` y preservando `rowversion`/`ConcurrencyConflict`

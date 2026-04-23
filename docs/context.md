@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 ya permite cargar entidades trackeadas, registrar nuevas con `add_tracked(...)`, marcarlas como `Modified` o `Deleted` mediante API explícita y persistir `Added`/`Modified`/`Deleted` con `db.save_changes().await?`. El siguiente foco natural es cerrar cobertura y documentación de límites de la API experimental.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. El siguiente foco natural es iniciar la Etapa 13 de migraciones avanzadas sin adelantar features de Etapa 14.
 
 ## Dirección Arquitectónica Vigente
 
@@ -198,6 +198,10 @@ La Etapa 12 ya permite cargar entidades trackeadas, registrar nuevas con `add_tr
 - `Tracked<T>` y `save_changes` siguen siendo explícitamente experimentales y no deben reemplazar la API CRUD actual ni introducir reflexión/proxies tipo EF Core.
 - El tracking ya observa acceso mutable local sobre el wrapper, mantiene referencias vivas a entidades trackeadas mientras el wrapper exista y `save_changes()` ya persiste `Added`, `Modified` y `Deleted`; sin embargo, al hacer `drop` del wrapper este deja de participar en la unidad de trabajo experimental.
 - `save_changes()` actual cubre entidades `Added`, `Modified` y `Deleted`; el tracking sigue siendo explícito y no existe inferencia automática global de altas/bajas fuera del wrapper.
+- `save_changes()` no persiste entidades `Unchanged`; si no hay wrappers vivos en estado pendiente, devuelve `0`.
+- Si un wrapper trackeado se descarta antes de `save_changes()`, su registro interno se elimina y sus cambios dejan de participar en la persistencia experimental.
+- Quitar una entidad que estaba en `Added` mediante `remove_tracked(...)` cancela la inserción pendiente localmente; no emite `DELETE` contra la base.
+- El tracking experimental sigue limitado a entidades con primary key simple en las rutas que reutilizan `find`, `update`, `delete` o `save_changes()`.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - `crates/mssql-orm/tests/stage5_public_crud.rs` comparte nombres de tabla fijos entre tests; para evitar interferencia entre casos, su ejecución fiable sigue siendo serial (`-- --test-threads=1`) mientras no se aíslen los recursos por prueba.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
@@ -205,7 +209,7 @@ La Etapa 12 ya permite cargar entidades trackeadas, registrar nuevas con `add_tr
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking`.
-2. Después pasar a la Etapa 13 sin adelantar features de pooling ni multi-database.
+1. Iniciar `Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes`.
+2. Descomponer esa etapa en subtareas verificables si el backlog actual resulta demasiado amplio para una sola sesión.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

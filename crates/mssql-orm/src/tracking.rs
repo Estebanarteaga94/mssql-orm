@@ -3,6 +3,23 @@
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs
+//! - infer inserts, updates or deletes globally outside of `Tracked<T>`
+//! - diff entity fields structurally before deciding whether an entity changed
+//! - keep dropped wrappers in the unit of work
+//! - support composite primary keys through `save_changes()`
+//!
+//! Current experimental entry points:
+//! - `DbSet::find_tracked(id)` for existing entities with single-column PK
+//! - `DbSet::add_tracked(entity)` for new entities pending insertion
+//! - `DbSet::remove_tracked(&mut tracked)` for explicit tracked deletion
+//! - `DbContext::save_changes()` for explicit persistence of live wrappers
+//!
+//! Observable limits in the current stage:
+//! - only wrappers still alive participate in `save_changes()`
+//! - mutable access marks `Unchanged` entities as `Modified` immediately
+//! - removing a tracked `Added` entity cancels the pending insert locally
+//! - successful tracked deletes unregister the wrapper from the internal registry
+//! - rowversion conflicts are still surfaced as `OrmError::ConcurrencyConflict`
 
 use core::ops::{Deref, DerefMut};
 use mssql_orm_core::Entity;

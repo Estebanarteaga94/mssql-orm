@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: cierre de cobertura y límites del change tracking experimental
+
+- Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, acotando la sesión a cerrar la última subtarea de Etapa 12 sin adelantar trabajo de Etapa 13.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/tracking.rs` ahora documenta explícitamente la surface experimental vigente, sus entry points (`find_tracked`, `add_tracked`, `remove_tracked`, `save_changes`) y límites observables: wrappers vivos únicamente, ausencia de diff estructural, cancelación local de `Added` removidos, límite de PK simple y preservación de `ConcurrencyConflict`.
+- `crates/mssql-orm/tests/stage5_public_crud.rs` añadió cobertura de integración real para dos contratos de límite que faltaban fijar: `save_changes()` devuelve `0` sobre entidades `Unchanged`, y wrappers descartados antes de guardar quedan fuera del unit of work experimental.
+- `docs/context.md` ahora registra esos límites operativos de forma explícita para futuras sesiones: no-op sobre `Unchanged`, exclusión de wrappers descartados, cancelación local de `Added` eliminados antes de persistirse y alcance actual de PK simple.
+
+### Resultado
+
+- La Etapa 12 quedó cerrada completa: la API experimental de tracking ya tiene cobertura unitaria/integración suficiente para su alcance actual y deja documentados sus límites observables sin ambigüedad.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La API sigue siendo deliberadamente experimental; el cierre de Etapa 12 no cambia los límites ya explícitos sobre PK simple ni introduce tracking automático global.
+
+### Próximo paso recomendado
+
+- Iniciar `Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes`.
+
 ### Sesión: soporte experimental de `Deleted` con `remove_tracked(...)`
 
 - Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo esta sesión acotada a la subtarea de Etapa 12 para entidades `Deleted`.
