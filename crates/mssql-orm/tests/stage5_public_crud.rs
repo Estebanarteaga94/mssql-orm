@@ -119,6 +119,9 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
         let found = db.users.find(inserted.id).await?;
         assert_eq!(found, Some(inserted.clone()));
 
+        let tracked = db.users.find_tracked(inserted.id).await?;
+        assert_eq!(tracked, Some(Tracked::from_loaded(inserted.clone())));
+
         let count = db.users.query().count().await?;
         assert_eq!(count, 1);
 

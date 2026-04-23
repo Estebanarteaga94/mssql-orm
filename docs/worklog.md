@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::find_tracked(id)` sobre PK simple
+
+- Se confirmó que el plan maestro real del repositorio no está en la raíz sino en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad para esta subtarea.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Exponer DbSet::find_tracked(id) para PK simple reutilizando find y snapshot inicial` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/context.rs` ahora expone `DbSet::find_tracked(...)` como wrapper explícito sobre `DbSet::find(...)`, limitado a entidades `Clone + FromRow + Send` y retornando `Option<Tracked<E>>` construido con `Tracked::from_loaded(...)`.
+- La implementación no introduce todavía colección interna de tracking, dirty detection, `save_changes()` ni nuevas rutas de persistencia; la carga trackeada sigue montada completamente sobre la infraestructura CRUD existente.
+- Se actualizó `crates/mssql-orm/src/tracking.rs` para quitar de la documentación del módulo la exclusión `find_tracked(...)`, manteniendo explícitos los límites que siguen pendientes.
+- Se añadió cobertura unitaria en `crates/mssql-orm/src/context.rs` para fijar que `find_tracked(...)` reutiliza el mismo camino de error/conexión de `find(...)`.
+- Se amplió `crates/mssql-orm/tests/stage5_public_crud.rs` con una validación pública real contra SQL Server que verifica que `find_tracked(...)` devuelve `Tracked::from_loaded(...)` sobre una entidad recién insertada.
+- Como ajuste documental de consistencia, se retiró de `docs/tasks.md` una tarea pendiente duplicada sobre `Tracked<T>` que ya estaba cubierta por la subtarea completada de surface mínima.
+
+### Resultado
+
+- La Etapa 12 ya permite cargar entidades como `Tracked<T>` por PK simple desde `DbSet`, dejando lista la base para la próxima subtarea de transición `Unchanged -> Modified`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La suite `stage5_public_crud` comparte tablas fijas entre tests; cuando se ejecuta en paralelo puede producir fallos cruzados no relacionados con esta subtarea, por lo que en esta sesión se validó en serial con `--test-threads=1`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Detectar transición Unchanged -> Modified al mutar Tracked<T> sin exigir todavía tracking automático global`.
+
 ### Sesión: surface experimental mínima de change tracking
 
 - Se tomó la primera subtarea de la Etapa 12 y se movió en `docs/tasks.md` a `En Progreso` antes de editar, usando como referencia el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`.

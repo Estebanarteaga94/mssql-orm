@@ -3,7 +3,6 @@
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
 //! - register tracked entities inside a `DbContext`
-//! - implement `find_tracked(...)`
 //! - persist changes through `save_changes()`
 //! - detect dirty state automatically from mutable access
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs

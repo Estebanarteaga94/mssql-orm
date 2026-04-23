@@ -1,3 +1,4 @@
+use crate::Tracked;
 use crate::dbset_query::DbSetQuery;
 use core::future::Future;
 use std::marker::PhantomData;
@@ -101,6 +102,18 @@ impl<E: Entity> DbSet<E> {
         K: SqlTypeMapping,
     {
         self.query_with(self.find_select_query(key)?).first().await
+    }
+
+    /// Loads an entity by its single-column primary key and wraps it in the
+    /// experimental snapshot-based tracking container.
+    pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
+    where
+        E: Clone + FromRow + Send,
+        K: SqlTypeMapping,
+    {
+        self.find(key)
+            .await
+            .map(|entity| entity.map(Tracked::from_loaded))
     }
 
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
@@ -417,13 +430,14 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
 mod tests {
     use super::{DbContext, DbContextEntitySet, DbSet};
     use mssql_orm_core::{
-        ColumnMetadata, ColumnValue, Entity, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
-        SqlValue,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
+        Row, SqlServerType, SqlValue,
     };
     use mssql_orm_query::{
         ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
     };
 
+    #[derive(Debug, Clone)]
     struct TestEntity;
     struct VersionedEntity;
     struct CompositeKeyEntity;
@@ -637,6 +651,12 @@ mod tests {
         }
     }
 
+    impl FromRow for TestEntity {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
+        }
+    }
+
     impl DbContext for DummyContext {
         fn from_shared_connection(_connection: super::SharedConnection) -> Self {
             unreachable!("DummyContext is only used in disconnected unit tests")
@@ -775,6 +795,18 @@ mod tests {
         assert_eq!(
             error.message(),
             "DbSet currently supports this operation only for entities with a single primary key column"
+        );
+    }
+
+    #[tokio::test]
+    async fn dbset_find_tracked_reuses_find_connection_path() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let error = dbset.find_tracked(7_i64).await.unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "DbSetQuery requires an initialized shared connection"
         );
     }
 
