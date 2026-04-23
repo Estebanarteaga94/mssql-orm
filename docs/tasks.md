@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server
 - [ ] Etapa 13: Generar scripts de migración idempotentes para SQL Server
 - [ ] Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a `drop + add`
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
@@ -11,6 +10,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server
 - [x] Etapa 13: Soportar `computed columns` en snapshots, diff y DDL SQL Server
 - [x] Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server
 - [x] Operativo: Descomponer la Etapa 13 de migraciones avanzadas en subtareas verificables y ordenadas

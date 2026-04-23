@@ -176,6 +176,24 @@ fn compile_drop_index(operation: &DropIndex) -> Result<String, OrmError> {
 }
 
 fn compile_add_foreign_key(operation: &AddForeignKey) -> Result<String, OrmError> {
+    if operation.foreign_key.columns.is_empty() {
+        return Err(OrmError::new(
+            "SQL Server foreign key migration compilation requires at least one local column",
+        ));
+    }
+
+    if operation.foreign_key.referenced_columns.is_empty() {
+        return Err(OrmError::new(
+            "SQL Server foreign key migration compilation requires at least one referenced column",
+        ));
+    }
+
+    if operation.foreign_key.columns.len() != operation.foreign_key.referenced_columns.len() {
+        return Err(OrmError::new(
+            "SQL Server foreign key migration compilation requires the same number of local and referenced columns",
+        ));
+    }
+
     let table = quote_qualified_identifier(&operation.schema_name, &operation.table_name)?;
     let constraint = quote_identifier(&operation.foreign_key.name)?;
     let columns = operation
@@ -220,11 +238,7 @@ fn render_foreign_key_action_clause(
         ReferentialAction::NoAction => "NO ACTION",
         ReferentialAction::Cascade => "CASCADE",
         ReferentialAction::SetNull => "SET NULL",
-        ReferentialAction::SetDefault => {
-            return Err(OrmError::new(
-                "SQL Server foreign key migration compilation only supports NO ACTION, CASCADE and SET NULL in this stage",
-            ));
-        }
+        ReferentialAction::SetDefault => "SET DEFAULT",
     };
 
     Ok(format!(" ON {action_kind} {action_sql}"))
@@ -707,17 +721,41 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsupported_set_default_foreign_key_action() {
+    fn compiles_foreign_key_set_default_and_composite_columns_to_sql() {
+        let operation = MigrationOperation::AddForeignKey(AddForeignKey::new(
+            "sales",
+            "order_allocations",
+            ForeignKeySnapshot::new(
+                "fk_order_allocations_customer_branch_customers",
+                vec!["customer_id".to_string(), "branch_id".to_string()],
+                "sales",
+                "customers",
+                vec!["id".to_string(), "branch_id".to_string()],
+                ReferentialAction::SetDefault,
+                ReferentialAction::SetDefault,
+            ),
+        ));
+
+        let sql = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "ALTER TABLE [sales].[order_allocations] ADD CONSTRAINT [fk_order_allocations_customer_branch_customers] FOREIGN KEY ([customer_id], [branch_id]) REFERENCES [sales].[customers] ([id], [branch_id]) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT"
+        );
+    }
+
+    #[test]
+    fn rejects_foreign_key_with_mismatched_column_cardinality() {
         let operation = MigrationOperation::AddForeignKey(AddForeignKey::new(
             "sales",
             "orders",
             ForeignKeySnapshot::new(
-                "fk_orders_customer_id_customers",
+                "fk_orders_customer_branch_customers",
                 vec!["customer_id".to_string()],
                 "sales",
                 "customers",
-                vec!["id".to_string()],
-                ReferentialAction::SetDefault,
+                vec!["id".to_string(), "branch_id".to_string()],
+                ReferentialAction::NoAction,
                 ReferentialAction::NoAction,
             ),
         ));
@@ -726,7 +764,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "SQL Server foreign key migration compilation only supports NO ACTION, CASCADE and SET NULL in this stage"
+            "SQL Server foreign key migration compilation requires the same number of local and referenced columns"
         );
     }
 

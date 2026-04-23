@@ -360,6 +360,29 @@ mod tests {
         )
     }
 
+    fn composite_foreign_key(
+        name: &str,
+        schema: &str,
+        table: &str,
+        columns: &[&str],
+        referenced_columns: &[&str],
+        on_delete: ReferentialAction,
+        on_update: ReferentialAction,
+    ) -> ForeignKeySnapshot {
+        ForeignKeySnapshot::new(
+            name,
+            columns.iter().map(|column| (*column).to_string()).collect(),
+            schema,
+            table,
+            referenced_columns
+                .iter()
+                .map(|column| (*column).to_string())
+                .collect(),
+            on_delete,
+            on_update,
+        )
+    }
+
     #[test]
     fn schema_and_table_diff_keeps_safe_operation_order() {
         let previous = ModelSnapshot::new(vec![
@@ -820,6 +843,76 @@ mod tests {
                         "sales",
                         "customers",
                         "customer_id",
+                    ),
+                )),
+            ]
+        );
+    }
+
+    #[test]
+    fn relational_diff_recreates_composite_foreign_key_when_columns_or_actions_change() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_allocations",
+                vec![
+                    column("customer_id", SqlServerType::BigInt, false, None),
+                    column("branch_id", SqlServerType::BigInt, false, None),
+                ],
+                vec![],
+                vec![composite_foreign_key(
+                    "fk_order_allocations_customer_branch_customers",
+                    "sales",
+                    "customers",
+                    &["customer_id", "branch_id"],
+                    &["id", "branch_id"],
+                    ReferentialAction::NoAction,
+                    ReferentialAction::NoAction,
+                )],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_allocations",
+                vec![
+                    column("customer_id", SqlServerType::BigInt, false, None),
+                    column("branch_id", SqlServerType::BigInt, false, None),
+                ],
+                vec![],
+                vec![composite_foreign_key(
+                    "fk_order_allocations_customer_branch_customers",
+                    "sales",
+                    "customers",
+                    &["customer_id", "branch_id"],
+                    &["id", "branch_id"],
+                    ReferentialAction::SetDefault,
+                    ReferentialAction::Cascade,
+                )],
+            )],
+        )]);
+
+        let operations = diff_relational_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::DropForeignKey(DropForeignKey::new(
+                    "sales",
+                    "order_allocations",
+                    "fk_order_allocations_customer_branch_customers",
+                )),
+                MigrationOperation::AddForeignKey(AddForeignKey::new(
+                    "sales",
+                    "order_allocations",
+                    composite_foreign_key(
+                        "fk_order_allocations_customer_branch_customers",
+                        "sales",
+                        "customers",
+                        &["customer_id", "branch_id"],
+                        &["id", "branch_id"],
+                        ReferentialAction::SetDefault,
+                        ReferentialAction::Cascade,
                     ),
                 )),
             ]

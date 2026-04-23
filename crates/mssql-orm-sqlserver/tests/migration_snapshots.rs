@@ -35,6 +35,37 @@ fn snapshots_foreign_key_migration_sql() {
 }
 
 #[test]
+fn snapshots_advanced_foreign_key_migration_sql() {
+    let operations = vec![
+        MigrationOperation::AddForeignKey(AddForeignKey::new(
+            "sales",
+            "order_allocations",
+            ForeignKeySnapshot::new(
+                "fk_order_allocations_customer_branch_customers",
+                vec!["customer_id".to_string(), "branch_id".to_string()],
+                "sales",
+                "customers",
+                vec!["id".to_string(), "branch_id".to_string()],
+                ReferentialAction::SetDefault,
+                ReferentialAction::Cascade,
+            ),
+        )),
+        MigrationOperation::DropForeignKey(DropForeignKey::new(
+            "sales",
+            "order_allocations",
+            "fk_order_allocations_customer_branch_customers",
+        )),
+    ];
+
+    let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+    assert_snapshot!(
+        "advanced_foreign_key_migration_sql",
+        render_statements(&sql)
+    );
+}
+
+#[test]
 fn snapshots_computed_column_migration_sql() {
     let operations = vec![
         MigrationOperation::AddColumn(AddColumn::new(

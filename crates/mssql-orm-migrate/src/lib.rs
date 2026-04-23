@@ -284,6 +284,79 @@ mod tests {
         foreign_keys: &ORDER_FOREIGN_KEYS,
     };
 
+    const ORDER_ALLOCATION_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: Some(IdentityMetadata::new(1, 1)),
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "customer_id",
+            column_name: "customer_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "branch_id",
+            column_name: "branch_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+    const ORDER_ALLOCATION_PK_COLUMNS: [&str; 1] = ["id"];
+    const ORDER_ALLOCATION_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_order_allocations_customer_branch_customers",
+        &["customer_id", "branch_id"],
+        "sales",
+        "customers",
+        &["id", "branch_id"],
+        ReferentialAction::SetDefault,
+        ReferentialAction::Cascade,
+    )];
+    const ORDER_ALLOCATION_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "OrderAllocation",
+        schema: "sales",
+        table: "order_allocations",
+        columns: &ORDER_ALLOCATION_COLUMNS,
+        primary_key: PrimaryKeyMetadata::new(
+            Some("pk_order_allocations"),
+            &ORDER_ALLOCATION_PK_COLUMNS,
+        ),
+        indexes: &[],
+        foreign_keys: &ORDER_ALLOCATION_FOREIGN_KEYS,
+    };
+
     #[test]
     fn declares_migration_boundary() {
         let engine = MigrationEngine;
@@ -411,6 +484,22 @@ mod tests {
         assert_eq!(foreign_key.referenced_columns, vec!["id"]);
         assert_eq!(foreign_key.on_delete, ReferentialAction::NoAction);
         assert_eq!(foreign_key.on_update, ReferentialAction::NoAction);
+    }
+
+    #[test]
+    fn table_snapshot_preserves_composite_foreign_keys_from_entity_metadata() {
+        let table = TableSnapshot::from(&ORDER_ALLOCATION_METADATA);
+        let foreign_key = table
+            .foreign_key("fk_order_allocations_customer_branch_customers")
+            .expect("composite foreign key must exist");
+
+        assert_eq!(table.foreign_keys.len(), 1);
+        assert_eq!(foreign_key.columns, vec!["customer_id", "branch_id"]);
+        assert_eq!(foreign_key.referenced_schema, "sales");
+        assert_eq!(foreign_key.referenced_table, "customers");
+        assert_eq!(foreign_key.referenced_columns, vec!["id", "branch_id"]);
+        assert_eq!(foreign_key.on_delete, ReferentialAction::SetDefault);
+        assert_eq!(foreign_key.on_update, ReferentialAction::Cascade);
     }
 
     #[test]

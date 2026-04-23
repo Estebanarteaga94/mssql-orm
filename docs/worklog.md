@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: foreign keys avanzadas en snapshots, diff y DDL SQL Server
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-migrate/src/lib.rs` ahora fija mediante pruebas que `TableSnapshot::from(&EntityMetadata)` preserva foreign keys compuestas, múltiples columnas referenciadas y acciones referenciales distintas de `NoAction`.
+- `crates/mssql-orm-migrate/src/diff.rs` añadió cobertura explícita para recrear foreign keys compuestas cuando cambia su definición, incluyendo cambios de acciones referenciales.
+- `crates/mssql-orm-sqlserver/src/migration.rs` ahora compila `ReferentialAction::SetDefault` a `SET DEFAULT` en DDL SQL Server y valida que toda foreign key tenga al menos una columna local, al menos una columna referenciada y la misma cardinalidad en ambos lados.
+- La misma capa SQL ahora tiene cobertura unitaria para foreign keys compuestas con `SET DEFAULT` y para el rechazo de definiciones con cardinalidad inválida.
+- `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` y el snapshot `migration_snapshots__advanced_foreign_key_migration_sql.snap` ahora congelan el SQL observable de una foreign key compuesta con acciones referenciales avanzadas.
+
+### Resultado
+
+- La subtarea quedó cerrada para el pipeline de migraciones: snapshots, diff relacional y DDL SQL Server ya soportan foreign keys compuestas y `SET DEFAULT`, con validaciones explícitas del shape relacional.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-sqlserver --lib migration`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La surface pública de `#[derive(Entity)]` sigue limitada a foreign keys declaradas por campo; esta sesión no introdujo sintaxis pública nueva para declarar foreign keys compuestas desde macros.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Generar scripts de migración idempotentes para SQL Server`.
+
 ### Sesión: computed columns en snapshots, diff y DDL SQL Server
 
 - Se tomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna (`plan_orm_sqlserver_tiberius_code_first.md`) no existe en la raíz del repositorio y se dejó esta constancia para evitar ambigüedad operativa.

@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos y `computed columns` de extremo a extremo; el siguiente foco natural es completar foreign keys avanzadas antes de tocar scripts idempotentes o renombres explícitos.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos, `computed columns` y foreign keys avanzadas dentro del pipeline de migraciones; el siguiente foco natural es generar scripts idempotentes antes de tocar renombres explícitos.
 
 ## Dirección Arquitectónica Vigente
 
@@ -107,6 +107,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
 - `mssql-orm-migrate` ahora también expone `diff_relational_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de un índice o de una foreign key existente, hoy la modela como `Drop...` seguido de `Create/Add...`.
+- Ese contrato ya quedó cubierto también para foreign keys compuestas y para cambios de acciones referenciales (`NoAction`, `Cascade`, `SetNull`, `SetDefault`) en el pipeline de snapshots/diff.
 - La cobertura del diff engine ya quedó centralizada en pruebas unitarias dedicadas dentro de `crates/mssql-orm-migrate/src/diff.rs`, en lugar de estar dispersa en `lib.rs`.
 - Esa batería ya fija casos mínimos de orden seguro, no-op sobre snapshots iguales, altas/bajas de tablas, altas/bajas de columnas, alteraciones básicas y una composición completa de diff sobre snapshots mínimos.
 - `lib.rs` quedó otra vez enfocado en reexports, boundaries y shape base de snapshots/operaciones, reduciendo ruido y duplicación en la capa pública de la crate.
@@ -114,8 +115,9 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
 - `mssql-orm-sqlserver` ya compila `AddForeignKey` y `DropForeignKey` a DDL SQL Server básico usando `ALTER TABLE ... ADD/DROP CONSTRAINT`.
-- `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE` y `SET NULL`.
-- `ReferentialAction::SetDefault` sigue rechazado explícitamente en DDL, porque todavía no forma parte del alcance activo.
+- `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE`, `SET NULL` y `SET DEFAULT`.
+- La compilación DDL de foreign keys ahora también valida cardinalidad mínima y que exista el mismo número de columnas locales y referenciadas antes de generar SQL.
+- La surface pública actual sigue declarando foreign keys desde campos individuales; aunque snapshots/diff/DDL ya aceptan foreign keys compuestas, la sintaxis pública para derivarlas automáticamente no se amplió en esta sesión.
 - `mssql-orm-sqlserver` ya compila `CreateIndex` y `DropIndex` a DDL SQL Server usando `CREATE [UNIQUE] INDEX ... ON ...` y `DROP INDEX ... ON ...`, preservando orden `ASC`/`DESC` desde el snapshot.
 - `mssql-orm-sqlserver` ya compila columnas computadas en `CREATE TABLE` y `ALTER TABLE ... ADD [col] AS (...)`; los cambios sobre `computed_sql` siguen entrando por la estrategia de recreación del diff y no por `ALTER COLUMN`.
 - `mssql-orm-query` ahora modela joins explícitos en `SelectQuery` mediante `JoinType`, `Join`, `join(...)`, `inner_join::<E>(...)` y `left_join::<E>(...)`, manteniendo el AST libre de SQL directo.
@@ -212,7 +214,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server`.
-2. Después avanzar con scripts idempotentes antes de tocar renombres explícitos.
+1. Implementar `Etapa 13: Generar scripts de migración idempotentes para SQL Server`.
+2. Después avanzar con renombres explícitos sin degradar a `drop + add`.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
