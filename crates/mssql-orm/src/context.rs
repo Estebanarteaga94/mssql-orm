@@ -3,6 +3,7 @@ use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::EntityPersist;
 use mssql_orm_core::{
     Changeset, Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping, SqlValue,
 };
@@ -148,6 +149,64 @@ impl<E: Entity> DbSet<E> {
         Ok(result.total() > 0)
     }
 
+    pub(crate) async fn find_by_sql_value(&self, key: SqlValue) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        self.query_with(self.find_select_query_sql_value(key)?)
+            .first()
+            .await
+    }
+
+    pub(crate) async fn insert_entity_values(
+        &self,
+        values: Vec<mssql_orm_core::ColumnValue>,
+    ) -> Result<E, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        let compiled = SqlServerCompiler::compile_insert(&self.insert_query_values(values))?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await;
+        let inserted = connection.fetch_one(compiled).await?;
+
+        inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
+    }
+
+    pub(crate) async fn insert_entity(&self, entity: &E) -> Result<E, OrmError>
+    where
+        E: EntityPersist + FromRow + Send,
+    {
+        self.insert_entity_values(entity.insert_values()).await
+    }
+
+    pub(crate) async fn update_entity_values_by_sql_value(
+        &self,
+        key: SqlValue,
+        changes: Vec<mssql_orm_core::ColumnValue>,
+    ) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        let compiled =
+            SqlServerCompiler::compile_update(&self.update_query_sql_value(key, changes)?)?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await;
+        connection.fetch_one(compiled).await
+    }
+
+    pub(crate) async fn update_entity_by_sql_value(
+        &self,
+        key: SqlValue,
+        entity: &E,
+    ) -> Result<Option<E>, OrmError>
+    where
+        E: EntityPersist + FromRow + Send,
+    {
+        self.update_entity_values_by_sql_value(key, entity.update_changes())
+            .await
+    }
+
     pub fn shared_connection(&self) -> SharedConnection {
         Arc::clone(
             self.connection
@@ -181,11 +240,19 @@ impl<E: Entity> DbSet<E> {
         Ok(SelectQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?))
     }
 
+    fn find_select_query_sql_value(&self, key: SqlValue) -> Result<SelectQuery, OrmError> {
+        Ok(SelectQuery::from_entity::<E>().filter(self.primary_key_predicate_value(key)?))
+    }
+
     fn insert_query<I>(&self, insertable: &I) -> InsertQuery
     where
         I: Insertable<E>,
     {
         InsertQuery::for_entity::<E, I>(insertable)
+    }
+
+    fn insert_query_values(&self, values: Vec<mssql_orm_core::ColumnValue>) -> InsertQuery {
+        InsertQuery::for_entity::<E, _>(&RawInsertable(values))
     }
 
     fn update_query<K, C>(&self, key: K, changeset: &C) -> Result<UpdateQuery, OrmError>
@@ -194,6 +261,15 @@ impl<E: Entity> DbSet<E> {
         C: Changeset<E>,
     {
         Ok(UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?))
+    }
+
+    fn update_query_sql_value(
+        &self,
+        key: SqlValue,
+        changes: Vec<mssql_orm_core::ColumnValue>,
+    ) -> Result<UpdateQuery, OrmError> {
+        Ok(UpdateQuery::for_entity::<E, _>(&RawChangeset(changes))
+            .filter(self.primary_key_predicate_value(key)?))
     }
 
     fn delete_query<K>(&self, key: K) -> Result<DeleteQuery, OrmError>
@@ -234,6 +310,22 @@ impl<E: Entity> DbSet<E> {
             )),
             Expr::Value(key),
         ))
+    }
+}
+
+struct RawInsertable(Vec<mssql_orm_core::ColumnValue>);
+
+impl<E: Entity> Insertable<E> for RawInsertable {
+    fn values(&self) -> Vec<mssql_orm_core::ColumnValue> {
+        self.0.clone()
+    }
+}
+
+struct RawChangeset(Vec<mssql_orm_core::ColumnValue>);
+
+impl<E: Entity> Changeset<E> for RawChangeset {
+    fn changes(&self) -> Vec<mssql_orm_core::ColumnValue> {
+        self.0.clone()
     }
 }
 

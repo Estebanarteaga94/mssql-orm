@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Avanzar desde `entity.delete(&db)` ya cerrado hacia la última subtarea de Etapa 10, `entity.save(&db)`, manteniendo la API pública concentrada en `mssql-orm`.
+La Etapa 10 quedó cerrada con `entity.save(&db)` y el foco operativo inmediato pasa a la Etapa 11, empezando por concurrencia optimista basada en `rowversion`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -138,9 +138,12 @@ Avanzar desde `entity.delete(&db)` ya cerrado hacia la última subtarea de Etapa
 - Ese ejemplo usa `DATABASE_URL`, prepara `dbo.basic_crud_users`, recorre `insert`, `find`, `query`, `update` y `delete`, y limpia la tabla al final.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
-- La crate pública `mssql-orm` ahora también expone `ActiveRecord`, implementado blanket sobre toda `Entity`; su superficie mínima actual es `Entity::query(&db)` y `Entity::find(&db, id)`, delegando estrictamente a `DbContextEntitySet<E>` y `DbSet<E>`.
+- La crate pública `mssql-orm` ahora también expone `ActiveRecord`, implementado blanket sobre toda `Entity`; su superficie de Etapa 10 ya incluye `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.delete(&db)` y `entity.save(&db)`, delegando estrictamente a `DbContextEntitySet<E>` y `DbSet<E>`.
 - La cobertura de Active Record base ya quedó separada de la batería genérica: existe `tests/active_record_trybuild.rs` para contratos de compilación y `tests/stage10_public_active_record.rs` para roundtrip real de `query/find` contra SQL Server.
 - `entity.delete(&db)` ya quedó implementado sobre Active Record reutilizando `DbSet::delete` a través de un helper oculto de PK simple generado por `#[derive(Entity)]`; para PK compuesta sigue retornando error explícito de etapa.
+- `entity.save(&db)` ya quedó implementado sobre `&mut self` y sincroniza la instancia con la fila persistida devuelta por la base.
+- `#[derive(Entity)]` ahora genera además contratos ocultos de persistencia para Active Record: valores insertables, cambios actualizables, sincronización desde la fila materializada y estrategia de persistencia basada en la PK simple.
+- La estrategia actual de `save` es explícita y mínima: PK simple `identity` con valor `0` inserta y refresca la entidad; PK simple sin `identity` usa `find` por PK para decidir entre inserción y actualización; cualquier PK compuesta sigue rechazándose en esta etapa.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -168,18 +171,18 @@ Avanzar desde `entity.delete(&db)` ya cerrado hacia la última subtarea de Etapa
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
-- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; Etapa 10 ya tiene resolución tipada `DbContext -> DbSet<T>`, `ActiveRecord::query/find`, cobertura dedicada y `entity.delete(&db)`.
-- El único frente restante de Etapa 10 es `entity.save(&db)`, que requiere una estrategia explícita para PK y persistencia de instancias sin duplicar `DbSet::update`.
+- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
 - `delete` tampoco soporta primary key compuesta en esta etapa y retorna `bool` para distinguir entre fila eliminada y ausencia de fila, reservando conflictos de concurrencia para la Etapa 11.
+- `save` también queda limitado a PK simple; en PK con `identity` depende de la convención explícita `0 => insert`, y para PK natural simple usa una comprobación previa de existencia antes de decidir entre inserción o actualización.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 10: Diseñar e implementar entity.save(&db) sobre Active Record con estrategia explícita de PK y persistencia`.
-2. Reutilizar la misma filosofía aplicada a `delete(&db)`: `save(&db)` debe apoyarse en `DbSet` y en helpers generados por macro, sin otra ruta de ejecución paralela.
+1. Implementar `Etapa 11: Implementar soporte de concurrencia optimista con rowversion`.
+2. Reutilizar la ruta actual de `update/save` sobre `DbSet` y Active Record, agregando control de versión sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

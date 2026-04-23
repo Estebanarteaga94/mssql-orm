@@ -168,6 +168,57 @@ async fn public_active_record_delete_roundtrips_and_returns_false_when_missing()
     result
 }
 
+#[tokio::test]
+async fn public_active_record_save_inserts_and_updates_against_real_sql_server()
+-> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping Active Record save integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = ActiveRecordDb::connect(&connection_string).await?;
+
+        let mut user = ActiveRecordUser {
+            id: 0,
+            name: "Inserted".to_string(),
+            active: true,
+        };
+
+        user.save(&db).await?;
+
+        assert!(user.id > 0);
+        assert_eq!(user.name, "Inserted");
+        assert!(user.active);
+        assert_eq!(db.users.query().count().await?, 1);
+
+        user.name = "Updated".to_string();
+        user.active = false;
+        user.save(&db).await?;
+
+        let persisted = ActiveRecordUser::find(&db, user.id).await?;
+        assert_eq!(
+            persisted,
+            Some(ActiveRecordUser {
+                id: user.id,
+                name: "Updated".to_string(),
+                active: false,
+            })
+        );
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+    result
+}
+
 fn test_connection_string() -> Option<String> {
     std::env::var(TEST_CONNECTION_ENV)
         .ok()

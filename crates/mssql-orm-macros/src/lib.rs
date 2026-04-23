@@ -66,6 +66,10 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut column_symbols = Vec::new();
     let mut primary_key_columns = Vec::new();
     let mut primary_key_value_expr = None;
+    let mut persist_mode_expr = None;
+    let mut insert_values = Vec::new();
+    let mut update_changes = Vec::new();
+    let mut sync_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
 
@@ -87,13 +91,46 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             || (field_ident == &Ident::new("id", field_ident.span()) && !has_explicit_primary_key);
         if primary_key {
             primary_key_columns.push(column_name.clone());
+            let field_ty = &field.ty;
             if primary_key_value_expr.is_none() {
-                let field_ty = &field.ty;
                 primary_key_value_expr = Some(quote! {
                     Ok(<#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
                         ::core::clone::Clone::clone(&self.#field_ident)
                     ))
                 });
+            }
+
+            if persist_mode_expr.is_none() {
+                let identity_strategy = if config.identity {
+                    match type_info.kind {
+                        TypeKind::I64 | TypeKind::I32 | TypeKind::I16 | TypeKind::U8 => {
+                            Some(quote! {
+                                if self.#field_ident == 0 {
+                                    Ok(::mssql_orm::EntityPersistMode::Insert)
+                                } else {
+                                    Ok(::mssql_orm::EntityPersistMode::Update(
+                                        <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                                            ::core::clone::Clone::clone(&self.#field_ident)
+                                        )
+                                    ))
+                                }
+                            })
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                persist_mode_expr = Some(identity_strategy.unwrap_or_else(|| {
+                    quote! {
+                        Ok(::mssql_orm::EntityPersistMode::InsertOrUpdate(
+                            <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                                ::core::clone::Clone::clone(&self.#field_ident)
+                            )
+                        ))
+                    }
+                }));
             }
         }
 
@@ -161,6 +198,34 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         column_symbols.push(quote! {
             pub const #field_ident: ::mssql_orm::core::EntityColumn<#ident> =
                 ::mssql_orm::core::EntityColumn::new(#rust_field, #column_name);
+        });
+
+        if insertable {
+            let field_ty = &field.ty;
+            insert_values.push(quote! {
+                values.push(::mssql_orm::core::ColumnValue::new(
+                    #column_name,
+                    <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        ::core::clone::Clone::clone(&self.#field_ident)
+                    ),
+                ));
+            });
+        }
+
+        if updatable {
+            let field_ty = &field.ty;
+            update_changes.push(quote! {
+                changes.push(::mssql_orm::core::ColumnValue::new(
+                    #column_name,
+                    <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        ::core::clone::Clone::clone(&self.#field_ident)
+                    ),
+                ));
+            });
+        }
+
+        sync_fields.push(quote! {
+            self.#field_ident = persisted.#field_ident;
         });
 
         for index in config.indexes {
@@ -242,6 +307,15 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             ))
         }
     };
+    let persist_mode_impl = if primary_key_columns.len() == 1 {
+        persist_mode_expr.expect("single primary key must produce save strategy")
+    } else {
+        quote! {
+            Err(::mssql_orm::core::OrmError::new(
+                "ActiveRecord currently supports save only for entities with a single primary key column",
+            ))
+        }
+    };
 
     Ok(quote! {
         static #metadata_ident: ::mssql_orm::core::EntityMetadata = ::mssql_orm::core::EntityMetadata {
@@ -277,6 +351,28 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         impl ::mssql_orm::EntityPrimaryKey for #ident {
             fn primary_key_value(&self) -> Result<::mssql_orm::core::SqlValue, ::mssql_orm::core::OrmError> {
                 #primary_key_value_impl
+            }
+        }
+
+        impl ::mssql_orm::EntityPersist for #ident {
+            fn persist_mode(&self) -> Result<::mssql_orm::EntityPersistMode, ::mssql_orm::core::OrmError> {
+                #persist_mode_impl
+            }
+
+            fn insert_values(&self) -> ::std::vec::Vec<::mssql_orm::core::ColumnValue> {
+                let mut values = ::std::vec::Vec::new();
+                #(#insert_values)*
+                values
+            }
+
+            fn update_changes(&self) -> ::std::vec::Vec<::mssql_orm::core::ColumnValue> {
+                let mut changes = ::std::vec::Vec::new();
+                #(#update_changes)*
+                changes
+            }
+
+            fn sync_persisted(&mut self, persisted: Self) {
+                #(#sync_fields)*
             }
         }
     })

@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: `entity.save(&db)` para Active Record
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad para cerrar la última subtarea pendiente de la Etapa 10.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 10: Diseñar e implementar entity.save(&db) sobre Active Record con estrategia explícita de PK y persistencia` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/active_record.rs` con `save(&db)` sobre `&mut self`, manteniendo la API Active Record como capa de conveniencia encima de `DbSet` y sincronizando la instancia con la fila materializada devuelta por la base.
+- Se introdujeron los contratos ocultos `EntityPersist` y `EntityPersistMode`, y `crates/mssql-orm-macros/src/lib.rs` ahora los implementa automáticamente para `#[derive(Entity)]`, generando extracción de valores insertables, cambios actualizables y estrategia de persistencia por PK simple.
+- La estrategia aplicada quedó explícita en el macro: para PK simple con `identity`, `id == 0` se trata como inserción y cualquier otro valor como actualización; para PK simple no `identity`, `save` realiza `insert-or-update` apoyándose en `DbSet::find`, `DbSet::insert` y `DbSet::update` sin compilar SQL fuera de la crate pública.
+- `crates/mssql-orm/src/context.rs` se amplió solo con helpers internos basados en `ColumnValue` para buscar, insertar y actualizar por `SqlValue`, evitando duplicar el pipeline de compilación SQL Server y ejecución Tiberius ya existente.
+- Se añadió `crates/mssql-orm/tests/ui/active_record_save_public_valid.rs`, se extendió `crates/mssql-orm/tests/active_record_trybuild.rs` y `crates/mssql-orm/tests/stage10_public_active_record.rs` ahora cubre roundtrip real de `save` tanto en alta como en actualización.
+
+### Resultado
+
+- La Etapa 10 quedó cerrada: `ActiveRecord` ya expone `query`, `find`, `delete` y `save`, siempre montado sobre `DbSet` y sin introducir una ruta paralela de compilación o ejecución.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib active_record`
+- `cargo test -p mssql-orm --test active_record_trybuild`
+- `cargo test -p mssql-orm --test stage10_public_active_record`
+- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `save`, igual que `find`, `update` y `delete`, sigue limitado a primary key simple; para PK compuesta retorna error explícito de etapa.
+- La heurística `identity == 0 => insert` quedó restringida a PK enteras con `identity`; si más adelante se quiere soportar estados más ricos o detached entities, eso debe resolverse en la Etapa 12 con tracking explícito y no ampliando heurísticas implícitas.
+
+### Próximo paso recomendado
+
+- Empezar la Etapa 11 implementando soporte de concurrencia optimista con `rowversion` sobre la ruta de actualización ya existente.
+
 ### Sesión: `entity.delete(&db)` para Active Record
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como referencia para la subtarea de borrado Active Record.

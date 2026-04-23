@@ -1,10 +1,25 @@
 use crate::{DbContextEntitySet, DbSetQuery};
 use core::future::Future;
-use mssql_orm_core::{Entity, FromRow, OrmError, SqlTypeMapping, SqlValue};
+use mssql_orm_core::{ColumnValue, Entity, FromRow, OrmError, SqlTypeMapping, SqlValue};
 
 #[doc(hidden)]
 pub trait EntityPrimaryKey: Entity {
     fn primary_key_value(&self) -> Result<SqlValue, OrmError>;
+}
+
+#[doc(hidden)]
+pub enum EntityPersistMode {
+    Insert,
+    InsertOrUpdate(SqlValue),
+    Update(SqlValue),
+}
+
+#[doc(hidden)]
+pub trait EntityPersist: Entity {
+    fn persist_mode(&self) -> Result<EntityPersistMode, OrmError>;
+    fn insert_values(&self) -> Vec<ColumnValue>;
+    fn update_changes(&self) -> Vec<ColumnValue>;
+    fn sync_persisted(&mut self, persisted: Self);
 }
 
 pub trait ActiveRecord: Entity + Sized {
@@ -33,39 +48,103 @@ pub trait ActiveRecord: Entity + Sized {
 
         async move { db.db_set().delete_by_sql_value(key?).await }
     }
+
+    fn save<C>(&mut self, db: &C) -> impl Future<Output = Result<(), OrmError>> + Send
+    where
+        C: DbContextEntitySet<Self> + Sync,
+        Self: EntityPersist + FromRow + Send,
+    {
+        async move {
+            match <Self as EntityPersist>::persist_mode(self)? {
+                EntityPersistMode::Insert => {
+                    let persisted = db.db_set().insert_entity(self).await?;
+                    <Self as EntityPersist>::sync_persisted(self, persisted);
+                    Ok(())
+                }
+                EntityPersistMode::InsertOrUpdate(key) => {
+                    if db.db_set().find_by_sql_value(key.clone()).await?.is_some() {
+                        if let Some(persisted) =
+                            db.db_set().update_entity_by_sql_value(key, self).await?
+                        {
+                            <Self as EntityPersist>::sync_persisted(self, persisted);
+                        }
+                    } else {
+                        let persisted = db.db_set().insert_entity(self).await?;
+                        <Self as EntityPersist>::sync_persisted(self, persisted);
+                    }
+
+                    Ok(())
+                }
+                EntityPersistMode::Update(key) => {
+                    let persisted = db
+                        .db_set()
+                        .update_entity_by_sql_value(key, self)
+                        .await?
+                        .ok_or_else(|| {
+                            OrmError::new(
+                                "ActiveRecord save could not update a row for the current primary key",
+                            )
+                        })?;
+                    <Self as EntityPersist>::sync_persisted(self, persisted);
+                    Ok(())
+                }
+            }
+        }
+    }
 }
 
 impl<E: Entity> ActiveRecord for E {}
 
 #[cfg(test)]
 mod tests {
-    use super::{ActiveRecord, EntityPrimaryKey};
+    use super::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
     use crate::{DbContext, DbContextEntitySet, DbSet};
     use mssql_orm_core::{
-        ColumnMetadata, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row,
-        SqlServerType,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
+        Row, SqlServerType,
     };
     use mssql_orm_query::SelectQuery;
 
-    #[derive(Debug)]
-    struct TestEntity;
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestEntity {
+        id: i64,
+        name: String,
+    }
 
-    static TEST_ENTITY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
-        rust_field: "id",
-        column_name: "id",
-        sql_type: SqlServerType::BigInt,
-        nullable: false,
-        primary_key: true,
-        identity: None,
-        default_sql: None,
-        computed_sql: None,
-        rowversion: false,
-        insertable: true,
-        updatable: false,
-        max_length: None,
-        precision: None,
-        scale: None,
-    }];
+    static TEST_ENTITY_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+    ];
 
     static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "TestEntity",
@@ -88,13 +167,42 @@ mod tests {
 
     impl FromRow for TestEntity {
         fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
-            Ok(Self)
+            Ok(Self {
+                id: 7,
+                name: "Persisted".to_string(),
+            })
         }
     }
 
     impl EntityPrimaryKey for TestEntity {
         fn primary_key_value(&self) -> Result<mssql_orm_core::SqlValue, OrmError> {
-            Ok(mssql_orm_core::SqlValue::I64(7))
+            Ok(mssql_orm_core::SqlValue::I64(self.id))
+        }
+    }
+
+    impl EntityPersist for TestEntity {
+        fn persist_mode(&self) -> Result<EntityPersistMode, OrmError> {
+            Ok(EntityPersistMode::Update(mssql_orm_core::SqlValue::I64(
+                self.id,
+            )))
+        }
+
+        fn insert_values(&self) -> Vec<ColumnValue> {
+            vec![ColumnValue::new(
+                "name",
+                mssql_orm_core::SqlValue::String(self.name.clone()),
+            )]
+        }
+
+        fn update_changes(&self) -> Vec<ColumnValue> {
+            vec![ColumnValue::new(
+                "name",
+                mssql_orm_core::SqlValue::String(self.name.clone()),
+            )]
+        }
+
+        fn sync_persisted(&mut self, persisted: Self) {
+            *self = persisted;
         }
     }
 
@@ -162,13 +270,38 @@ mod tests {
         let context = DummyContext {
             entities: DbSet::<TestEntity>::disconnected(),
         };
-        let entity = TestEntity;
+        let entity = TestEntity {
+            id: 7,
+            name: "Ana".to_string(),
+        };
 
         let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
         let error = match runtime.block_on(entity.delete(&context)) {
             Ok(value) => {
                 panic!("expected disconnected ActiveRecord::delete to fail, got {value:?}")
             }
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error,
+            OrmError::new("DbSet requires an initialized shared connection")
+        );
+    }
+
+    #[test]
+    fn active_record_save_reuses_dbset_error_contract() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let mut entity = TestEntity {
+            id: 7,
+            name: "Ana".to_string(),
+        };
+
+        let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let error = match runtime.block_on(entity.save(&context)) {
+            Ok(()) => panic!("expected disconnected ActiveRecord::save to fail"),
             Err(error) => error,
         };
 

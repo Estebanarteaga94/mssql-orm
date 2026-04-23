@@ -18,7 +18,7 @@ pub use mssql_orm_sqlserver as sqlserver;
 pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
-pub use active_record::{ActiveRecord, EntityPrimaryKey};
+pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
 pub use context::{DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
 pub use page_request::PageRequest;
