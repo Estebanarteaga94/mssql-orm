@@ -1,5 +1,5 @@
-use crate::Tracked;
 use crate::dbset_query::DbSetQuery;
+use crate::{Tracked, TrackingRegistry, TrackingRegistryHandle};
 use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -19,6 +19,8 @@ pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnecti
 pub trait DbContext: Sized {
     fn from_shared_connection(connection: SharedConnection) -> Self;
     fn shared_connection(&self) -> SharedConnection;
+    #[doc(hidden)]
+    fn tracking_registry(&self) -> TrackingRegistryHandle;
 
     fn transaction<F, Fut, T>(
         &self,
@@ -62,13 +64,23 @@ pub trait DbContextEntitySet<E: Entity>: DbContext {
 #[derive(Clone)]
 pub struct DbSet<E: Entity> {
     connection: Option<SharedConnection>,
+    tracking_registry: TrackingRegistryHandle,
     _entity: PhantomData<fn() -> E>,
 }
 
 impl<E: Entity> DbSet<E> {
     pub fn new(connection: SharedConnection) -> Self {
+        Self::with_tracking_registry(connection, Arc::new(TrackingRegistry::default()))
+    }
+
+    #[doc(hidden)]
+    pub fn with_tracking_registry(
+        connection: SharedConnection,
+        tracking_registry: TrackingRegistryHandle,
+    ) -> Self {
         Self {
             connection: Some(connection),
+            tracking_registry,
             _entity: PhantomData,
         }
     }
@@ -77,6 +89,7 @@ impl<E: Entity> DbSet<E> {
     pub(crate) fn disconnected() -> Self {
         Self {
             connection: None,
+            tracking_registry: Arc::new(TrackingRegistry::default()),
             _entity: PhantomData,
         }
     }
@@ -111,9 +124,16 @@ impl<E: Entity> DbSet<E> {
         E: Clone + FromRow + Send,
         K: SqlTypeMapping,
     {
-        self.find(key)
+        let tracked = self
+            .find(key)
             .await
-            .map(|entity| entity.map(Tracked::from_loaded))
+            .map(|entity| entity.map(Tracked::from_loaded))?;
+
+        if let Some(entity) = tracked.as_ref() {
+            self.tracking_registry.register_loaded::<E>(entity);
+        }
+
+        Ok(tracked)
     }
 
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
@@ -263,6 +283,11 @@ impl<E: Entity> DbSet<E> {
                 .as_ref()
                 .expect("DbSet requires an initialized shared connection"),
         )
+    }
+
+    #[doc(hidden)]
+    pub fn tracking_registry(&self) -> TrackingRegistryHandle {
+        Arc::clone(&self.tracking_registry)
     }
 
     fn require_connection(&self) -> Result<SharedConnection, OrmError> {
@@ -664,6 +689,10 @@ mod tests {
 
         fn shared_connection(&self) -> super::SharedConnection {
             panic!("DummyContext is only used in disconnected unit tests")
+        }
+
+        fn tracking_registry(&self) -> crate::TrackingRegistryHandle {
+            self.entities.tracking_registry()
         }
     }
 

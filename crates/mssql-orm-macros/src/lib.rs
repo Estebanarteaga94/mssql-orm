@@ -445,8 +445,9 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
             })?;
 
             Ok(quote! {
-                #field_ident: ::mssql_orm::DbSet::<#entity_type>::new(
-                    ::std::sync::Arc::clone(&connection)
+                #field_ident: ::mssql_orm::DbSet::<#entity_type>::with_tracking_registry(
+                    ::std::sync::Arc::clone(&connection),
+                    ::std::sync::Arc::clone(&tracking_registry)
                 )
             })
         })
@@ -479,6 +480,8 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
     Ok(quote! {
         impl ::mssql_orm::DbContext for #ident {
             fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
+                let tracking_registry =
+                    ::std::sync::Arc::new(::mssql_orm::TrackingRegistry::default());
                 Self {
                     #(#initializers),*
                 }
@@ -486,6 +489,10 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
 
             fn shared_connection(&self) -> ::mssql_orm::SharedConnection {
                 self.#shared_connection_field.shared_connection()
+            }
+
+            fn tracking_registry(&self) -> ::mssql_orm::TrackingRegistryHandle {
+                self.#shared_connection_field.tracking_registry()
             }
         }
 

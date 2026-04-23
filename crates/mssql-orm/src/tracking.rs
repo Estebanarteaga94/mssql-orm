@@ -2,11 +2,12 @@
 //!
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
-//! - register tracked entities inside a `DbContext`
 //! - persist changes through `save_changes()`
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs
 
 use core::ops::{Deref, DerefMut};
+use mssql_orm_core::Entity;
+use std::sync::{Arc, Mutex};
 
 /// Lifecycle state for an experimentally tracked entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,6 +29,22 @@ pub struct Tracked<T> {
     current: T,
     state: EntityState,
 }
+
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrackedEntityRegistration {
+    pub entity_rust_name: &'static str,
+    pub state: EntityState,
+}
+
+#[doc(hidden)]
+#[derive(Debug, Default)]
+pub struct TrackingRegistry {
+    entries: Mutex<Vec<TrackedEntityRegistration>>,
+}
+
+#[doc(hidden)]
+pub type TrackingRegistryHandle = Arc<TrackingRegistry>;
 
 impl<T: Clone> Tracked<T> {
     /// Creates a tracked value loaded from persistence.
@@ -98,9 +115,58 @@ impl<T> DerefMut for Tracked<T> {
     }
 }
 
+impl TrackingRegistry {
+    pub fn register_loaded<E: Entity>(&self, tracked: &Tracked<E>) {
+        self.entries
+            .lock()
+            .expect("tracking registry mutex poisoned")
+            .push(TrackedEntityRegistration {
+                entity_rust_name: E::metadata().rust_name,
+                state: tracked.state(),
+            });
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.entries
+            .lock()
+            .expect("tracking registry mutex poisoned")
+            .len()
+    }
+
+    pub fn registrations(&self) -> Vec<TrackedEntityRegistration> {
+        self.entries
+            .lock()
+            .expect("tracking registry mutex poisoned")
+            .clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{EntityState, Tracked};
+    use super::{EntityState, Tracked, TrackedEntityRegistration, TrackingRegistry};
+    use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata};
+
+    #[derive(Clone)]
+    struct DummyEntity;
+
+    static DUMMY_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "DummyEntity",
+        schema: "dbo",
+        table: "dummy_entities",
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for DummyEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &DUMMY_ENTITY_METADATA
+        }
+    }
 
     #[test]
     fn tracked_loaded_value_keeps_original_and_current_snapshots() {
@@ -158,5 +224,22 @@ mod tests {
         assert_eq!(tracked.state(), EntityState::Added);
         assert_eq!(tracked.original(), "Maria");
         assert_eq!(tracked.current(), "Maria Fernanda");
+    }
+
+    #[test]
+    fn tracking_registry_records_loaded_entities() {
+        let registry = TrackingRegistry::default();
+        let tracked = Tracked::from_loaded(DummyEntity);
+
+        registry.register_loaded::<DummyEntity>(&tracked);
+
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations(),
+            vec![TrackedEntityRegistration {
+                entity_rust_name: "DummyEntity",
+                state: EntityState::Unchanged,
+            }]
+        );
     }
 }

@@ -88,6 +88,12 @@ struct VersionedPublicCrudDb {
     pub users: DbSet<VersionedPublicCrudUser>,
 }
 
+#[derive(DbContext)]
+struct CombinedTrackedCrudDb {
+    pub users: DbSet<PublicCrudUser>,
+    pub versioned_users: DbSet<VersionedPublicCrudUser>,
+}
+
 #[tokio::test]
 async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<(), OrmError> {
     let Some(connection_string) = test_connection_string() else {
@@ -119,11 +125,20 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
         let found = db.users.find(inserted.id).await?;
         assert_eq!(found, Some(inserted.clone()));
 
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+        assert_eq!(registry.entry_count(), 0);
+
         let tracked = db.users.find_tracked(inserted.id).await?;
         let mut tracked = tracked.expect("tracked entity should exist");
         assert_eq!(tracked.state(), EntityState::Unchanged);
         assert_eq!(tracked.original(), &inserted);
         assert_eq!(tracked.current(), &inserted);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations()[0].entity_rust_name,
+            "PublicCrudUser"
+        );
+        assert_eq!(registry.registrations()[0].state, EntityState::Unchanged);
 
         tracked.name = "Ana Maria".to_string();
 
@@ -359,6 +374,61 @@ async fn public_dbset_update_uses_rowversion_to_prevent_stale_writes() -> Result
     }
     .await;
 
+    cleanup_versioned_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_shares_tracking_registry_across_dbsets() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping shared tracking registry integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+    reset_versioned_test_table(&connection_string).await?;
+    announce_test_table(keep_tables, false);
+
+    let result = async {
+        let db = CombinedTrackedCrudDb::connect(&connection_string).await?;
+        let registry = <CombinedTrackedCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+
+        let inserted = db
+            .users
+            .insert(NewPublicCrudUser {
+                name: "Shared Registry".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let versioned = db
+            .versioned_users
+            .insert(NewVersionedPublicCrudUser {
+                name: "Shared Registry Versioned".to_string(),
+            })
+            .await?;
+
+        assert_eq!(registry.entry_count(), 0);
+
+        let _ = db.users.find_tracked(inserted.id).await?;
+        let _ = db.versioned_users.find_tracked(versioned.id).await?;
+
+        let registrations = registry.registrations();
+        assert_eq!(registrations.len(), 2);
+        assert_eq!(registrations[0].entity_rust_name, "PublicCrudUser");
+        assert_eq!(registrations[0].state, EntityState::Unchanged);
+        assert_eq!(registrations[1].entity_rust_name, "VersionedPublicCrudUser");
+        assert_eq!(registrations[1].state, EntityState::Unchanged);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
     cleanup_versioned_test_table(&connection_string, keep_tables).await?;
 
     result

@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: colección interna mínima de entidades trackeadas en `DbContext`
+
+- Se mantuvo como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md` y se acotó la subtarea a introducir una colección interna compartida, sin adelantar todavía `save_changes()`, `add` o `remove`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Introducir colección interna mínima de entidades trackeadas dentro de DbContext experimental sin romper la API explícita existente` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/tracking.rs` ahora define la infraestructura oculta `TrackingRegistry`, `TrackingRegistryHandle` y `TrackedEntityRegistration`, con una colección protegida por `Mutex` para registrar entidades cargadas experimentalmente.
+- `crates/mssql-orm/src/context.rs` ahora hace que cada `DbSet` mantenga un `TrackingRegistryHandle`; `DbSet::find_tracked(...)` registra automáticamente las entidades cargadas en ese registro interno además de devolver `Tracked<E>`.
+- La trait `DbContext` ahora expone el método oculto `tracking_registry()`, y `#[derive(DbContext)]` en `crates/mssql-orm-macros/src/lib.rs` construye un único registro compartido por todos los `DbSet` del contexto derivado mediante `DbSet::with_tracking_registry(...)`.
+- La colección añadida en esta sesión es deliberadamente mínima: registra la carga de entidades por tipo y estado inicial, pero todavía no sincroniza mutaciones vivas del wrapper con el registro ni persiste cambios.
+- Se añadieron pruebas unitarias del registro en `tracking.rs` y una integración pública nueva en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida que dos `DbSet` distintos dentro del mismo `DbContext` derivado comparten el mismo registro y acumulan entradas al usar `find_tracked(...)`.
+
+### Resultado
+
+- La Etapa 12 ya cuenta con una colección interna común a nivel de `DbContext` derivado, suficiente como base experimental para montar `save_changes()` sobre entidades `Modified`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El registro actual conserva únicamente registros de carga (`entity_rust_name`, `state` inicial); todavía no mantiene referencias vivas compartidas al contenido mutable de `Tracked<T>`, por lo que `save_changes()` deberá introducir ese acoplamiento con cuidado y sin romper la surface existente.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: save_changes() para entidades Modified, reutilizando DbSet::update y preservando rowversion/ConcurrencyConflict`.
+
 ### Sesión: transición `Unchanged -> Modified` en `Tracked<T>`
 
 - Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo la subtarea limitada a la mutabilidad observada del wrapper `Tracked<T>`.

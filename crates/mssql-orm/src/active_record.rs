@@ -242,6 +242,10 @@ mod tests {
         fn shared_connection(&self) -> crate::SharedConnection {
             panic!("DummyContext is only used in disconnected unit tests")
         }
+
+        fn tracking_registry(&self) -> crate::TrackingRegistryHandle {
+            self.entities.tracking_registry()
+        }
     }
 
     impl DbContextEntitySet<TestEntity> for DummyContext {

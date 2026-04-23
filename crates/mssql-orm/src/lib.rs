@@ -27,6 +27,8 @@ pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
 pub use tracking::{EntityState, Tracked};
+#[doc(hidden)]
+pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
 
 pub mod prelude {
     pub use crate::{
