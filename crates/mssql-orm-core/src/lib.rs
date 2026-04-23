@@ -394,6 +394,7 @@ impl PrimaryKeyMetadata {
 pub struct ColumnMetadata {
     pub rust_field: &'static str,
     pub column_name: &'static str,
+    pub renamed_from: Option<&'static str>,
     pub sql_type: SqlServerType,
     pub nullable: bool,
     pub primary_key: bool,
@@ -575,6 +576,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "tenant_id",
             column_name: "tenant_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -591,6 +593,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -607,6 +610,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "email",
             column_name: "email",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,
@@ -623,6 +627,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "version",
             column_name: "version",
+            renamed_from: None,
             sql_type: SqlServerType::RowVersion,
             nullable: false,
             primary_key: false,
@@ -832,6 +837,7 @@ mod tests {
         let computed = ColumnMetadata {
             rust_field: "full_name",
             column_name: "full_name",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,

@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: `RenameColumn` explícito con `#[orm(renamed_from = "...")]`
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.
+- Al revisar el alcance real de renombres explícitos se confirmó que la subtarea original era demasiado grande para una sola sesión verificable, así que se descompuso operativamente en `RenameColumn` y `RenameTable` dentro de `docs/tasks.md` antes de continuar.
+- Se movió en `docs/tasks.md` la nueva subtarea `Etapa 13: Soportar RenameColumn explícito con #[orm(renamed_from = \"...\")] en snapshots, diff y DDL SQL Server` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-core/src/lib.rs` ahora incorpora `renamed_from` en `ColumnMetadata`, preservando el hint explícito de rename en la metadata derivada.
+- `crates/mssql-orm-macros/src/lib.rs` ahora acepta `#[orm(renamed_from = \"old_name\")]` en campos de entidad y lo emite en la metadata pública generada por `#[derive(Entity)]`.
+- `crates/mssql-orm-migrate/src/snapshot.rs` ahora preserva `renamed_from` en `ColumnSnapshot`, y `crates/mssql-orm-migrate/src/operation.rs`/`diff.rs` introducen `MigrationOperation::RenameColumn` con detección explícita basada en ese hint, sin inferir automáticamente que `drop + add` implique rename.
+- El diff de columnas ahora emite `RenameColumn` cuando una columna actual apunta a un nombre previo mediante `renamed_from`; si además cambia shape soportado, emite `RenameColumn` seguido de `AlterColumn` en lugar de degradar el rename a `DropColumn + AddColumn`.
+- `crates/mssql-orm-sqlserver/src/migration.rs` ahora compila `RenameColumn` a `EXEC sp_rename ... 'COLUMN'`, y `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` junto al snapshot `migration_snapshots__rename_column_migration_sql.snap` congelan ese SQL observable.
+- `crates/mssql-orm/tests/trybuild.rs` y `crates/mssql-orm/tests/ui/entity_renamed_from_valid.rs` fijan la nueva surface pública del derive para consumidores reales.
+
+### Resultado
+
+- La mitad acotada de la subtarea de renombres quedó cerrada: el sistema ya soporta `RenameColumn` explícito de extremo a extremo en metadata derivada, snapshots, diff y DDL SQL Server, sin introducir inferencia riesgosa de renombres.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-sqlserver --lib migration`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `RenameTable` sigue pendiente como subtarea separada; esta sesión no introdujo metadata ni diff explícito para renombres de tabla.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Soportar RenameTable explícito en snapshots, diff y DDL SQL Server`.
+
 ### Sesión: scripts de migración idempotentes para SQL Server
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.

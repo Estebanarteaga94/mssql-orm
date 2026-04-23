@@ -172,6 +172,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         let precision = config.precision.or(type_info.default_precision);
         let scale = config.scale.or(type_info.default_scale);
         let default_sql = option_lit_str(config.default_sql);
+        let renamed_from = option_lit_str(config.renamed_from);
         let has_computed_sql = config.computed_sql.is_some();
         let computed_sql = option_lit_str(config.computed_sql);
         let max_length = option_number(max_length);
@@ -185,6 +186,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             ::mssql_orm::core::ColumnMetadata {
                 rust_field: #rust_field,
                 column_name: #column_name,
+                renamed_from: #renamed_from,
                 sql_type: #sql_type,
                 nullable: #nullable,
                 primary_key: #primary_key,
@@ -966,6 +968,8 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
                 config.nullable = true;
             } else if meta.path.is_ident("default_sql") {
                 config.default_sql = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("renamed_from") {
+                config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("index") {
                 let mut index = IndexConfig::default();
                 meta.parse_nested_meta(|nested| {
@@ -1495,6 +1499,7 @@ struct PersistenceFieldConfig {
 #[derive(Default)]
 struct FieldConfig {
     column: Option<LitStr>,
+    renamed_from: Option<LitStr>,
     primary_key: bool,
     identity: bool,
     identity_seed: Option<i64>,

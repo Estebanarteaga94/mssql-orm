@@ -136,6 +136,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -152,6 +153,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "name",
             column_name: "name",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: true,
             primary_key: false,

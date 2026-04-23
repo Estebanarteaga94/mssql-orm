@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos, `computed columns`, foreign keys avanzadas y scripts idempotentes dentro del pipeline de migraciones; el siguiente foco natural es resolver renombres explícitos sin degradar a `drop + add`.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes y `RenameColumn` explícito dentro del pipeline de migraciones; el siguiente foco natural es cerrar `RenameTable` sin degradar a `drop + add`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -37,6 +37,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El derive valida en compile-time que `#[orm(on_delete = "set null")]` solo pueda usarse sobre columnas nullable.
 - La sintaxis estructurada valida en compile-time la existencia de la columna de destino apoyándose en los símbolos generados por `#[derive(Entity)]` sobre la entidad referenciada, y no exige que esa columna sea primary key porque SQL Server también permite FKs hacia columnas no PK.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
+- El derive también acepta ahora `#[orm(renamed_from = "...")]` sobre campos, dejando ese hint explícito disponible para el diff de migraciones sin inferencia automática de renombres.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
 - La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren casos válidos de entidades con `foreign_key`, schema por defecto `dbo` para referencias abreviadas, la sintaxis estructurada y errores de compilación esperados para ausencia de PK, `identity` inválido, `rowversion` inválido, segmentos vacíos/formato inválido en `foreign_key` y columnas de destino inexistentes en el formato estructurado.
 - La crate pública `mssql-orm` ahora también incluye una batería dedicada `stage9_relationship_metadata.rs` para fijar la metadata relacional generada por `#[derive(Entity)]`, incluyendo múltiples foreign keys, nombres generados y helpers de lookup sobre metadata.
@@ -104,7 +105,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-migrate` ahora también expone `diff_column_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff de columnas ya detecta `AddColumn`, `DropColumn` y `AlterColumn` comparando `ColumnSnapshot` completo y usando orden determinista por nombre de columna.
 - Cuando cambia `computed_sql` o una columna pasa de regular a computada (o viceversa), el diff actual la modela como `DropColumn` seguido de `AddColumn`; `AlterColumn` sigue reservado a cambios básicos de tipo y nullability.
-- El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
+- Cuando una columna actual declara `renamed_from`, el diff puede emitir `RenameColumn` de forma explícita; si además cambia shape soportado, el rename se compone con `AlterColumn` posterior en lugar de degradar directamente a `DropColumn + AddColumn`.
+- El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; los renombres de tabla siguen como subtarea pendiente separada.
 - `mssql-orm-migrate` ahora también expone `diff_relational_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de un índice o de una foreign key existente, hoy la modela como `Drop...` seguido de `Create/Add...`.
 - Ese contrato ya quedó cubierto también para foreign keys compuestas y para cambios de acciones referenciales (`NoAction`, `Cascade`, `SetNull`, `SetDefault`) en el pipeline de snapshots/diff.
@@ -114,6 +116,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-sqlserver` ahora compila `MigrationOperation` a DDL SQL Server mediante un módulo dedicado de migraciones, reutilizando `MigrationOperation` y `ColumnSnapshot`/`TableSnapshot` definidos en `mssql-orm-migrate`.
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
+- La generación SQL actual también cubre `RenameColumn` mediante `sp_rename`, siempre que el diff lo reciba como operación explícita.
 - `mssql-orm-sqlserver` ya compila `AddForeignKey` y `DropForeignKey` a DDL SQL Server básico usando `ALTER TABLE ... ADD/DROP CONSTRAINT`.
 - `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE`, `SET NULL` y `SET DEFAULT`.
 - La compilación DDL de foreign keys ahora también valida cardinalidad mínima y que exista el mismo número de columnas locales y referenciadas antes de generar SQL.
@@ -215,7 +218,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a drop + add`.
+1. Implementar `Etapa 13: Soportar RenameTable explícito en snapshots, diff y DDL SQL Server`.
 2. Después evaluar `migration script --from --to` si sigue siendo prioritario para flujos de revisión de producción.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

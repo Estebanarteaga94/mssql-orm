@@ -1,9 +1,9 @@
 use crate::{
     AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema, CreateTable,
     DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable, ForeignKeySnapshot,
-    IndexSnapshot, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+    IndexSnapshot, MigrationOperation, ModelSnapshot, RenameColumn, SchemaSnapshot, TableSnapshot,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Computes the minimum stage-7 diff for schema and table creation/deletion.
 pub fn diff_schema_and_table_operations(
@@ -99,41 +99,57 @@ pub fn diff_column_operations(
 
             let previous_columns = column_map(previous_table);
             let current_columns = column_map(current_table);
+            let mut consumed_previous_columns = BTreeSet::new();
 
             for (column_name, current_column) in &current_columns {
+                if let Some(renamed_from) = current_column
+                    .renamed_from
+                    .as_deref()
+                    .filter(|renamed_from| *renamed_from != column_name)
+                    .filter(|renamed_from| !current_columns.contains_key(*renamed_from))
+                {
+                    if let Some(previous_column) = previous_columns.get(renamed_from) {
+                        consumed_previous_columns.insert(renamed_from.to_string());
+                        operations.push(MigrationOperation::RenameColumn(RenameColumn::new(
+                            schema_name.clone(),
+                            table_name.clone(),
+                            renamed_from.to_string(),
+                            column_name.clone(),
+                        )));
+                        push_followup_column_change(
+                            &mut operations,
+                            schema_name,
+                            table_name,
+                            renamed_previous_column(previous_column, current_column),
+                            current_column,
+                        );
+                        continue;
+                    }
+                }
+
                 match previous_columns.get(column_name) {
                     None => operations.push(MigrationOperation::AddColumn(AddColumn::new(
                         schema_name.clone(),
                         table_name.clone(),
                         (*current_column).clone(),
                     ))),
-                    Some(previous_column) if *previous_column != *current_column => {
-                        if requires_drop_and_add(previous_column, current_column) {
-                            operations.push(MigrationOperation::DropColumn(DropColumn::new(
-                                schema_name.clone(),
-                                table_name.clone(),
-                                column_name.clone(),
-                            )));
-                            operations.push(MigrationOperation::AddColumn(AddColumn::new(
-                                schema_name.clone(),
-                                table_name.clone(),
-                                (*current_column).clone(),
-                            )));
-                        } else {
-                            operations.push(MigrationOperation::AlterColumn(AlterColumn::new(
-                                schema_name.clone(),
-                                table_name.clone(),
-                                (*previous_column).clone(),
-                                (*current_column).clone(),
-                            )));
-                        }
+                    Some(previous_column) => {
+                        consumed_previous_columns.insert(column_name.clone());
+                        push_followup_column_change(
+                            &mut operations,
+                            schema_name,
+                            table_name,
+                            (*previous_column).clone(),
+                            current_column,
+                        );
                     }
-                    Some(_) => {}
                 }
             }
 
             for column_name in previous_columns.keys() {
-                if !current_columns.contains_key(column_name) {
+                if !consumed_previous_columns.contains(column_name)
+                    && !current_columns.contains_key(column_name)
+                {
                     operations.push(MigrationOperation::DropColumn(DropColumn::new(
                         schema_name.clone(),
                         table_name.clone(),
@@ -145,6 +161,50 @@ pub fn diff_column_operations(
     }
 
     operations
+}
+
+fn push_followup_column_change(
+    operations: &mut Vec<MigrationOperation>,
+    schema_name: &str,
+    table_name: &str,
+    previous_column: ColumnSnapshot,
+    current_column: &ColumnSnapshot,
+) {
+    if columns_equal_for_diff(&previous_column, current_column) {
+        return;
+    }
+
+    if requires_drop_and_add(&previous_column, current_column) {
+        operations.push(MigrationOperation::DropColumn(DropColumn::new(
+            schema_name.to_string(),
+            table_name.to_string(),
+            current_column.name.clone(),
+        )));
+        operations.push(MigrationOperation::AddColumn(AddColumn::new(
+            schema_name.to_string(),
+            table_name.to_string(),
+            current_column.clone(),
+        )));
+    } else {
+        operations.push(MigrationOperation::AlterColumn(AlterColumn::new(
+            schema_name.to_string(),
+            table_name.to_string(),
+            previous_column,
+            current_column.clone(),
+        )));
+    }
+}
+
+fn renamed_previous_column(previous: &ColumnSnapshot, current: &ColumnSnapshot) -> ColumnSnapshot {
+    let mut renamed = previous.clone();
+    renamed.name = current.name.clone();
+    renamed
+}
+
+fn columns_equal_for_diff(previous: &ColumnSnapshot, current: &ColumnSnapshot) -> bool {
+    let mut normalized_current = current.clone();
+    normalized_current.renamed_from = None;
+    *previous == normalized_current
 }
 
 fn requires_drop_and_add(previous: &ColumnSnapshot, current: &ColumnSnapshot) -> bool {
@@ -301,7 +361,7 @@ mod tests {
         AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema,
         CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
         ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationOperation, ModelSnapshot,
-        SchemaSnapshot, TableSnapshot,
+        RenameColumn, SchemaSnapshot, TableSnapshot,
     };
     use mssql_orm_core::{IdentityMetadata, ReferentialAction, SqlServerType};
 
@@ -534,6 +594,89 @@ mod tests {
                 column("email", SqlServerType::NVarChar, false, Some(160)),
                 column("email", SqlServerType::NVarChar, true, Some(255)),
             ))]
+        );
+    }
+
+    #[test]
+    fn column_diff_renames_column_when_explicit_hint_matches_previous_name() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("email", SqlServerType::NVarChar, false, Some(160))],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![
+                    column("email_address", SqlServerType::NVarChar, false, Some(160))
+                        .with_renamed_from("email"),
+                ],
+                vec![],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![MigrationOperation::RenameColumn(RenameColumn::new(
+                "sales",
+                "customers",
+                "email",
+                "email_address",
+            ))]
+        );
+    }
+
+    #[test]
+    fn column_diff_renames_then_alters_column_when_shape_changes() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("email", SqlServerType::NVarChar, false, Some(160))],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![
+                    column("email_address", SqlServerType::NVarChar, true, Some(255))
+                        .with_renamed_from("email"),
+                ],
+                vec![],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::RenameColumn(RenameColumn::new(
+                    "sales",
+                    "customers",
+                    "email",
+                    "email_address",
+                )),
+                MigrationOperation::AlterColumn(AlterColumn::new(
+                    "sales",
+                    "customers",
+                    column("email_address", SqlServerType::NVarChar, false, Some(160)),
+                    column("email_address", SqlServerType::NVarChar, true, Some(255))
+                        .with_renamed_from("email"),
+                )),
+            ]
         );
     }
 

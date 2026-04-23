@@ -19,6 +19,7 @@ static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
     ColumnMetadata {
         rust_field: "id",
         column_name: "id",
+        renamed_from: None,
         sql_type: SqlServerType::BigInt,
         nullable: false,
         primary_key: true,
@@ -35,6 +36,7 @@ static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
     ColumnMetadata {
         rust_field: "email",
         column_name: "email",
+        renamed_from: None,
         sql_type: SqlServerType::NVarChar,
         nullable: false,
         primary_key: false,
@@ -51,6 +53,7 @@ static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
     ColumnMetadata {
         rust_field: "active",
         column_name: "active",
+        renamed_from: None,
         sql_type: SqlServerType::Bit,
         nullable: false,
         primary_key: false,
@@ -67,6 +70,7 @@ static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
     ColumnMetadata {
         rust_field: "created_at",
         column_name: "created_at",
+        renamed_from: None,
         sql_type: SqlServerType::DateTime2,
         nullable: false,
         primary_key: false,
@@ -102,6 +106,7 @@ static ORDER_COLUMNS: [ColumnMetadata; 3] = [
     ColumnMetadata {
         rust_field: "id",
         column_name: "id",
+        renamed_from: None,
         sql_type: SqlServerType::BigInt,
         nullable: false,
         primary_key: true,
@@ -118,6 +123,7 @@ static ORDER_COLUMNS: [ColumnMetadata; 3] = [
     ColumnMetadata {
         rust_field: "customer_id",
         column_name: "customer_id",
+        renamed_from: None,
         sql_type: SqlServerType::BigInt,
         nullable: false,
         primary_key: false,
@@ -134,6 +140,7 @@ static ORDER_COLUMNS: [ColumnMetadata; 3] = [
     ColumnMetadata {
         rust_field: "total_cents",
         column_name: "total_cents",
+        renamed_from: None,
         sql_type: SqlServerType::BigInt,
         nullable: false,
         primary_key: false,

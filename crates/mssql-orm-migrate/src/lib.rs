@@ -16,7 +16,7 @@ pub use filesystem::{
 };
 pub use operation::{
     AddColumn, AddForeignKey, AlterColumn, CreateIndex, CreateSchema, CreateTable, DropColumn,
-    DropForeignKey, DropIndex, DropSchema, DropTable, MigrationOperation,
+    DropForeignKey, DropIndex, DropSchema, DropTable, MigrationOperation, RenameColumn,
 };
 pub use snapshot::{
     ColumnSnapshot, ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot,
@@ -38,7 +38,7 @@ mod tests {
         AddColumn, AddForeignKey, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateIndex,
         CreateSchema, CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
         ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
-        MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+        MigrationOperation, ModelSnapshot, RenameColumn, SchemaSnapshot, TableSnapshot,
     };
     use mssql_orm_core::{
         ColumnMetadata, EntityMetadata, ForeignKeyMetadata, IdentityMetadata, IndexColumnMetadata,
@@ -49,6 +49,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -65,6 +66,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "email",
             column_name: "email",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,
@@ -81,6 +83,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "version",
             column_name: "version",
+            renamed_from: None,
             sql_type: SqlServerType::RowVersion,
             nullable: false,
             primary_key: false,
@@ -117,6 +120,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -133,6 +137,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "display_name",
             column_name: "display_name",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,
@@ -163,6 +168,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -179,6 +185,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "customer_id",
             column_name: "customer_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: false,
@@ -195,6 +202,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "total_cents",
             column_name: "total_cents",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: false,
@@ -233,6 +241,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -249,6 +258,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "customer_id",
             column_name: "customer_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: false,
@@ -288,6 +298,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -304,6 +315,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "customer_id",
             column_name: "customer_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: false,
@@ -320,6 +332,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "branch_id",
             column_name: "branch_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: false,
@@ -569,6 +582,12 @@ mod tests {
         ));
         let drop_column =
             MigrationOperation::DropColumn(DropColumn::new("sales", "customers", "email"));
+        let rename_column = MigrationOperation::RenameColumn(RenameColumn::new(
+            "sales",
+            "customers",
+            "email",
+            "email_address",
+        ));
         let alter_column = MigrationOperation::AlterColumn(AlterColumn::new(
             "sales",
             "customers",
@@ -629,6 +648,7 @@ mod tests {
         assert_eq!(drop_table.table_name(), Some("customers"));
         assert_eq!(add_column.table_name(), Some("customers"));
         assert_eq!(drop_column.table_name(), Some("customers"));
+        assert_eq!(rename_column.table_name(), Some("customers"));
         assert_eq!(alter_column.table_name(), Some("customers"));
         assert_eq!(create_index.table_name(), Some("customers"));
         assert_eq!(drop_index.table_name(), Some("customers"));

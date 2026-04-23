@@ -1,7 +1,7 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a `drop + add`
+- [ ] Etapa 13: Soportar `RenameTable` explícito en snapshots, diff y DDL SQL Server
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
@@ -9,6 +9,8 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Descomponer la subtarea de renombres explícitos de Etapa 13 en `RenameColumn` y `RenameTable`
+- [x] Etapa 13: Soportar `RenameColumn` explícito con `#[orm(renamed_from = "...")]` en snapshots, diff y DDL SQL Server
 - [x] Etapa 13: Generar scripts de migración idempotentes para SQL Server
 - [x] Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server
 - [x] Etapa 13: Soportar `computed columns` en snapshots, diff y DDL SQL Server

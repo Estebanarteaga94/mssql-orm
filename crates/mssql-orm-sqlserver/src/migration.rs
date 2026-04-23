@@ -3,7 +3,7 @@ use mssql_orm_core::{OrmError, ReferentialAction, SqlServerType};
 use mssql_orm_migrate::{
     AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema, CreateTable,
     DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable, IndexColumnSnapshot,
-    MigrationOperation,
+    MigrationOperation, RenameColumn,
 };
 
 const MIGRATIONS_HISTORY_SCHEMA: &str = "dbo";
@@ -34,6 +34,7 @@ fn compile_operation(operation: &MigrationOperation) -> Result<String, OrmError>
         MigrationOperation::DropSchema(operation) => compile_drop_schema(operation),
         MigrationOperation::CreateTable(operation) => compile_create_table(operation),
         MigrationOperation::DropTable(operation) => compile_drop_table(operation),
+        MigrationOperation::RenameColumn(operation) => compile_rename_column(operation),
         MigrationOperation::AddColumn(operation) => compile_add_column(operation),
         MigrationOperation::DropColumn(operation) => compile_drop_column(operation),
         MigrationOperation::AlterColumn(operation) => compile_alter_column(operation),
@@ -104,6 +105,19 @@ fn compile_add_column(operation: &AddColumn) -> Result<String, OrmError> {
         "ALTER TABLE {} ADD {}",
         quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
         compile_column_definition(&operation.column)?,
+    ))
+}
+
+fn compile_rename_column(operation: &RenameColumn) -> Result<String, OrmError> {
+    let qualified_column = format!(
+        "{}.{}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+        quote_identifier(&operation.previous_column_name)?,
+    );
+
+    Ok(format!(
+        "EXEC sp_rename N'{qualified_column}', N'{next_name}', N'COLUMN'",
+        next_name = operation.next_column_name,
     ))
 }
 
@@ -345,7 +359,8 @@ mod tests {
     use mssql_orm_migrate::{
         AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema,
         CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
-        ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationOperation, TableSnapshot,
+        ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationOperation, RenameColumn,
+        TableSnapshot,
     };
 
     fn customer_table() -> TableSnapshot {
@@ -552,6 +567,23 @@ mod tests {
         assert_eq!(
             sql[0],
             "ALTER TABLE [sales].[customers] ALTER COLUMN [email] nvarchar(255) NULL"
+        );
+    }
+
+    #[test]
+    fn compiles_rename_column_to_sp_rename() {
+        let operation = MigrationOperation::RenameColumn(RenameColumn::new(
+            "sales",
+            "customers",
+            "email",
+            "email_address",
+        ));
+
+        let sql = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "EXEC sp_rename N'[sales].[customers].[email]', N'email_address', N'COLUMN'"
         );
     }
 

@@ -616,6 +616,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -632,6 +633,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "name",
             column_name: "name",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,
@@ -648,6 +650,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "active",
             column_name: "active",
+            renamed_from: None,
             sql_type: SqlServerType::Bit,
             nullable: false,
             primary_key: false,
@@ -680,6 +683,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "tenant_id",
             column_name: "tenant_id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -696,6 +700,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -728,6 +733,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "id",
             column_name: "id",
+            renamed_from: None,
             sql_type: SqlServerType::BigInt,
             nullable: false,
             primary_key: true,
@@ -744,6 +750,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "name",
             column_name: "name",
+            renamed_from: None,
             sql_type: SqlServerType::NVarChar,
             nullable: false,
             primary_key: false,
@@ -760,6 +767,7 @@ mod tests {
         ColumnMetadata {
             rust_field: "version",
             column_name: "version",
+            renamed_from: None,
             sql_type: SqlServerType::RowVersion,
             nullable: false,
             primary_key: false,

@@ -116,6 +116,7 @@ impl TableSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnSnapshot {
     pub name: String,
+    pub renamed_from: Option<String>,
     pub sql_type: SqlServerType,
     pub nullable: bool,
     pub primary_key: bool,
@@ -149,6 +150,7 @@ impl ColumnSnapshot {
     ) -> Self {
         Self {
             name: name.into(),
+            renamed_from: None,
             sql_type,
             nullable,
             primary_key,
@@ -163,12 +165,18 @@ impl ColumnSnapshot {
             scale,
         }
     }
+
+    pub fn with_renamed_from(mut self, renamed_from: impl Into<String>) -> Self {
+        self.renamed_from = Some(renamed_from.into());
+        self
+    }
 }
 
 impl From<&ColumnMetadata> for ColumnSnapshot {
     fn from(column: &ColumnMetadata) -> Self {
         Self {
             name: column.column_name.to_string(),
+            renamed_from: column.renamed_from.map(str::to_owned),
             sql_type: column.sql_type,
             nullable: column.nullable,
             primary_key: column.primary_key,

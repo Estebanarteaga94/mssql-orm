@@ -7,6 +7,7 @@ pub enum MigrationOperation {
     DropSchema(DropSchema),
     CreateTable(CreateTable),
     DropTable(DropTable),
+    RenameColumn(RenameColumn),
     AddColumn(AddColumn),
     DropColumn(DropColumn),
     AlterColumn(AlterColumn),
@@ -23,6 +24,7 @@ impl MigrationOperation {
             Self::DropSchema(operation) => &operation.schema_name,
             Self::CreateTable(operation) => &operation.schema_name,
             Self::DropTable(operation) => &operation.schema_name,
+            Self::RenameColumn(operation) => &operation.schema_name,
             Self::AddColumn(operation) => &operation.schema_name,
             Self::DropColumn(operation) => &operation.schema_name,
             Self::AlterColumn(operation) => &operation.schema_name,
@@ -38,6 +40,7 @@ impl MigrationOperation {
             Self::CreateSchema(_) | Self::DropSchema(_) => None,
             Self::CreateTable(operation) => Some(&operation.table.name),
             Self::DropTable(operation) => Some(&operation.table_name),
+            Self::RenameColumn(operation) => Some(&operation.table_name),
             Self::AddColumn(operation) => Some(&operation.table_name),
             Self::DropColumn(operation) => Some(&operation.table_name),
             Self::AlterColumn(operation) => Some(&operation.table_name),
@@ -105,6 +108,31 @@ impl DropTable {
         Self {
             schema_name: schema_name.into(),
             table_name: table_name.into(),
+        }
+    }
+}
+
+/// Rename an existing column in a table without recreating it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenameColumn {
+    pub schema_name: String,
+    pub table_name: String,
+    pub previous_column_name: String,
+    pub next_column_name: String,
+}
+
+impl RenameColumn {
+    pub fn new(
+        schema_name: impl Into<String>,
+        table_name: impl Into<String>,
+        previous_column_name: impl Into<String>,
+        next_column_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            table_name: table_name.into(),
+            previous_column_name: previous_column_name.into(),
+            next_column_name: next_column_name.into(),
         }
     }
 }
