@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 5 exponiendo la API CRUD base `find`, `insert`, `update`, `delete` y `query`, ahora que `DbContext`, `DbSet<T>` y `#[derive(DbContext)]` ya existen en la superficie pública.
+Continuar la Etapa 5 implementando las operaciones CRUD restantes sobre `DbSet<T>`, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]` y el runner base `DbSet::query()` ya existen en la superficie pública.
 
 ## Dirección Arquitectónica Vigente
 
@@ -61,8 +61,10 @@ Continuar la Etapa 5 exponiendo la API CRUD base `find`, `insert`, `update`, `de
 - Las pruebas reales usan tablas efímeras únicas en `tempdb.dbo` en lugar de `#temp tables`, porque la ejecución RPC usada por Tiberius no preserva tablas temporales locales entre llamadas separadas.
 - La validación manual de esta sesión confirmó conectividad real con SQL Server local usando el login `sa`; la cadena original con `Database=test` no fue usable porque esa base no estaba accesible, así que la verificación se ejecutó contra `master`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
-- La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
-- `DbSet<T>` ya encapsula una conexión compartida sobre `tokio::sync::Mutex<MssqlConnection<_>>` y expone metadata de entidad, dejando preparada la base para CRUD en la siguiente tarea sin mover responsabilidades fuera de la crate pública.
+- La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
+- `DbSet<T>` ya encapsula una conexión compartida sobre `tokio::sync::Mutex<MssqlConnection<_>>`, expone metadata de entidad y ahora también expone `query()` y `query_with(SelectQuery)` como base pública para ejecución de queries por entidad.
+- `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
+- `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -82,13 +84,13 @@ Continuar la Etapa 5 exponiendo la API CRUD base `find`, `insert`, `update`, `de
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
-- `DbSet<T>` ya sostiene una conexión compartida, pero todavía no expone operaciones CRUD; la siguiente tarea debe reutilizar ese handle sin introducir lógica SQL fuera de `mssql-orm-sqlserver`.
+- `DbSet<T>` ya sostiene una conexión compartida y un runner base de query, pero todavía faltan `find`, `insert`, `update` y `delete`; las siguientes tareas deben reutilizar ese handle sin introducir lógica SQL fuera de `mssql-orm-sqlserver`.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 5: Exponer API CRUD base find, insert, update, delete, query`.
-2. Reutilizar `DbSet<T>`, `SharedConnection`, `MssqlConnection`, `Executor`, `fetch_one` y `fetch_all` como base inmediata de esa API.
-3. Mantener estable el contrato de `#[derive(DbContext)]` y sus pruebas `trybuild` mientras entra la primera capa CRUD pública.
+1. Implementar `Etapa 5: Implementar DbSet::find por primary key simple`.
+2. Reutilizar `DbSetQuery`, `query_with`, metadata de primary key, `MssqlConnection`, `fetch_one` y `SqlServerCompiler` como base inmediata.
+3. Mantener estable el contrato de `#[derive(DbContext)]` y la nueva superficie `DbSetQuery<T>` mientras entran `insert`, `update` y `delete`.

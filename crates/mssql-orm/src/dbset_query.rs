@@ -1,0 +1,216 @@
+use crate::context::SharedConnection;
+use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
+use mssql_orm_query::{CountQuery, SelectQuery};
+use mssql_orm_sqlserver::SqlServerCompiler;
+
+#[derive(Clone)]
+pub struct DbSetQuery<E: Entity> {
+    connection: Option<SharedConnection>,
+    select_query: SelectQuery,
+    _entity: core::marker::PhantomData<fn() -> E>,
+}
+
+impl<E: Entity> DbSetQuery<E> {
+    pub(crate) fn new(connection: Option<SharedConnection>, select_query: SelectQuery) -> Self {
+        Self {
+            connection,
+            select_query,
+            _entity: core::marker::PhantomData,
+        }
+    }
+
+    pub fn with_select_query(mut self, select_query: SelectQuery) -> Self {
+        self.select_query = select_query;
+        self
+    }
+
+    pub fn select_query(&self) -> &SelectQuery {
+        &self.select_query
+    }
+
+    pub fn into_select_query(self) -> SelectQuery {
+        self.select_query
+    }
+
+    pub async fn all(self) -> Result<Vec<E>, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await;
+        connection.fetch_all(compiled).await
+    }
+
+    pub async fn first(self) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await;
+        connection.fetch_one(compiled).await
+    }
+
+    pub async fn count(self) -> Result<i64, OrmError> {
+        let compiled = SqlServerCompiler::compile_count(&self.count_query())?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await;
+        let row = connection.fetch_one::<CountRow>(compiled).await?;
+
+        row.map(|row| row.value)
+            .ok_or_else(|| OrmError::new("count query did not return a row"))
+    }
+
+    fn count_query(&self) -> CountQuery {
+        CountQuery {
+            from: self.select_query.from,
+            predicate: self.select_query.predicate.clone(),
+        }
+    }
+
+    fn require_connection(&self) -> Result<SharedConnection, OrmError> {
+        self.connection
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| OrmError::new("DbSetQuery requires an initialized shared connection"))
+    }
+}
+
+impl<E: Entity> core::fmt::Debug for DbSetQuery<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DbSetQuery")
+            .field("entity", &E::metadata().rust_name)
+            .field("table", &E::metadata().table)
+            .field("select_query", &self.select_query)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CountRow {
+    value: i64,
+}
+
+impl FromRow for CountRow {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        match row.get_required("count")? {
+            SqlValue::I32(value) => Ok(Self {
+                value: i64::from(value),
+            }),
+            SqlValue::I64(value) => Ok(Self { value }),
+            _ => Err(OrmError::new(
+                "expected SQL Server COUNT result as i32 or i64",
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DbSetQuery;
+    use crate::context::DbSet;
+    use mssql_orm_core::{
+        Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
+    };
+    use mssql_orm_query::{Expr, Predicate, SelectQuery};
+
+    struct TestEntity;
+
+    static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TestEntity",
+        schema: "dbo",
+        table: "test_entities",
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for TestEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &TEST_ENTITY_METADATA
+        }
+    }
+
+    #[test]
+    fn dbset_query_starts_from_entity_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let query = dbset.query();
+
+        assert_eq!(
+            query.select_query(),
+            &SelectQuery::from_entity::<TestEntity>()
+        );
+    }
+
+    #[test]
+    fn dbset_query_accepts_replacement_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let custom = SelectQuery::from_entity::<TestEntity>().filter(Predicate::eq(
+            Expr::value(SqlValue::Bool(true)),
+            Expr::value(SqlValue::Bool(true)),
+        ));
+
+        let query = dbset.query().with_select_query(custom.clone());
+
+        assert_eq!(query.select_query(), &custom);
+        assert_eq!(query.into_select_query(), custom);
+    }
+
+    #[test]
+    fn count_row_accepts_i32_and_i64_results() {
+        struct CountTestRow {
+            value: SqlValue,
+        }
+
+        impl Row for CountTestRow {
+            fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError> {
+                Ok((column == "count").then(|| self.value.clone()))
+            }
+        }
+
+        let from_i32 = super::CountRow::from_row(&CountTestRow {
+            value: SqlValue::I32(7),
+        })
+        .unwrap();
+        let from_i64 = super::CountRow::from_row(&CountTestRow {
+            value: SqlValue::I64(9),
+        })
+        .unwrap();
+
+        assert_eq!(from_i32.value, 7);
+        assert_eq!(from_i64.value, 9);
+    }
+
+    #[test]
+    fn count_row_rejects_non_integer_results() {
+        struct CountTestRow;
+
+        impl Row for CountTestRow {
+            fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError> {
+                Ok((column == "count").then(|| SqlValue::String("7".to_string())))
+            }
+        }
+
+        let error = super::CountRow::from_row(&CountTestRow).unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "expected SQL Server COUNT result as i32 or i64"
+        );
+    }
+
+    #[test]
+    fn debug_mentions_entity_type() {
+        let query = DbSetQuery::<TestEntity>::new(None, SelectQuery::from_entity::<TestEntity>());
+
+        let rendered = format!("{query:?}");
+
+        assert!(rendered.contains("DbSetQuery"));
+        assert!(rendered.contains("test_entities"));
+    }
+}

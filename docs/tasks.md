@@ -1,7 +1,11 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 5: Exponer API CRUD base `find`, `insert`, `update`, `delete`, `query`
+- [ ] Etapa 5: Implementar `DbSet::find` por primary key simple
+- [ ] Etapa 5: Implementar `DbSet::insert` sobre modelos `Insertable` con retorno materializado
+- [ ] Etapa 5: Implementar `DbSet::update` por primary key simple sobre `Changeset`
+- [ ] Etapa 5: Implementar `DbSet::delete` por primary key simple
+- [ ] Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública
 - [ ] Etapa 5: Crear ejemplo funcional `basic-crud`
 - [ ] Etapa 6: Implementar query builder público con filtros, composición lógica, ordenamiento, limit y paginación
 - [ ] Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público
@@ -26,6 +30,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 5: Exponer `DbSet::query()` y query runner base (`all`, `first`, `count`) sobre `SelectQuery`
 - [x] Inicialización del sistema autónomo
 - [x] Crear base documental operativa en `docs/`
 - [x] Etapa 0: Crear workspace Rust con crates internas base (`mssql-orm`, `core`, `macros`, `query`, `sqlserver`, `tiberius`, `migrate`, `cli`)

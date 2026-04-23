@@ -2,6 +2,45 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::query()` y query runner base
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Exponer DbSet::query() y query runner base (all, first, count) sobre SelectQuery` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/dbset_query.rs` como nueva capa pública para ejecutar queries de entidad sobre la conexión compartida del `DbSet`.
+- `DbSetQuery<E>` ahora encapsula un `SelectQuery` y expone `with_select_query`, `select_query`, `into_select_query`, `all`, `first` y `count`.
+- Se actualizó `crates/mssql-orm/src/context.rs` para que `DbSet<T>` exponga `query()` y `query_with(SelectQuery)`, reutilizando la misma conexión compartida y sin mover generación SQL fuera de `mssql-orm-sqlserver`.
+- Se reexportó `DbSetQuery` desde `crates/mssql-orm/src/lib.rs` y desde la `prelude` pública para dejar estable la superficie base de la Etapa 5.
+- Para soportar materialización consistente del conteo, `mssql-orm-sqlserver` ahora compila `CountQuery` como `SELECT COUNT(*) AS [count] ...`.
+- Se actualizaron las pruebas unitarias de la crate pública y el snapshot de `count` en `mssql-orm-sqlserver` para fijar el alias observable y cubrir `CountRow` con resultados `i32` e `i64`.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La crate pública ya tiene la primera pieza ejecutable del CRUD de Etapa 5: queries de entidad con ejecución base para `all`, `first` y `count`, apoyadas en `SelectQuery` y sin adelantar todavía el query builder fluido de la Etapa 6.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo aparecieron ajustes locales de compilación y tests por imports en módulos `#[cfg(test)]` y por el lifetime del lock sobre la conexión compartida.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Implementar DbSet::find por primary key simple`, reutilizando `query_with`, metadata de primary key y el runner recién incorporado.
+
+### Sesión: División de la tarea amplia de Etapa 5
+
+- Se releyó el plan maestro en la ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe una copia operativa en la raíz del repositorio.
+- Se dividió la tarea amplia `Etapa 5: Exponer API CRUD base find, insert, update, delete, query` en subtareas verificables dentro de `docs/tasks.md`.
+- La nueva descomposición separa `query()/all/first/count`, `find`, `insert`, `update`, `delete` y pruebas de integración de la API CRUD pública.
+- No se modificó código en esta sesión; el cambio fue únicamente de planificación operativa para mejorar trazabilidad y evitar trabajo parcial ambiguo.
+
+### Resultado
+
+- El backlog de Etapa 5 quedó más granular y listo para ejecutar una subtarea concreta por sesión sin mezclar responsabilidades.
+
+### Próximo paso recomendado
+
+- Mover a `En Progreso` la subtarea `Etapa 5: Exponer DbSet::query() y query runner base (all, first, count) sobre SelectQuery` e implementarla primero, porque destraba `find` y reduce duplicación para el resto del CRUD.
+
 ### Sesión: `DbContext`, `DbSet<T>` y `#[derive(DbContext)]`
 
 - Se movió en `docs/tasks.md` la tarea `Etapa 5: Implementar DbContext trait, DbSet<T> y #[derive(DbContext)]` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

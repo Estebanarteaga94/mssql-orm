@@ -117,7 +117,11 @@ impl crate::SqlServerCompiler {
 
     pub fn compile_count(query: &CountQuery) -> Result<CompiledQuery, OrmError> {
         let mut parameters = ParameterBuilder::default();
-        let mut sql = format!("SELECT COUNT(*) FROM {}", quote_table_ref(&query.from)?);
+        let mut sql = format!(
+            "SELECT COUNT(*) AS {} FROM {}",
+            quote_identifier("count")?,
+            quote_table_ref(&query.from)?,
+        );
 
         if let Some(predicate) = &query.predicate {
             let predicate = compile_predicate(predicate, &mut parameters)?;
@@ -574,7 +578,7 @@ mod tests {
         assert_eq!(compiled_delete.params, vec![SqlValue::I64(7)]);
         assert_eq!(
             compiled_count.sql,
-            "SELECT COUNT(*) FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)"
+            "SELECT COUNT(*) AS [count] FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)"
         );
         assert_eq!(compiled_count.params, vec![SqlValue::Bool(true)]);
     }
@@ -590,7 +594,7 @@ mod tests {
 
         assert_eq!(
             compiled.sql,
-            "SELECT COUNT(*) FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)"
+            "SELECT COUNT(*) AS [count] FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)"
         );
         assert_eq!(compiled.params, vec![SqlValue::Bool(true)]);
     }

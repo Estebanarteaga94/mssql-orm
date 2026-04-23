@@ -1,7 +1,9 @@
+use crate::dbset_query::DbSetQuery;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use mssql_orm_core::{Entity, EntityMetadata, OrmError};
+use mssql_orm_query::SelectQuery;
 use mssql_orm_tiberius::{MssqlConnection, TokioConnectionStream};
 
 pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>>;
@@ -36,6 +38,17 @@ impl<E: Entity> DbSet<E> {
         E::metadata()
     }
 
+    pub fn query(&self) -> DbSetQuery<E> {
+        DbSetQuery::new(
+            self.connection.as_ref().cloned(),
+            SelectQuery::from_entity::<E>(),
+        )
+    }
+
+    pub fn query_with(&self, select_query: SelectQuery) -> DbSetQuery<E> {
+        DbSetQuery::new(self.connection.as_ref().cloned(), select_query)
+    }
+
     pub fn shared_connection(&self) -> SharedConnection {
         Arc::clone(
             self.connection
@@ -63,6 +76,7 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
 mod tests {
     use super::DbSet;
     use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata};
+    use mssql_orm_query::SelectQuery;
 
     struct TestEntity;
 
@@ -100,5 +114,23 @@ mod tests {
 
         assert!(rendered.contains("TestEntity"));
         assert!(rendered.contains("test_entities"));
+    }
+
+    #[test]
+    fn dbset_query_uses_entity_select_query_by_default() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        assert_eq!(
+            dbset.query().into_select_query(),
+            SelectQuery::from_entity::<TestEntity>()
+        );
+    }
+
+    #[test]
+    fn dbset_query_with_accepts_custom_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let custom = SelectQuery::from_entity::<TestEntity>();
+
+        assert_eq!(dbset.query_with(custom.clone()).into_select_query(), custom);
     }
 }

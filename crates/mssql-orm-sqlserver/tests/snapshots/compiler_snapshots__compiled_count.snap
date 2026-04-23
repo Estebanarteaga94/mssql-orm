@@ -2,6 +2,6 @@
 source: crates/mssql-orm-sqlserver/tests/compiler_snapshots.rs
 expression: render_snapshot(&compiled)
 ---
-SQL: SELECT COUNT(*) FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)
+SQL: SELECT COUNT(*) AS [count] FROM [sales].[customers] WHERE ([sales].[customers].[active] = @P1)
 Params:
 1: Bool(true)

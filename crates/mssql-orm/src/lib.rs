@@ -3,6 +3,7 @@
 extern crate self as mssql_orm;
 
 mod context;
+mod dbset_query;
 
 pub use mssql_orm_core as core;
 pub use mssql_orm_macros as macros;
@@ -13,9 +14,10 @@ pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
 pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
+pub use dbset_query::DbSetQuery;
 
 pub mod prelude {
-    pub use crate::{DbContext, DbSet};
+    pub use crate::{DbContext, DbSet, DbSetQuery};
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
