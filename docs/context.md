@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 implementando soporte de `#[orm(foreign_key = ...)]` en `#[derive(Entity)]`, reutilizando la metadata base de relaciones ya fijada en `mssql-orm-core`.
+Continuar la Etapa 9 ampliando la cobertura de pruebas de metadata relacional derivada, ahora que `#[derive(Entity)]` ya soporta `#[orm(foreign_key = ...)]`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -31,6 +31,7 @@ Continuar la Etapa 9 implementando soporte de `#[orm(foreign_key = ...)]` en `#[
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
+- `mssql-orm-macros` ahora también soporta `#[orm(foreign_key = "tabla.columna")]` y `#[orm(foreign_key = "schema.tabla.columna")]`, generando `ForeignKeyMetadata` con `NoAction` por defecto sobre update/delete en esta etapa.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
 - La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren un caso válido de entidad y errores de compilación esperados para ausencia de PK, `identity` inválido y `rowversion` inválido.
@@ -145,6 +146,7 @@ Continuar la Etapa 9 implementando soporte de `#[orm(foreign_key = ...)]` en `#[
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no hay cobertura específica de commit/rollback real en SQL Server.
 - La metadata base de relaciones ya quedó fijada, pero todavía no existe parsing/generación automática desde `#[orm(foreign_key = ...)]`; hasta que eso exista, las relaciones siguen dependiendo de metadata escrita manualmente en pruebas.
+- Aunque el derive ya genera `ForeignKeyMetadata`, todavía falta una batería más explícita de pruebas unitarias/trybuild centradas en relaciones, así como el uso de esa metadata en snapshots, DDL y joins.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -155,6 +157,6 @@ Continuar la Etapa 9 implementando soporte de `#[orm(foreign_key = ...)]` en `#[
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Soportar atributos foreign_key en #[derive(Entity)] y generar metadata correspondiente`.
-2. Reutilizar la metadata base ya fijada en `core`, evitando crear un segundo contrato paralelo para relaciones.
-3. Mantener joins, DDL y `delete behavior` fuera de alcance hasta que el derive genere metadata consistente.
+1. Implementar `Etapa 9: Agregar pruebas trybuild y unitarias de metadata de relaciones`.
+2. Reutilizar la metadata base ya fijada en `core` y la generación automática ya incorporada al derive, evitando duplicar escenarios en varios lugares sin necesidad.
+3. Mantener snapshots, DDL, índices asociados y joins fuera de alcance hasta fijar primero la cobertura observable de la metadata relacional.

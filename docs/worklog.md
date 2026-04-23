@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: Derive de `foreign_key` en `Entity`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Soportar atributos foreign_key en #[derive(Entity)] y generar metadata correspondiente` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-macros/src/lib.rs` para que `parse_field_config` acepte `#[orm(foreign_key = "...")]` en formato `tabla.columna` o `schema.tabla.columna`.
+- `#[derive(Entity)]` ahora genera `ForeignKeyMetadata` automáticamente para los campos marcados con `foreign_key`, usando la columna local derivada y `ReferentialAction::NoAction` por defecto en esta etapa.
+- Cuando el usuario omite el schema de destino, el derive asume `dbo`, alineado con la convención actual del proyecto para SQL Server.
+- Se amplió `crates/mssql-orm/tests/ui/entity_valid.rs` para fijar por compilación y runtime mínimo que la metadata derivada ya incluye foreign keys.
+- Se añadió `crates/mssql-orm/tests/ui/entity_foreign_key_invalid_format.rs` y su `.stderr` para rechazar formatos inválidos de `foreign_key`.
+
+### Resultado
+
+- El derive `Entity` ya puede generar metadata de relaciones uno-a-muchos a partir del atributo `foreign_key`, dejando lista la base para una batería más específica de pruebas y para la posterior integración con migraciones.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Esta sesión no implementó todavía índices asociados, `delete behavior` configurable ni DDL/migraciones de foreign keys; esos entregables siguen en el backlog separado de Etapa 9.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Agregar pruebas trybuild y unitarias de metadata de relaciones`.
+
 ### Sesión: Metadata base de relaciones uno-a-muchos
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

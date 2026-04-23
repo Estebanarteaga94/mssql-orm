@@ -1,8 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos
-- [ ] Etapa 9: Soportar atributos `foreign_key` en `#[derive(Entity)]` y generar metadata correspondiente
 - [ ] Etapa 9: Agregar pruebas `trybuild` y unitarias de metadata de relaciones
 - [ ] Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados
 - [ ] Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys
@@ -24,6 +22,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Soportar atributos `foreign_key` en `#[derive(Entity)]` y generar metadata correspondiente
 - [x] Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos
 - [x] Etapa 8: Agregar pruebas de commit y rollback
 - [x] Etapa 8: Exponer `db.transaction(...)` en la crate pública reutilizando la infraestructura transaccional

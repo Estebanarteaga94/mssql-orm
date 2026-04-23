@@ -19,6 +19,9 @@ pub struct Customer {
 
     #[orm(rowversion)]
     pub version: Vec<u8>,
+
+    #[orm(foreign_key = "crm.accounts.id")]
+    pub account_id: i64,
 }
 
 fn main() {
@@ -27,4 +30,8 @@ fn main() {
     assert_eq!(metadata.table, "customers");
     assert_eq!(Customer::email.column_name(), "email");
     assert!(Customer::version.metadata().rowversion);
+    assert_eq!(metadata.foreign_keys.len(), 1);
+    assert_eq!(metadata.foreign_keys[0].referenced_schema, "crm");
+    assert_eq!(metadata.foreign_keys[0].referenced_table, "accounts");
+    assert_eq!(metadata.foreign_keys[0].referenced_columns, &["id"]);
 }

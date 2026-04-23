@@ -66,6 +66,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut column_symbols = Vec::new();
     let mut primary_key_columns = Vec::new();
     let mut indexes = Vec::new();
+    let mut foreign_keys = Vec::new();
 
     let has_explicit_primary_key = has_explicit_primary_key(&fields)?;
 
@@ -172,6 +173,32 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 }
             });
         }
+
+        if let Some(foreign_key) = config.foreign_key {
+            let foreign_key_name = foreign_key.name.unwrap_or_else(|| {
+                generated_foreign_key_name(
+                    table.value().as_str(),
+                    column_name.value().as_str(),
+                    foreign_key.referenced_table.value().as_str(),
+                    field_ident.span(),
+                )
+            });
+            let referenced_schema = foreign_key.referenced_schema;
+            let referenced_table = foreign_key.referenced_table;
+            let referenced_column = foreign_key.referenced_column;
+
+            foreign_keys.push(quote! {
+                ::mssql_orm::core::ForeignKeyMetadata::new(
+                    #foreign_key_name,
+                    &[#column_name],
+                    #referenced_schema,
+                    #referenced_table,
+                    &[#referenced_column],
+                    ::mssql_orm::core::ReferentialAction::NoAction,
+                    ::mssql_orm::core::ReferentialAction::NoAction,
+                )
+            });
+        }
     }
 
     if primary_key_columns.is_empty() {
@@ -197,7 +224,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 &[#(#primary_key_columns),*],
             ),
             indexes: &[#(#indexes),*],
-            foreign_keys: &[],
+            foreign_keys: &[#(#foreign_keys),*],
         };
 
         #[allow(non_upper_case_globals)]
@@ -565,6 +592,8 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
                 config.computed_sql = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("rowversion") {
                 config.rowversion = true;
+            } else if meta.path.is_ident("foreign_key") {
+                config.foreign_key = Some(parse_foreign_key_config(meta.value()?.parse()?)?);
             } else {
                 return Err(meta.error("atributo orm no soportado a nivel de campo"));
             }
@@ -584,6 +613,48 @@ fn parse_lit_str(expr: Expr) -> Result<LitStr> {
         }) => Ok(value),
         other => Err(Error::new_spanned(other, "se esperaba un string literal")),
     }
+}
+
+fn parse_foreign_key_config(expr: Expr) -> Result<ForeignKeyConfig> {
+    let value = parse_lit_str(expr)?;
+    let raw = value.value();
+    let segments = raw.split('.').collect::<Vec<_>>();
+
+    let (referenced_schema, referenced_table, referenced_column) = match segments.as_slice() {
+        [table, column] => (
+            LitStr::new("dbo", value.span()),
+            LitStr::new(table, value.span()),
+            LitStr::new(column, value.span()),
+        ),
+        [schema, table, column] => (
+            LitStr::new(schema, value.span()),
+            LitStr::new(table, value.span()),
+            LitStr::new(column, value.span()),
+        ),
+        _ => {
+            return Err(Error::new_spanned(
+                value,
+                "foreign_key requiere el formato \"tabla.columna\" o \"schema.tabla.columna\"",
+            ));
+        }
+    };
+
+    if referenced_schema.value().is_empty()
+        || referenced_table.value().is_empty()
+        || referenced_column.value().is_empty()
+    {
+        return Err(Error::new_spanned(
+            value,
+            "foreign_key no permite segmentos vacíos",
+        ));
+    }
+
+    Ok(ForeignKeyConfig {
+        name: None,
+        referenced_schema,
+        referenced_table,
+        referenced_column,
+    })
 }
 
 fn parse_u32_expr(expr: Expr) -> Result<u32> {
@@ -908,6 +979,15 @@ fn generated_index_name(prefix: &str, table: &str, column: &str, span: Span) -> 
     LitStr::new(&format!("{prefix}_{table}_{column}"), span)
 }
 
+fn generated_foreign_key_name(
+    table: &str,
+    column: &str,
+    referenced_table: &str,
+    span: Span,
+) -> LitStr {
+    LitStr::new(&format!("fk_{table}_{column}_{referenced_table}"), span)
+}
+
 #[derive(Default)]
 struct EntityConfig {
     table: Option<LitStr>,
@@ -940,12 +1020,20 @@ struct FieldConfig {
     precision: Option<u8>,
     scale: Option<u8>,
     indexes: Vec<IndexConfig>,
+    foreign_key: Option<ForeignKeyConfig>,
 }
 
 #[derive(Default)]
 struct IndexConfig {
     name: Option<LitStr>,
     unique: bool,
+}
+
+struct ForeignKeyConfig {
+    name: Option<LitStr>,
+    referenced_schema: LitStr,
+    referenced_table: LitStr,
+    referenced_column: LitStr,
 }
 
 struct TypeInfo {
