@@ -12,6 +12,9 @@ use mssql_orm_sqlserver::SqlServerCompiler;
 #[allow(dead_code)]
 struct Customer;
 
+#[allow(dead_code)]
+struct Order;
+
 static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
     ColumnMetadata {
         rust_field: "id",
@@ -95,12 +98,85 @@ impl Entity for Customer {
     }
 }
 
+static ORDER_COLUMNS: [ColumnMetadata; 3] = [
+    ColumnMetadata {
+        rust_field: "id",
+        column_name: "id",
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: true,
+        identity: Some(IdentityMetadata::new(1, 1)),
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: false,
+        updatable: false,
+        max_length: None,
+        precision: None,
+        scale: None,
+    },
+    ColumnMetadata {
+        rust_field: "customer_id",
+        column_name: "customer_id",
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: false,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: true,
+        updatable: true,
+        max_length: None,
+        precision: None,
+        scale: None,
+    },
+    ColumnMetadata {
+        rust_field: "total_cents",
+        column_name: "total_cents",
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: false,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: true,
+        updatable: true,
+        max_length: None,
+        precision: None,
+        scale: None,
+    },
+];
+
+static ORDER_METADATA: EntityMetadata = EntityMetadata {
+    rust_name: "Order",
+    schema: "sales",
+    table: "orders",
+    columns: &ORDER_COLUMNS,
+    primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &["id"]),
+    indexes: &[],
+    foreign_keys: &[],
+};
+
+impl Entity for Order {
+    fn metadata() -> &'static EntityMetadata {
+        &ORDER_METADATA
+    }
+}
+
 #[allow(non_upper_case_globals)]
 impl Customer {
     const id: EntityColumn<Customer> = EntityColumn::new("id", "id");
     const email: EntityColumn<Customer> = EntityColumn::new("email", "email");
     const active: EntityColumn<Customer> = EntityColumn::new("active", "active");
     const created_at: EntityColumn<Customer> = EntityColumn::new("created_at", "created_at");
+}
+
+#[allow(non_upper_case_globals)]
+impl Order {
+    const customer_id: EntityColumn<Order> = EntityColumn::new("customer_id", "customer_id");
+    const total_cents: EntityColumn<Order> = EntityColumn::new("total_cents", "total_cents");
 }
 
 struct NewCustomer {
@@ -156,6 +232,29 @@ fn snapshots_compiled_select_sql_and_params() {
     let compiled = SqlServerCompiler::compile_select(&query).unwrap();
 
     assert_snapshot!("compiled_select", render_snapshot(&compiled));
+}
+
+#[test]
+fn snapshots_compiled_joined_select_sql_and_params() {
+    let query = SelectQuery::from_entity::<Customer>()
+        .select(vec![
+            Expr::from(Customer::email),
+            Expr::from(Order::total_cents),
+        ])
+        .inner_join::<Order>(Predicate::eq(
+            Expr::from(Customer::id),
+            Expr::from(Order::customer_id),
+        ))
+        .filter(Predicate::gte(
+            Expr::from(Order::total_cents),
+            Expr::value(SqlValue::I64(5000)),
+        ))
+        .order_by(OrderBy::desc(Order::total_cents))
+        .paginate(Pagination::page(2, 10));
+
+    let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+    assert_snapshot!("compiled_select_with_join", render_snapshot(&compiled));
 }
 
 #[test]

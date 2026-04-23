@@ -1,6 +1,6 @@
 use insta::assert_snapshot;
 use mssql_orm::prelude::*;
-use mssql_orm::query::CompiledQuery;
+use mssql_orm::query::{CompiledQuery, Expr, Predicate};
 use mssql_orm::sqlserver::SqlServerCompiler;
 
 #[allow(dead_code)]
@@ -13,6 +13,17 @@ struct SnapshotUser {
     #[orm(length = 180)]
     email: String,
     active: bool,
+}
+
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "snapshot_orders", schema = "dbo")]
+struct SnapshotOrder {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+    user_id: i64,
+    total_cents: i64,
 }
 
 #[test]
@@ -31,6 +42,26 @@ fn public_query_builder_snapshot_preserves_sql_and_parameter_order() {
 
     assert_snapshot!(
         "public_query_builder_compiled_select",
+        render_snapshot(&compiled)
+    );
+}
+
+#[test]
+fn public_query_builder_join_snapshot_preserves_sql_and_parameter_order() {
+    let compiled = SqlServerCompiler::compile_select(
+        &mssql_orm::query::SelectQuery::from_entity::<SnapshotUser>()
+            .inner_join::<SnapshotOrder>(Predicate::eq(
+                Expr::from(SnapshotUser::id),
+                Expr::from(SnapshotOrder::user_id),
+            ))
+            .filter(SnapshotOrder::total_cents.gte(1000_i64))
+            .order_by(SnapshotOrder::total_cents.desc())
+            .paginate(PageRequest::new(2, 10).to_pagination()),
+    )
+    .unwrap();
+
+    assert_snapshot!(
+        "public_query_builder_compiled_join_select",
         render_snapshot(&compiled)
     );
 }

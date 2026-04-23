@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 reforzando cobertura con pruebas de integración y snapshots para joins y foreign keys, ahora que la surface pública mínima ya existe.
+Continuar la Etapa 9 con el rediseño estructurado de `foreign_key`, ahora que metadata, DDL, joins y cobertura observable básica ya quedaron cerrados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -117,6 +117,7 @@ Continuar la Etapa 9 reforzando cobertura con pruebas de integración y snapshot
 - `mssql-orm-sqlserver` ya compila joins explícitos a `INNER JOIN` y `LEFT JOIN` para el caso base sin aliases, preservando el orden de joins y de parámetros en el SQL parametrizado final.
 - Mientras no exista aliasing en el AST, la compilación SQL Server rechaza explícitamente self-joins o joins repetidos sobre la misma tabla.
 - La crate pública `mssql-orm` ya expone `DbSetQuery::join(...)`, `inner_join::<T>(...)` y `left_join::<T>(...)`, además de reexportar `Join` y `JoinType` desde la `prelude`.
+- `mssql-orm-sqlserver` ahora también tiene snapshots dedicados para `SELECT` con joins y para DDL de foreign keys, y la crate pública `mssql-orm` cuenta con un snapshot adicional para joins compilados desde su query builder.
 - Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
@@ -162,7 +163,7 @@ Continuar la Etapa 9 reforzando cobertura con pruebas de integración y snapshot
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, y joins explícitos ya existen en AST, compilación SQL Server y surface pública mínima; el siguiente frente real de Etapa 9 pasa a ser cobertura de pruebas y snapshots dedicados.
+- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, joins explícitos ya existen en AST, compilación SQL Server y surface pública mínima, y la cobertura observable básica ya quedó añadida; el siguiente frente real de Etapa 9 pasa a ser el rediseño estructurado de `foreign_key`.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -173,6 +174,6 @@ Continuar la Etapa 9 reforzando cobertura con pruebas de integración y snapshot
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys`.
-2. Cubrir tanto el SQL observable como la surface pública mínima ya expuesta, sin reabrir todavía soporte de aliases.
-3. Dejar el rediseño estructurado de `foreign_key` como siguiente frente funcional después de cerrar esa cobertura.
+1. Implementar `Etapa 9: Rediseñar foreign_key hacia sintaxis estructurada #[orm(foreign_key(entity = Customer, column = id))] con validación en compile-time, sin exigir que la columna de destino sea primary key`.
+2. Mantener el alcance acotado al derive y a la validación de metadata, sin reabrir todavía aliases ni features de roadmap posteriores.
+3. Preservar compatibilidad razonable con el shape actual de metadata y con el pipeline de migraciones ya estabilizado.

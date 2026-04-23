@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: Cobertura de integración y snapshots para joins y foreign keys
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se amplió `crates/mssql-orm-sqlserver/tests/compiler_snapshots.rs` con un snapshot adicional `compiled_select_with_join`, fijando el SQL y el orden de parámetros para un `SELECT` con `INNER JOIN`.
+- Se añadió `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` con el snapshot `foreign_key_migration_sql`, fijando el DDL observable de `AddForeignKey` y `DropForeignKey` con `ON DELETE CASCADE`.
+- Se extendió `crates/mssql-orm/tests/stage6_public_query_builder_snapshots.rs` con el snapshot `public_query_builder_compiled_join_select`, cubriendo la compilación SQL desde la surface pública mínima de joins.
+- Se materializaron y versionaron los snapshots nuevos bajo `crates/mssql-orm-sqlserver/tests/snapshots/` y `crates/mssql-orm/tests/snapshots/`.
+- Durante la validación se detectó un gap menor en imports para el snapshot público de joins; se corrigió importando `Expr` y `Predicate` desde `mssql_orm::query`.
+
+### Resultado
+
+- La Etapa 9 ya tiene cobertura observable adicional para joins y foreign keys tanto en la capa SQL Server como en la crate pública, reduciendo riesgo de regresiones silenciosas en SQL y DDL.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-sqlserver --test compiler_snapshots`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo test -p mssql-orm --test stage6_public_query_builder_snapshots`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La ausencia de aliases sigue limitando joins repetidos sobre la misma tabla; la cobertura añadida se mantuvo dentro del caso base ya soportado.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Rediseñar foreign_key hacia sintaxis estructurada #[orm(foreign_key(entity = Customer, column = id))] con validación en compile-time, sin exigir que la columna de destino sea primary key`.
+
 ### Sesión: Surface pública mínima para joins explícitos
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Exponer joins explícitos mínimos en la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
