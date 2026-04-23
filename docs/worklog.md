@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: Cobertura de pruebas para metadata relacional
+
+- Se confirmó nuevamente que el plan maestro usado como fuente de verdad está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, no en la raíz del repositorio.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Agregar pruebas trybuild y unitarias de metadata de relaciones` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se amplió `crates/mssql-orm/tests/trybuild.rs` con un caso válido adicional y un caso inválido adicional centrados en `foreign_key`.
+- Se añadió `crates/mssql-orm/tests/ui/entity_foreign_key_default_schema_valid.rs` para fijar por compilación y runtime mínimo que `#[orm(foreign_key = "customers.id")]` usa schema `dbo` por defecto, respeta `#[orm(column = "...")]` como columna local y genera el nombre esperado de foreign key.
+- Se añadió `crates/mssql-orm/tests/ui/entity_foreign_key_empty_segment.rs` y su `.stderr` para rechazar explícitamente segmentos vacíos como `crm..id`.
+- Se añadió `crates/mssql-orm/tests/stage9_relationship_metadata.rs` con pruebas dedicadas de metadata relacional derivada, cubriendo múltiples foreign keys, nombres generados, schema por defecto, acciones referenciales por defecto y helpers `foreign_key`, `foreign_keys_for_column` y `foreign_keys_referencing`.
+
+### Resultado
+
+- La Etapa 9 ahora tiene una batería de pruebas específica para metadata de relaciones, separada de los casos generales de entidades y suficiente para fijar el contrato observable antes de avanzar a snapshots, DDL y joins.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage9_relationship_metadata`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `Cargo.lock` ya tenía cambios previos ajenos a esta sesión y no fue alterado por el trabajo realizado.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados`.
+
 ### Sesión: Derive de `foreign_key` en `Entity`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Soportar atributos foreign_key en #[derive(Entity)] y generar metadata correspondiente` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

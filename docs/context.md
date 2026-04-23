@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 ampliando la cobertura de pruebas de metadata relacional derivada, ahora que `#[derive(Entity)]` ya soporta `#[orm(foreign_key = ...)]`.
+Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots y diff de migraciones para foreign keys e índices asociados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -32,9 +32,11 @@ Continuar la Etapa 9 ampliando la cobertura de pruebas de metadata relacional de
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
 - `mssql-orm-macros` ahora también soporta `#[orm(foreign_key = "tabla.columna")]` y `#[orm(foreign_key = "schema.tabla.columna")]`, generando `ForeignKeyMetadata` con `NoAction` por defecto sobre update/delete en esta etapa.
+- Queda pendiente una evolución del atributo `foreign_key` hacia una sintaxis estructurada del estilo `#[orm(foreign_key(entity = Customer, column = id))]`, y esa futura validación no debe exigir que la columna de destino sea primary key porque SQL Server también permite FKs hacia columnas no PK.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
-- La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren un caso válido de entidad y errores de compilación esperados para ausencia de PK, `identity` inválido y `rowversion` inválido.
+- La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren casos válidos de entidades con `foreign_key`, schema por defecto `dbo` para referencias abreviadas y errores de compilación esperados para ausencia de PK, `identity` inválido, `rowversion` inválido y segmentos vacíos/formato inválido en `foreign_key`.
+- La crate pública `mssql-orm` ahora también incluye una batería dedicada `stage9_relationship_metadata.rs` para fijar la metadata relacional generada por `#[derive(Entity)]`, incluyendo múltiples foreign keys, nombres generados y helpers de lookup sobre metadata.
 - `mssql-orm-core` ya define `SqlValue`, `ColumnValue`, `Row`, `FromRow`, `Insertable<E>` y `Changeset<E>` como contratos base de mapping y persistencia.
 - `mssql-orm-core` ya define `SqlTypeMapping` con implementaciones base para `bool`, `i32`, `i64`, `f64`, `String`, `Vec<u8>`, `Uuid`, `Decimal`, `NaiveDate`, `NaiveDateTime` y `Option<T>`, alineadas con las convenciones actuales del plan.
 - `mssql-orm-macros` ya implementa `#[derive(Insertable)]` y `#[derive(Changeset)]` para structs con campos nombrados usando `#[orm(entity = MiEntidad)]`.
@@ -144,9 +146,9 @@ Continuar la Etapa 9 ampliando la cobertura de pruebas de metadata relacional de
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
-- La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no hay cobertura específica de commit/rollback real en SQL Server.
-- La metadata base de relaciones ya quedó fijada, pero todavía no existe parsing/generación automática desde `#[orm(foreign_key = ...)]`; hasta que eso exista, las relaciones siguen dependiendo de metadata escrita manualmente en pruebas.
-- Aunque el derive ya genera `ForeignKeyMetadata`, todavía falta una batería más explícita de pruebas unitarias/trybuild centradas en relaciones, así como el uso de esa metadata en snapshots, DDL y joins.
+- La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
+- La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
+- Aunque la cobertura de pruebas relacionales ya quedó fijada, esa metadata todavía no participa en snapshots, diff de migraciones, DDL SQL Server ni joins explícitos.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -157,6 +159,6 @@ Continuar la Etapa 9 ampliando la cobertura de pruebas de metadata relacional de
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Agregar pruebas trybuild y unitarias de metadata de relaciones`.
-2. Reutilizar la metadata base ya fijada en `core` y la generación automática ya incorporada al derive, evitando duplicar escenarios en varios lugares sin necesidad.
-3. Mantener snapshots, DDL, índices asociados y joins fuera de alcance hasta fijar primero la cobertura observable de la metadata relacional.
+1. Implementar `Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados`.
+2. Reutilizar la metadata relacional ya fijada por las pruebas nuevas para evitar redefinir shapes de foreign keys al pasar a `ModelSnapshot` y al diff.
+3. Mantener DDL SQL Server y joins fuera de alcance hasta cerrar primero la persistencia/detección de cambios de foreign keys en migraciones.

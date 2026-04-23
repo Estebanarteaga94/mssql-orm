@@ -1,0 +1,5 @@
+error: foreign_key no permite segmentos vacíos
+  --> tests/ui/entity_foreign_key_empty_segment.rs:10:25
+   |
+10 |     #[orm(foreign_key = "crm..id")]
+   |                         ^^^^^^^^^

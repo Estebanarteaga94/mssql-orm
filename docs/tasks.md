@@ -1,7 +1,7 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 9: Agregar pruebas `trybuild` y unitarias de metadata de relaciones
+- [ ] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key
 - [ ] Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados
 - [ ] Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys
 - [ ] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`) en metadata y DDL
@@ -22,6 +22,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Agregar pruebas `trybuild` y unitarias de metadata de relaciones
 - [x] Etapa 9: Soportar atributos `foreign_key` en `#[derive(Entity)]` y generar metadata correspondiente
 - [x] Etapa 9: Extender metadata base para relaciones y foreign keys uno-a-muchos
 - [x] Etapa 8: Agregar pruebas de commit y rollback
