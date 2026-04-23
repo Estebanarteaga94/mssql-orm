@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya fue descompuesta en subtareas verificables y el siguiente foco natural es arrancar por índices compuestos, sin adelantar features de Etapa 14.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos de extremo a extremo y el siguiente foco natural es `computed columns`, sin adelantar features de Etapa 14.
 
 ## Dirección Arquitectónica Vigente
 
@@ -32,6 +32,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
 - `mssql-orm-macros` ahora soporta `#[orm(foreign_key = "tabla.columna")]`, `#[orm(foreign_key = "schema.tabla.columna")]` y la sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]`.
+- `mssql-orm-macros` ahora también soporta índices compuestos a nivel de entidad mediante `#[orm(index(name = "ix_...", columns(campo_a, campo_b)))]`, resolviendo esos campos hacia múltiples `IndexColumnMetadata` dentro de la metadata derivada.
 - Sobre esos campos, el derive ya acepta además `#[orm(on_delete = "no action" | "cascade" | "set null")]`, generando `ForeignKeyMetadata` con `on_delete` configurable y `on_update = NoAction` en esta etapa.
 - El derive valida en compile-time que `#[orm(on_delete = "set null")]` solo pueda usarse sobre columnas nullable.
 - La sintaxis estructurada valida en compile-time la existencia de la columna de destino apoyándose en los símbolos generados por `#[derive(Entity)]` sobre la entidad referenciada, y no exige que esa columna sea primary key porque SQL Server también permite FKs hacia columnas no PK.
@@ -104,7 +105,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El diff de columnas ya detecta `AddColumn`, `DropColumn` y `AlterColumn` comparando `ColumnSnapshot` completo y usando orden determinista por nombre de columna.
 - El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
 - `mssql-orm-migrate` ahora también expone `diff_relational_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
-- El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de una foreign key existente, hoy la modela como `DropForeignKey` seguido de `AddForeignKey`.
+- El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de un índice o de una foreign key existente, hoy la modela como `Drop...` seguido de `Create/Add...`.
 - La cobertura del diff engine ya quedó centralizada en pruebas unitarias dedicadas dentro de `crates/mssql-orm-migrate/src/diff.rs`, en lugar de estar dispersa en `lib.rs`.
 - Esa batería ya fija casos mínimos de orden seguro, no-op sobre snapshots iguales, altas/bajas de tablas, altas/bajas de columnas, alteraciones básicas y una composición completa de diff sobre snapshots mínimos.
 - `lib.rs` quedó otra vez enfocado en reexports, boundaries y shape base de snapshots/operaciones, reduciendo ruido y duplicación en la capa pública de la crate.
@@ -209,7 +210,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server`.
-2. Después avanzar con `computed columns`, foreign keys avanzadas y scripts idempotentes antes de tocar renombres explícitos.
+1. Implementar `Etapa 13: Soportar computed columns en snapshots, diff y DDL SQL Server`.
+2. Después avanzar con foreign keys avanzadas y scripts idempotentes antes de tocar renombres explícitos.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

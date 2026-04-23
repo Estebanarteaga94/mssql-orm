@@ -1,8 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Operativo: Descomponer la Etapa 13 de migraciones avanzadas en subtareas verificables y ordenadas
-- [ ] Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server
 - [ ] Etapa 13: Soportar `computed columns` en snapshots, diff y DDL SQL Server
 - [ ] Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server
 - [ ] Etapa 13: Generar scripts de migración idempotentes para SQL Server
@@ -14,6 +12,8 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server
+- [x] Operativo: Descomponer la Etapa 13 de migraciones avanzadas en subtareas verificables y ordenadas
 - [x] Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking
 - [x] Etapa 12: Soportar estado `Deleted` con `remove(tracked)` o equivalente explícito y persistencia vía `delete`
 - [x] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`

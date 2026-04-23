@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: índices compuestos en metadata derivada, snapshots y diff
+
+- Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, tomando como subtarea activa `Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server`.
+- Se movió en `docs/tasks.md` esa subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla; además se corrigió el estado operativo de la tarea ya ejecutada de descomposición de Etapa 13.
+- `crates/mssql-orm-macros/src/lib.rs` ahora soporta índices compuestos a nivel de entidad mediante `#[orm(index(name = \"ix_...\", columns(campo_a, campo_b)))]`, resolviendo esos campos hacia columnas reales de metadata y manteniendo intacto el soporte previo de índices simples por campo.
+- La generación de metadata ahora produce `IndexMetadata` con múltiples `IndexColumnMetadata` cuando se usa esa sintaxis, dejando que snapshots y DDL reutilicen el mismo shape ya existente sin abrir un sistema paralelo.
+- `crates/mssql-orm-migrate/src/diff.rs` ahora recrea índices cuando cambia su definición manteniendo el mismo nombre, en lugar de comparar solo presencia/ausencia; esto cierra el hueco real para índices compuestos en el diff relacional.
+- `crates/mssql-orm-migrate/src/lib.rs` añadió cobertura unitaria para confirmar que `TableSnapshot::from(&EntityMetadata)` preserva índices compuestos y su orden/dirección.
+- `crates/mssql-orm/src/lib.rs` y `crates/mssql-orm/tests/trybuild.rs` ahora fijan públicamente la nueva surface con un caso real de derive válido y aserciones sobre metadata compuesta.
+- No fue necesario cambiar la compilación DDL de `mssql-orm-sqlserver`: ya soportaba múltiples `IndexColumnSnapshot`; la sesión añadió cobertura suficiente para congelar ese contrato en combinación con la nueva metadata derivada.
+
+### Resultado
+
+- La Etapa 13 ya soporta índices compuestos de extremo a extremo: metadata derivada, snapshot, diff relacional y compilación SQL Server.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-sqlserver --lib`
+- `cargo check --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La nueva sintaxis de índices compuestos se limita por ahora a columnas en orden ascendente desde metadata derivada; la infraestructura de snapshot/DDL ya soporta `DESC`, pero esa configuración fina no se expuso todavía en atributos públicos en esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Soportar computed columns en snapshots, diff y DDL SQL Server`.
+
 ### Sesión: descomposición de la Etapa 13 de migraciones avanzadas
 
 - Se revisó nuevamente el backlog operativo en `docs/tasks.md` y se confirmó que la tarea amplia `Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes` era demasiado grande para una sola sesión sin mezclar varias capas del sistema de migraciones.

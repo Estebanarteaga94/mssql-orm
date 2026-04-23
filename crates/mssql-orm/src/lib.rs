@@ -126,6 +126,7 @@ mod tests {
     #[allow(dead_code)]
     #[derive(Entity, Debug, Clone)]
     #[orm(table = "users", schema = "auth")]
+    #[orm(index(name = "ix_users_email_created_by", columns(email, created_by)))]
     struct DerivedUser {
         #[orm(primary_key)]
         #[orm(identity)]
@@ -207,7 +208,7 @@ mod tests {
         assert_eq!(metadata.schema, "auth");
         assert_eq!(metadata.table, "users");
         assert_eq!(metadata.primary_key.columns, &["id"]);
-        assert_eq!(metadata.indexes.len(), 2);
+        assert_eq!(metadata.indexes.len(), 3);
 
         let id = metadata.field("id").expect("id column metadata");
         assert_eq!(id.sql_type, SqlServerType::BigInt);
@@ -241,6 +242,12 @@ mod tests {
         assert!(metadata.indexes[0].unique);
         assert_eq!(metadata.indexes[1].name, "ix_users_display_name");
         assert!(!metadata.indexes[1].unique);
+        assert_eq!(metadata.indexes[2].name, "ix_users_email_created_by");
+        assert_eq!(metadata.indexes[2].columns.len(), 2);
+        assert_eq!(metadata.indexes[2].columns[0].column_name, "email");
+        assert_eq!(metadata.indexes[2].columns[1].column_name, "created_by");
+        assert!(!metadata.indexes[2].columns[0].descending);
+        assert!(!metadata.indexes[2].columns[1].descending);
     }
 
     #[test]

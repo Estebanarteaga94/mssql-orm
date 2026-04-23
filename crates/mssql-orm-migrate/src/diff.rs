@@ -162,12 +162,25 @@ pub fn diff_relational_operations(
             let current_indexes = index_map(current_table);
 
             for (index_name, index) in &current_indexes {
-                if !previous_indexes.contains_key(index_name) {
-                    operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
+                match previous_indexes.get(index_name) {
+                    None => operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
                         schema_name.clone(),
                         table_name.clone(),
                         (*index).clone(),
-                    )));
+                    ))),
+                    Some(previous_index) if *previous_index != *index => {
+                        operations.push(MigrationOperation::DropIndex(DropIndex::new(
+                            schema_name.clone(),
+                            table_name.clone(),
+                            index_name.clone(),
+                        )));
+                        operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
+                            schema_name.clone(),
+                            table_name.clone(),
+                            (*index).clone(),
+                        )));
+                    }
+                    Some(_) => {}
                 }
             }
 
@@ -626,6 +639,70 @@ mod tests {
                         "sales",
                         "customers",
                         "customer_id",
+                    ),
+                )),
+            ]
+        );
+    }
+
+    #[test]
+    fn relational_diff_recreates_index_when_composite_definition_changes() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "orders",
+                vec![
+                    column("customer_id", SqlServerType::BigInt, false, None),
+                    column("total_cents", SqlServerType::BigInt, false, None),
+                ],
+                vec![IndexSnapshot::new(
+                    "ix_orders_customer_total",
+                    vec![IndexColumnSnapshot::asc("customer_id")],
+                    false,
+                )],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "orders",
+                vec![
+                    column("customer_id", SqlServerType::BigInt, false, None),
+                    column("total_cents", SqlServerType::BigInt, false, None),
+                ],
+                vec![IndexSnapshot::new(
+                    "ix_orders_customer_total",
+                    vec![
+                        IndexColumnSnapshot::asc("customer_id"),
+                        IndexColumnSnapshot::desc("total_cents"),
+                    ],
+                    false,
+                )],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_relational_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::DropIndex(DropIndex::new(
+                    "sales",
+                    "orders",
+                    "ix_orders_customer_total",
+                )),
+                MigrationOperation::CreateIndex(CreateIndex::new(
+                    "sales",
+                    "orders",
+                    IndexSnapshot::new(
+                        "ix_orders_customer_total",
+                        vec![
+                            IndexColumnSnapshot::asc("customer_id"),
+                            IndexColumnSnapshot::desc("total_cents"),
+                        ],
+                        false,
                     ),
                 )),
             ]

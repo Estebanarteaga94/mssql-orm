@@ -3,6 +3,7 @@ fn entity_derive_ui() {
     let tests = trybuild::TestCases::new();
 
     tests.pass("tests/ui/entity_valid.rs");
+    tests.pass("tests/ui/entity_composite_index_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_default_schema_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_structured_valid.rs");
     tests.pass("tests/ui/insertable_changeset_valid.rs");

@@ -159,6 +159,76 @@ mod tests {
         foreign_keys: &[],
     };
 
+    const COMPOSITE_ORDER_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: Some(IdentityMetadata::new(1, 1)),
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "customer_id",
+            column_name: "customer_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "total_cents",
+            column_name: "total_cents",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+    const COMPOSITE_ORDER_PK_COLUMNS: [&str; 1] = ["id"];
+    const COMPOSITE_ORDER_INDEX_COLUMNS: [IndexColumnMetadata; 2] = [
+        IndexColumnMetadata::asc("customer_id"),
+        IndexColumnMetadata::desc("total_cents"),
+    ];
+    const COMPOSITE_ORDER_INDEXES: [IndexMetadata; 1] = [IndexMetadata {
+        name: "ix_orders_customer_total",
+        columns: &COMPOSITE_ORDER_INDEX_COLUMNS,
+        unique: false,
+    }];
+    const COMPOSITE_ORDER_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "CompositeOrder",
+        schema: "sales",
+        table: "orders",
+        columns: &COMPOSITE_ORDER_COLUMNS,
+        primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &COMPOSITE_ORDER_PK_COLUMNS),
+        indexes: &COMPOSITE_ORDER_INDEXES,
+        foreign_keys: &[],
+    };
+
     const ORDER_COLUMNS: [ColumnMetadata; 2] = [
         ColumnMetadata {
             rust_field: "id",
@@ -341,6 +411,24 @@ mod tests {
         assert_eq!(foreign_key.referenced_columns, vec!["id"]);
         assert_eq!(foreign_key.on_delete, ReferentialAction::NoAction);
         assert_eq!(foreign_key.on_update, ReferentialAction::NoAction);
+    }
+
+    #[test]
+    fn table_snapshot_preserves_composite_indexes_from_entity_metadata() {
+        let table = TableSnapshot::from(&COMPOSITE_ORDER_METADATA);
+        let index = table
+            .index("ix_orders_customer_total")
+            .expect("composite index must exist");
+
+        assert_eq!(table.indexes.len(), 1);
+        assert_eq!(
+            index.columns,
+            vec![
+                IndexColumnSnapshot::asc("customer_id"),
+                IndexColumnSnapshot::desc("total_cents"),
+            ]
+        );
+        assert!(!index.unique);
     }
 
     #[test]

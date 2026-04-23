@@ -1,9 +1,10 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
+use std::collections::BTreeMap;
 use syn::{
     Data, DeriveInput, Error, Expr, ExprLit, Field, Fields, Ident, Lit, LitStr, Path, Result,
-    Token, Type, parse_macro_input,
+    Token, Type, parse_macro_input, punctuated::Punctuated,
 };
 
 #[proc_macro_derive(Entity, attributes(orm))]
@@ -40,7 +41,11 @@ pub fn derive_changeset(input: TokenStream) -> TokenStream {
 
 fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let ident = input.ident;
-    let entity_config = parse_entity_config(&input.attrs)?;
+    let EntityConfig {
+        table: entity_table,
+        schema: entity_schema,
+        indexes: entity_indexes,
+    } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
             Fields::Named(fields) => fields.named,
@@ -54,12 +59,9 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         _ => return Err(Error::new_spanned(ident, "Entity solo soporta structs")),
     };
 
-    let schema = entity_config
-        .schema
-        .unwrap_or_else(|| LitStr::new("dbo", Span::call_site()));
-    let table = entity_config
-        .table
-        .unwrap_or_else(|| LitStr::new(&default_table_name(&ident), ident.span()));
+    let schema = entity_schema.unwrap_or_else(|| LitStr::new("dbo", Span::call_site()));
+    let table =
+        entity_table.unwrap_or_else(|| LitStr::new(&default_table_name(&ident), ident.span()));
     let rust_name = LitStr::new(&ident.to_string(), ident.span());
 
     let mut columns = Vec::new();
@@ -73,6 +75,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut sync_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
+    let mut field_columns = BTreeMap::<String, LitStr>::new();
 
     let has_explicit_primary_key = has_explicit_primary_key(&fields)?;
 
@@ -86,6 +89,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         let column_name = config
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+        field_columns.insert(field_ident.to_string(), column_name.clone());
         let type_info = analyze_type(&field.ty)?;
 
         let primary_key = config.primary_key
@@ -297,6 +301,46 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 )
             });
         }
+    }
+
+    for index in entity_indexes {
+        let resolved_columns = index
+            .columns
+            .iter()
+            .map(|column| {
+                field_columns
+                    .get(&column.to_string())
+                    .cloned()
+                    .ok_or_else(|| {
+                        Error::new_spanned(
+                            column,
+                            "index compuesto referencia un campo inexistente en la entidad",
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let generated_suffix = resolved_columns
+            .iter()
+            .map(LitStr::value)
+            .collect::<Vec<_>>()
+            .join("_");
+        let index_name = index.name.unwrap_or_else(|| {
+            generated_index_name(
+                if index.unique { "ux" } else { "ix" },
+                table.value().as_str(),
+                generated_suffix.as_str(),
+                index.columns[0].span(),
+            )
+        });
+        let unique = index.unique;
+
+        indexes.push(quote! {
+            ::mssql_orm::core::IndexMetadata {
+                name: #index_name,
+                columns: &[#(::mssql_orm::core::IndexColumnMetadata::asc(#resolved_columns)),*],
+                unique: #unique,
+            }
+        });
     }
 
     if primary_key_columns.is_empty() {
@@ -820,6 +864,8 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                 config.table = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("schema") {
                 config.schema = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("index") {
+                config.indexes.push(parse_entity_index_config(meta)?);
             } else {
                 return Err(meta.error("atributo orm no soportado a nivel de entidad"));
             }
@@ -829,6 +875,33 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
     }
 
     Ok(config)
+}
+
+fn parse_entity_index_config(meta: syn::meta::ParseNestedMeta<'_>) -> Result<EntityIndexConfig> {
+    let mut index = EntityIndexConfig::default();
+
+    meta.parse_nested_meta(|nested| {
+        if nested.path.is_ident("name") {
+            index.name = Some(parse_lit_str(nested.value()?.parse()?)?);
+        } else if nested.path.is_ident("unique") {
+            index.unique = true;
+        } else if nested.path.is_ident("columns") {
+            let content;
+            syn::parenthesized!(content in nested.input);
+            let columns = Punctuated::<Ident, Token![,]>::parse_terminated(&content)?;
+            index.columns.extend(columns);
+        } else {
+            return Err(nested.error("index de entidad solo soporta name, unique y columns(...)"));
+        }
+
+        Ok(())
+    })?;
+
+    if index.columns.is_empty() {
+        return Err(meta.error("index a nivel de entidad requiere columns(campo1, campo2, ...)"));
+    }
+
+    Ok(index)
 }
 
 fn parse_persistence_field_config(
@@ -1399,6 +1472,14 @@ fn generated_foreign_key_name(
 struct EntityConfig {
     table: Option<LitStr>,
     schema: Option<LitStr>,
+    indexes: Vec<EntityIndexConfig>,
+}
+
+#[derive(Default)]
+struct EntityIndexConfig {
+    name: Option<LitStr>,
+    unique: bool,
+    columns: Vec<Ident>,
 }
 
 #[derive(Default)]
