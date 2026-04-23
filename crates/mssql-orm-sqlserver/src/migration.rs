@@ -1,8 +1,8 @@
 use crate::quoting::{quote_identifier, quote_qualified_identifier};
-use mssql_orm_core::{OrmError, SqlServerType};
+use mssql_orm_core::{OrmError, ReferentialAction, SqlServerType};
 use mssql_orm_migrate::{
-    AddColumn, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn, DropSchema,
-    DropTable, MigrationOperation,
+    AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn,
+    DropForeignKey, DropSchema, DropTable, MigrationOperation,
 };
 
 const MIGRATIONS_HISTORY_SCHEMA: &str = "dbo";
@@ -39,9 +39,8 @@ fn compile_operation(operation: &MigrationOperation) -> Result<String, OrmError>
         MigrationOperation::CreateIndex(_) | MigrationOperation::DropIndex(_) => {
             compile_unsupported_index()
         }
-        MigrationOperation::AddForeignKey(_) | MigrationOperation::DropForeignKey(_) => {
-            compile_unsupported_foreign_key()
-        }
+        MigrationOperation::AddForeignKey(operation) => compile_add_foreign_key(operation),
+        MigrationOperation::DropForeignKey(operation) => compile_drop_foreign_key(operation),
     }
 }
 
@@ -141,15 +140,62 @@ fn compile_alter_column(operation: &AlterColumn) -> Result<String, OrmError> {
     ))
 }
 
-fn compile_unsupported_index() -> Result<String, OrmError> {
-    Err(OrmError::new(
-        "SQL Server index migration compilation is not supported in this stage",
+fn compile_add_foreign_key(operation: &AddForeignKey) -> Result<String, OrmError> {
+    reject_unsupported_foreign_key_actions(
+        operation.foreign_key.on_delete,
+        operation.foreign_key.on_update,
+    )?;
+
+    let table = quote_qualified_identifier(&operation.schema_name, &operation.table_name)?;
+    let constraint = quote_identifier(&operation.foreign_key.name)?;
+    let columns = operation
+        .foreign_key
+        .columns
+        .iter()
+        .map(|column| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+    let referenced_table = quote_qualified_identifier(
+        &operation.foreign_key.referenced_schema,
+        &operation.foreign_key.referenced_table,
+    )?;
+    let referenced_columns = operation
+        .foreign_key
+        .referenced_columns
+        .iter()
+        .map(|column| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+
+    Ok(format!(
+        "ALTER TABLE {table} ADD CONSTRAINT {constraint} FOREIGN KEY ({columns}) REFERENCES {referenced_table} ({referenced_columns})"
     ))
 }
 
-fn compile_unsupported_foreign_key() -> Result<String, OrmError> {
+fn compile_drop_foreign_key(operation: &DropForeignKey) -> Result<String, OrmError> {
+    Ok(format!(
+        "ALTER TABLE {} DROP CONSTRAINT {}",
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+        quote_identifier(&operation.foreign_key_name)?,
+    ))
+}
+
+fn reject_unsupported_foreign_key_actions(
+    on_delete: ReferentialAction,
+    on_update: ReferentialAction,
+) -> Result<(), OrmError> {
+    if on_delete != ReferentialAction::NoAction || on_update != ReferentialAction::NoAction {
+        return Err(OrmError::new(
+            "SQL Server foreign key migration compilation only supports NO ACTION in this stage",
+        ));
+    }
+
+    Ok(())
+}
+
+fn compile_unsupported_index() -> Result<String, OrmError> {
     Err(OrmError::new(
-        "SQL Server foreign key migration compilation is not supported in this stage",
+        "SQL Server index migration compilation is not supported in this stage",
     ))
 }
 
@@ -457,7 +503,42 @@ mod tests {
     }
 
     #[test]
-    fn rejects_foreign_key_migration_operations_until_stage_nine_ddl() {
+    fn compiles_foreign_key_migration_operations_to_sql() {
+        let operations = vec![
+            MigrationOperation::AddForeignKey(AddForeignKey::new(
+                "sales",
+                "orders",
+                ForeignKeySnapshot::new(
+                    "fk_orders_customer_id_customers",
+                    vec!["customer_id".to_string()],
+                    "sales",
+                    "customers",
+                    vec!["id".to_string()],
+                    ReferentialAction::NoAction,
+                    ReferentialAction::NoAction,
+                ),
+            )),
+            MigrationOperation::DropForeignKey(DropForeignKey::new(
+                "sales",
+                "orders",
+                "fk_orders_customer_id_customers",
+            )),
+        ];
+
+        let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "ALTER TABLE [sales].[orders] ADD CONSTRAINT [fk_orders_customer_id_customers] FOREIGN KEY ([customer_id]) REFERENCES [sales].[customers] ([id])"
+        );
+        assert_eq!(
+            sql[1],
+            "ALTER TABLE [sales].[orders] DROP CONSTRAINT [fk_orders_customer_id_customers]"
+        );
+    }
+
+    #[test]
+    fn rejects_foreign_key_actions_until_delete_behavior_stage() {
         let operation = MigrationOperation::AddForeignKey(AddForeignKey::new(
             "sales",
             "orders",
@@ -467,7 +548,7 @@ mod tests {
                 "sales",
                 "customers",
                 vec!["id".to_string()],
-                ReferentialAction::NoAction,
+                ReferentialAction::Cascade,
                 ReferentialAction::NoAction,
             ),
         ));
@@ -476,7 +557,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "SQL Server foreign key migration compilation is not supported in this stage"
+            "SQL Server foreign key migration compilation only supports NO ACTION in this stage"
         );
     }
 
@@ -493,22 +574,6 @@ mod tests {
         assert_eq!(
             error.message(),
             "SQL Server index migration compilation is not supported in this stage"
-        );
-    }
-
-    #[test]
-    fn rejects_drop_foreign_key_migration_operations_until_stage_nine_ddl() {
-        let operation = MigrationOperation::DropForeignKey(DropForeignKey::new(
-            "sales",
-            "orders",
-            "fk_orders_customer_id_customers",
-        ));
-
-        let error = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap_err();
-
-        assert_eq!(
-            error.message(),
-            "SQL Server foreign key migration compilation is not supported in this stage"
         );
     }
 }

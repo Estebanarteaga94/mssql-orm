@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: DDL SQL Server base para foreign keys
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se actualizó `crates/mssql-orm-sqlserver/src/migration.rs` para compilar `AddForeignKey` a `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...`.
+- La misma capa ahora compila `DropForeignKey` a `ALTER TABLE ... DROP CONSTRAINT ...`, reutilizando quoting seguro de identificadores y nombres multipartes ya existentes en la crate SQL Server.
+- Para no adelantar la subtarea de `delete behavior`, la compilación de foreign keys ahora rechaza explícitamente acciones referenciales distintas de `NoAction` con error claro de etapa.
+- `CreateIndex` y `DropIndex` permanecen rechazadas explícitamente, porque su DDL sigue fuera del alcance de esta sesión.
+- Se añadieron pruebas unitarias en `crates/mssql-orm-sqlserver/src/migration.rs` para `AddForeignKey`, `DropForeignKey` y rechazo de acciones `Cascade` antes de la subtarea dedicada.
+
+### Resultado
+
+- La crate SQL Server ya puede generar DDL básico de creación y eliminación de foreign keys a partir de las operaciones emitidas por el diff relacional, sin mezclar todavía soporte de `cascade`/`set null` ni DDL de índices.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo test -p mssql-orm-migrate`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `Cargo.lock` sigue con cambios previos ajenos a esta sesión y no fue modificado como parte del trabajo.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Soportar delete behavior inicial (no action, cascade, set null) en metadata y DDL`.
+
 ### Sesión: Snapshots y diff de migraciones para relaciones
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

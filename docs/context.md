@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 implementando el DDL SQL Server de foreign keys sobre la base ya fijada en metadata, snapshots y diff relacional.
+Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de foreign keys ya compilado para SQL Server.
 
 ## Dirección Arquitectónica Vigente
 
@@ -107,7 +107,9 @@ Continuar la Etapa 9 implementando el DDL SQL Server de foreign keys sobre la ba
 - `mssql-orm-sqlserver` ahora compila `MigrationOperation` a DDL SQL Server mediante un módulo dedicado de migraciones, reutilizando `MigrationOperation` y `ColumnSnapshot`/`TableSnapshot` definidos en `mssql-orm-migrate`.
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
-- Las nuevas operaciones relacionales (`CreateIndex`, `DropIndex`, `AddForeignKey`, `DropForeignKey`) ya están tipadas y validadas en el workspace, pero `mssql-orm-sqlserver` todavía las rechaza explícitamente hasta implementar su DDL dedicado.
+- `mssql-orm-sqlserver` ya compila `AddForeignKey` y `DropForeignKey` a DDL SQL Server básico usando `ALTER TABLE ... ADD/DROP CONSTRAINT`.
+- En esta etapa, la compilación de foreign keys solo acepta `ReferentialAction::NoAction`; cualquier otra acción sigue rechazándose explícitamente hasta la siguiente subtarea de `delete behavior`.
+- Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
 - `mssql-orm-cli` ya implementa `migration add <Name>`, `migration list` y `database update`, delegando la lógica de scaffolding/listado/script al crate de migraciones y reutilizando la creación SQL de `__mssql_orm_migrations` desde `mssql-orm-sqlserver`.
@@ -152,7 +154,7 @@ Continuar la Etapa 9 implementando el DDL SQL Server de foreign keys sobre la ba
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- Aunque snapshots y diff ya cubren metadata relacional, todavía falta compilar esas operaciones a DDL SQL Server y luego exponer joins explícitos en query/query-public.
+- Aunque el DDL básico de foreign keys ya existe, todavía falta soportar `cascade`/`set null`, sumar DDL de índices y luego exponer joins explícitos en query/query-public.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -163,6 +165,6 @@ Continuar la Etapa 9 implementando el DDL SQL Server de foreign keys sobre la ba
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys`.
-2. Reutilizar las nuevas operaciones `AddForeignKey` y `DropForeignKey` ya fijadas en `mssql-orm-migrate`, evitando volver a mezclar diff con generación SQL.
-3. Mantener joins y `delete behavior` configurable fuera de alcance hasta cerrar primero el DDL básico de foreign keys.
+1. Implementar `Etapa 9: Soportar delete behavior inicial (no action, cascade, set null) en metadata y DDL`.
+2. Reutilizar la compilación actual de `AddForeignKey`/`DropForeignKey` y extender solo el renderizado de acciones soportadas, sin reabrir el shape de snapshots ni del diff.
+3. Mantener joins e índices fuera de alcance hasta cerrar primero la semántica mínima de acciones referenciales.
