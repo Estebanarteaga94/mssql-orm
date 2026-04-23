@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: `DbSet::insert` con retorno materializado
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::insert sobre modelos Insertable con retorno materializado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/context.rs` para exponer `DbSet::insert<I>() -> Result<E, OrmError>`.
+- `insert` reutiliza `InsertQuery`, `SqlServerCompiler::compile_insert` y `MssqlConnection::fetch_one`, apoyándose en `OUTPUT INSERTED.*` ya emitido por la crate SQL Server.
+- Se añadió el helper interno `insert_query(&I) -> InsertQuery` para mantener la construcción del query testeable sin depender de una conexión real.
+- Si la inserción no devuelve una fila materializable, la API pública ahora falla explícitamente con `OrmError("insert query did not return a row")`.
+- Se añadieron pruebas unitarias para verificar la forma exacta del `InsertQuery` generado desde un modelo `Insertable`.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- `DbSet<T>` ya expone inserción base con retorno materializado de la entidad, cerrando otra pieza fundamental de la Etapa 5 sin mover compilación SQL ni ejecución fuera de sus crates correspondientes.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Implementar DbSet::update por primary key simple sobre Changeset`, reutilizando metadata de PK simple, `UpdateQuery`, `SqlServerCompiler::compile_update` y `fetch_one`.
+
 ### Sesión: `DbSet::find` por primary key simple
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::find por primary key simple` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

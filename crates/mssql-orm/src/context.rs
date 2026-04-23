@@ -2,8 +2,9 @@ use crate::dbset_query::DbSetQuery;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use mssql_orm_core::{Entity, EntityMetadata, FromRow, OrmError, SqlTypeMapping};
-use mssql_orm_query::{ColumnRef, Expr, Predicate, SelectQuery, TableRef};
+use mssql_orm_core::{Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping};
+use mssql_orm_query::{ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef};
+use mssql_orm_sqlserver::SqlServerCompiler;
 use mssql_orm_tiberius::{MssqlConnection, TokioConnectionStream};
 
 pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>>;
@@ -57,6 +58,19 @@ impl<E: Entity> DbSet<E> {
         self.query_with(self.find_select_query(key)?).first().await
     }
 
+    pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
+    where
+        E: FromRow + Send,
+        I: Insertable<E>,
+    {
+        let compiled = SqlServerCompiler::compile_insert(&self.insert_query(&insertable))?;
+        let shared_connection = self.shared_connection();
+        let mut connection = shared_connection.lock().await;
+        let inserted = connection.fetch_one(compiled).await?;
+
+        inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
+    }
+
     pub fn shared_connection(&self) -> SharedConnection {
         Arc::clone(
             self.connection
@@ -101,6 +115,13 @@ impl<E: Entity> DbSet<E> {
 
         Ok(SelectQuery::from_entity::<E>().filter(predicate))
     }
+
+    fn insert_query<I>(&self, insertable: &I) -> InsertQuery
+    where
+        I: Insertable<E>,
+    {
+        InsertQuery::for_entity::<E, I>(insertable)
+    }
 }
 
 pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection, OrmError> {
@@ -112,29 +133,68 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
 mod tests {
     use super::DbSet;
     use mssql_orm_core::{
-        ColumnMetadata, Entity, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
+        SqlValue,
     };
-    use mssql_orm_query::{ColumnRef, Expr, Predicate, SelectQuery, TableRef};
+    use mssql_orm_query::{ColumnRef, Expr, InsertQuery, Predicate, SelectQuery, TableRef};
 
     struct TestEntity;
     struct CompositeKeyEntity;
+    struct NewTestEntity {
+        name: String,
+        active: bool,
+    }
 
-    static TEST_ENTITY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
-        rust_field: "id",
-        column_name: "id",
-        sql_type: SqlServerType::BigInt,
-        nullable: false,
-        primary_key: true,
-        identity: None,
-        default_sql: None,
-        computed_sql: None,
-        rowversion: false,
-        insertable: true,
-        updatable: false,
-        max_length: None,
-        precision: None,
-        scale: None,
-    }];
+    static TEST_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "active",
+            column_name: "active",
+            sql_type: SqlServerType::Bit,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
 
     static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "TestEntity",
@@ -209,6 +269,15 @@ mod tests {
         }
     }
 
+    impl mssql_orm_core::Insertable<TestEntity> for NewTestEntity {
+        fn values(&self) -> Vec<ColumnValue> {
+            vec![
+                ColumnValue::new("name", SqlValue::String(self.name.clone())),
+                ColumnValue::new("active", SqlValue::Bool(self.active)),
+            ]
+        }
+    }
+
     #[test]
     fn dbset_exposes_entity_metadata() {
         let dbset = DbSet::<TestEntity>::disconnected();
@@ -272,6 +341,28 @@ mod tests {
         assert_eq!(
             error.message(),
             "DbSet::find currently supports only entities with a single primary key column"
+        );
+    }
+
+    #[test]
+    fn dbset_insert_builds_insert_query_for_entity() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let insertable = NewTestEntity {
+            name: "ana".to_string(),
+            active: true,
+        };
+
+        let query = dbset.insert_query(&insertable);
+
+        assert_eq!(
+            query,
+            InsertQuery {
+                into: TableRef::new("dbo", "test_entities"),
+                values: vec![
+                    ColumnValue::new("name", SqlValue::String("ana".to_string())),
+                    ColumnValue::new("active", SqlValue::Bool(true)),
+                ],
+            }
         );
     }
 }
