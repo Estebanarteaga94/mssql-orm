@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Pruebas unitarias públicas del query builder
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/tests/stage6_public_query_builder.rs` como prueba de integración pública enfocada en la forma del AST generado desde la superficie soportada.
+- Esa prueba valida composición de predicados, ordenamiento y paginación pública mediante `EntityColumnPredicateExt`, `EntityColumnOrderExt`, `PredicateCompositionExt` y `PageRequest`.
+- Se añadió `crates/mssql-orm/tests/ui/query_builder_public_valid.rs` para verificar con `trybuild` que un consumidor puede encadenar `query().filter(...).order_by(...).limit(...).paginate(...)` usando solo la API pública.
+- Se actualizó `crates/mssql-orm/tests/trybuild.rs` para incluir el nuevo caso `pass` del query builder público.
+- La cobertura nueva no introduce runtime extra ni depende de SQL Server real; se limita a validar contratos públicos y la forma observable del AST.
+
+### Resultado
+
+- La Etapa 6 ya cuenta con una batería pública específica que fija la sintaxis soportada del query builder y la estructura del AST resultante desde la perspectiva de un consumidor.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público`, compilando queries públicos a SQL Server y fijando tanto SQL como orden de parámetros.
+
 ### Sesión: Composición lógica pública de predicados
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Implementar composición lógica pública de predicados (and, or, not)` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

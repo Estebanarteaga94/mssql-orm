@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 6 con la siguiente subtarea detallada: consolidar pruebas unitarias específicas de la API pública del query builder y de la forma del AST generado, ahora que la superficie pública base ya quedó expuesta.
+Continuar la Etapa 6 con la siguiente subtarea detallada: agregar pruebas snapshot y de seguridad de parámetros para el query builder público, ahora que la superficie pública y su batería unitaria básica ya quedaron consolidadas.
 
 ## Dirección Arquitectónica Vigente
 
@@ -73,6 +73,7 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: consolidar pruebas uni
 - La crate pública `mssql-orm` ahora también expone `PageRequest` como contrato estable de paginación explícita.
 - La crate pública `mssql-orm` ahora también expone `PredicateCompositionExt`, habilitando `and`, `or` y `not` sobre `Predicate` sin introducir un DSL lógico paralelo.
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `limit`, `take`, `paginate`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
+- La crate pública `mssql-orm` ahora también cuenta con una batería específica de pruebas públicas del query builder: una prueba de integración sobre la forma del AST y un caso `trybuild` que valida el encadenamiento desde código consumidor.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -116,6 +117,6 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: consolidar pruebas uni
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado`.
-2. Continuar con snapshots y seguridad de parámetros del query builder público, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
+1. Implementar `Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público`.
+2. Reutilizar `DbSetQuery<T>`, el AST de `mssql-orm-query` y el compilador de `mssql-orm-sqlserver` como base, sin introducir una segunda ruta de compilación.
 3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
