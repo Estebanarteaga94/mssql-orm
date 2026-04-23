@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Pruebas de integración públicas para CRUD base
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/tests/stage5_public_crud.rs` como prueba de integración real sobre la superficie pública de `mssql-orm`.
+- La prueba nueva define una entidad pública con `#[derive(Entity)]`, modelos `Insertable`/`Changeset`, un `DbContext` derivado y un `FromRow` manual para recorrer la API tal como la usará un consumidor real.
+- El flujo validado cubre `insert`, `find`, `query().all`, `query().count`, `query_with(...).first`, `update` y `delete` usando `DbSet<T>`.
+- El setup y cleanup de la tabla de prueba se hace con `MssqlConnection` solo como soporte de infraestructura de test; la lógica CRUD validada ocurre a través de la crate pública.
+- La tabla de prueba se crea en `dbo.mssql_orm_public_crud` dentro de la base activa del connection string, porque la metadata actual no soporta prefijar base de datos distinta en esta etapa.
+- La prueba sigue usando `MSSQL_ORM_TEST_CONNECTION_STRING` y hace skip limpio cuando la variable no está presente.
+- La ruta operativa del plan maestro siguió siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se validó el workspace con `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --all --check` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La Etapa 5 ya no solo tiene la base CRUD implementada, sino también validación real de la superficie pública `mssql-orm` contra SQL Server.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo apareció un warning local por un import no usado en el test nuevo y se corrigió antes de cerrar `clippy`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Crear ejemplo funcional basic-crud`, reutilizando exactamente la superficie pública y el patrón de setup ya validados por la prueba de integración.
+
 ### Sesión: `DbSet::delete` por primary key simple
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Implementar DbSet::delete por primary key simple` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

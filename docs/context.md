@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 5 cerrando la validación pública de CRUD base, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]`, `DbSet::query()`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` ya existen en la superficie pública.
+Continuar la Etapa 5 cerrando el ejemplo funcional `basic-crud`, ahora que `DbContext`, `DbSet<T>`, `#[derive(DbContext)]`, `DbSet::query()`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` ya existen en la superficie pública y ya fueron validados contra SQL Server real.
 
 ## Dirección Arquitectónica Vigente
 
@@ -68,6 +68,8 @@ Continuar la Etapa 5 cerrando la validación pública de CRUD base, ahora que `D
 - `DbSet<T>` ahora también expone `update<K, C>() -> Result<Option<E>, OrmError>`, compilando un `UpdateQuery` desde `Changeset<E>` y materializando la fila actualizada cuando existe.
 - `DbSet<T>` ahora también expone `delete<K>() -> Result<bool, OrmError>`, compilando un `DeleteQuery` por primary key simple y devolviendo si hubo al menos una fila afectada.
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
+- La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
+- Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
@@ -88,7 +90,7 @@ Continuar la Etapa 5 cerrando la validación pública de CRUD base, ahora que `D
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
-- `DbSet<T>` ya sostiene una conexión compartida y la base CRUD fundamental completa, pero todavía faltan pruebas de integración públicas que validen la superficie de Etapa 5 desde la crate `mssql-orm`.
+- `DbSet<T>` ya sostiene una conexión compartida y la base CRUD fundamental completa, y ya existe validación pública real; el siguiente riesgo inmediato es dejar un ejemplo `basic-crud` coherente con esa superficie para usuarios externos.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
 - `delete` tampoco soporta primary key compuesta en esta etapa y retorna `bool` para distinguir entre fila eliminada y ausencia de fila, reservando conflictos de concurrencia para la Etapa 11.
@@ -98,6 +100,6 @@ Continuar la Etapa 5 cerrando la validación pública de CRUD base, ahora que `D
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública`.
-2. Reutilizar la infraestructura real de SQL Server ya disponible en `mssql-orm-tiberius/tests`, pero ejerciendo ahora la superficie pública `DbSet<T>` desde `mssql-orm`.
-3. Mantener estables los contratos actuales de `DbSetQuery<T>`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` mientras entran esas pruebas y el ejemplo `basic-crud`.
+1. Implementar `Etapa 5: Crear ejemplo funcional basic-crud`.
+2. Reutilizar exactamente la superficie pública ya validada en `crates/mssql-orm/tests/stage5_public_crud.rs` para evitar divergencia entre ejemplo y comportamiento real.
+3. Mantener estables los contratos actuales de `DbSetQuery<T>`, `DbSet::find()`, `DbSet::insert()`, `DbSet::update()` y `DbSet::delete()` mientras entra el ejemplo y luego la Etapa 6.
