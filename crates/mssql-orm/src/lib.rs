@@ -9,6 +9,7 @@ mod page_request;
 mod predicate_composition;
 mod query_order;
 mod query_predicates;
+mod tracking;
 
 pub use mssql_orm_core as core;
 pub use mssql_orm_macros as macros;
@@ -25,11 +26,12 @@ pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
+pub use tracking::{EntityState, Tracked};
 
 pub mod prelude {
     pub use crate::{
         ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
-        EntityColumnPredicateExt, PageRequest, PredicateCompositionExt,
+        EntityColumnPredicateExt, EntityState, PageRequest, PredicateCompositionExt, Tracked,
     };
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -45,9 +47,9 @@ pub mod prelude {
 mod tests {
     use super::prelude::{
         ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
-        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata,
+        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityState,
         IdentityMetadata, Insertable, OrmError, PageRequest, PredicateCompositionExt,
-        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
+        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
 
@@ -109,6 +111,14 @@ mod tests {
         fn require_trait<E: ActiveRecord>() {}
 
         require_trait::<PublicEntity>();
+    }
+
+    #[test]
+    fn exposes_tracking_surface_in_prelude() {
+        let tracked = Tracked::from_loaded(String::from("tracked"));
+
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(tracked.current(), "tracked");
     }
 
     #[allow(dead_code)]

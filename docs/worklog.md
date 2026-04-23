@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: surface experimental mínima de change tracking
+
+- Se tomó la primera subtarea de la Etapa 12 y se movió en `docs/tasks.md` a `En Progreso` antes de editar, usando como referencia el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se añadió `crates/mssql-orm/src/tracking.rs` como módulo nuevo de la crate pública, definiendo `EntityState` (`Unchanged`, `Added`, `Modified`, `Deleted`) y `Tracked<T>` como wrapper snapshot-based con `original`, `current` y `state`.
+- La surface nueva quedó intencionalmente mínima: `Tracked::from_loaded(...)`, `Tracked::from_added(...)`, accessors de lectura (`original`, `current`, `state`) y `into_current()`, sin introducir todavía `find_tracked`, `save_changes`, registro en `DbContext` ni detección automática de dirty state.
+- El módulo incluye documentación explícita de límites y exclusiones para evitar ambigüedad en sesiones futuras: no hay tracking registry, no hay `save_changes`, no hay dirty detection automática y la API explícita existente de `DbSet`/`ActiveRecord` sigue siendo la principal.
+- `crates/mssql-orm/src/lib.rs` ahora reexporta `Tracked` y `EntityState` en la raíz pública y en la `prelude`, dejando fijada desde ahora la surface observable del experimento.
+- Se añadieron pruebas unitarias del módulo nuevo y una prueba adicional en la crate pública para fijar la disponibilidad de la surface desde la `prelude`.
+
+### Resultado
+
+- La Etapa 12 ya tiene definida y validada la surface pública mínima sobre la que podrán montarse `find_tracked`, la transición a `Modified` y el futuro `save_changes`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib`
+- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Esta subtarea no implementa aún mutabilidad observada ni wiring de contexto; eso queda explícitamente para las siguientes subtareas del backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Exponer DbSet::find_tracked(id) para PK simple reutilizando find y snapshot inicial`.
+
 ### Sesión: descomposición de la Etapa 12 de change tracking
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta para revisar el alcance real de `Tracked<T>`, `EntityState`, `find_tracked`, `add`, `remove` y `save_changes`.

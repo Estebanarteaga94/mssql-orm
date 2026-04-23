@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 12: Definir surface experimental mínima de change tracking (`Tracked<T>`, `EntityState`, límites y exclusiones explícitas)
 - [ ] Etapa 12: Exponer `DbSet::find_tracked(id)` para PK simple reutilizando `find` y snapshot inicial
 - [ ] Etapa 12: Implementar `Tracked<T>` con `original/current/state` y acceso seguro a la entidad actual
 - [ ] Etapa 12: Detectar transición `Unchanged -> Modified` al mutar `Tracked<T>` sin exigir todavía tracking automático global
@@ -18,6 +17,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 12: Definir surface experimental mínima de change tracking (`Tracked<T>`, `EntityState`, límites y exclusiones explícitas)
 - [x] Operativo: Descomponer la Etapa 12 de change tracking en subtareas verificables y ordenadas
 - [x] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
 - [x] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
