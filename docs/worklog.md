@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: computed columns en snapshots, diff y DDL SQL Server
+
+- Se tomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna (`plan_orm_sqlserver_tiberius_code_first.md`) no existe en la raíz del repositorio y se dejó esta constancia para evitar ambigüedad operativa.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 13: Soportar computed columns en snapshots, diff y DDL SQL Server` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-migrate/src/diff.rs` ahora trata cualquier cambio en `computed_sql` como reemplazo estructural de la columna (`DropColumn` + `AddColumn`) en lugar de degradarlo a `AlterColumn`, preservando el límite actual de SQL Server para alteraciones simples y evitando prometer un `ALTER COLUMN` que la compilación no soporta en esta etapa.
+- La misma batería de diff ahora cubre dos casos explícitos: cambio de expresión computada y transición entre columna regular y columna computada, fijando orden determinista de operaciones.
+- `crates/mssql-orm-sqlserver/src/migration.rs` añadió cobertura unitaria para columnas computadas tanto en `CREATE TABLE` como en `ALTER TABLE ... ADD`, y mantiene el rechazo explícito de `AlterColumn` para cambios de `computed_sql`.
+- `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` y el snapshot `migration_snapshots__computed_column_migration_sql.snap` ahora congelan el SQL observable para añadir y eliminar una columna computada mediante migraciones.
+
+### Resultado
+
+- La subtarea de `computed columns` quedó cerrada para el alcance activo: el snapshot ya preservaba `computed_sql`, el diff ahora genera operaciones ejecutables para cambios sobre columnas computadas y la capa SQL Server tiene cobertura observable para su DDL.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-sqlserver --lib migration`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La estrategia actual para cambios de `computed_sql` es `drop + add`; todavía no existe soporte de renombre ni preservación de dependencias alrededor de columnas computadas complejas.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server`.
+
 ### Sesión: índices compuestos en metadata derivada, snapshots y diff
 
 - Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, tomando como subtarea activa `Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server`.

@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos de extremo a extremo y el siguiente foco natural es `computed columns`, sin adelantar features de Etapa 14.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos y `computed columns` de extremo a extremo; el siguiente foco natural es completar foreign keys avanzadas antes de tocar scripts idempotentes o renombres explícitos.
 
 ## Dirección Arquitectónica Vigente
 
@@ -103,6 +103,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El diff de schemas/tablas no intenta todavía detectar renombres ni cambios internos de columnas; esas responsabilidades quedan explícitamente para las siguientes subtareas de Etapa 7.
 - `mssql-orm-migrate` ahora también expone `diff_column_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff de columnas ya detecta `AddColumn`, `DropColumn` y `AlterColumn` comparando `ColumnSnapshot` completo y usando orden determinista por nombre de columna.
+- Cuando cambia `computed_sql` o una columna pasa de regular a computada (o viceversa), el diff actual la modela como `DropColumn` seguido de `AddColumn`; `AlterColumn` sigue reservado a cambios básicos de tipo y nullability.
 - El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
 - `mssql-orm-migrate` ahora también expone `diff_relational_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de un índice o de una foreign key existente, hoy la modela como `Drop...` seguido de `Create/Add...`.
@@ -116,6 +117,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE` y `SET NULL`.
 - `ReferentialAction::SetDefault` sigue rechazado explícitamente en DDL, porque todavía no forma parte del alcance activo.
 - `mssql-orm-sqlserver` ya compila `CreateIndex` y `DropIndex` a DDL SQL Server usando `CREATE [UNIQUE] INDEX ... ON ...` y `DROP INDEX ... ON ...`, preservando orden `ASC`/`DESC` desde el snapshot.
+- `mssql-orm-sqlserver` ya compila columnas computadas en `CREATE TABLE` y `ALTER TABLE ... ADD [col] AS (...)`; los cambios sobre `computed_sql` siguen entrando por la estrategia de recreación del diff y no por `ALTER COLUMN`.
 - `mssql-orm-query` ahora modela joins explícitos en `SelectQuery` mediante `JoinType`, `Join`, `join(...)`, `inner_join::<E>(...)` y `left_join::<E>(...)`, manteniendo el AST libre de SQL directo.
 - `mssql-orm-sqlserver` ya compila joins explícitos a `INNER JOIN` y `LEFT JOIN` para el caso base sin aliases, preservando el orden de joins y de parámetros en el SQL parametrizado final.
 - Mientras no exista aliasing en el AST, la compilación SQL Server rechaza explícitamente self-joins o joins repetidos sobre la misma tabla.
@@ -210,7 +212,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 13: Soportar computed columns en snapshots, diff y DDL SQL Server`.
-2. Después avanzar con foreign keys avanzadas y scripts idempotentes antes de tocar renombres explícitos.
+1. Implementar `Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server`.
+2. Después avanzar con scripts idempotentes antes de tocar renombres explícitos.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

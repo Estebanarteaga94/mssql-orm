@@ -108,12 +108,25 @@ pub fn diff_column_operations(
                         (*current_column).clone(),
                     ))),
                     Some(previous_column) if *previous_column != *current_column => {
-                        operations.push(MigrationOperation::AlterColumn(AlterColumn::new(
-                            schema_name.clone(),
-                            table_name.clone(),
-                            (*previous_column).clone(),
-                            (*current_column).clone(),
-                        )));
+                        if requires_drop_and_add(previous_column, current_column) {
+                            operations.push(MigrationOperation::DropColumn(DropColumn::new(
+                                schema_name.clone(),
+                                table_name.clone(),
+                                column_name.clone(),
+                            )));
+                            operations.push(MigrationOperation::AddColumn(AddColumn::new(
+                                schema_name.clone(),
+                                table_name.clone(),
+                                (*current_column).clone(),
+                            )));
+                        } else {
+                            operations.push(MigrationOperation::AlterColumn(AlterColumn::new(
+                                schema_name.clone(),
+                                table_name.clone(),
+                                (*previous_column).clone(),
+                                (*current_column).clone(),
+                            )));
+                        }
                     }
                     Some(_) => {}
                 }
@@ -132,6 +145,10 @@ pub fn diff_column_operations(
     }
 
     operations
+}
+
+fn requires_drop_and_add(previous: &ColumnSnapshot, current: &ColumnSnapshot) -> bool {
+    previous.computed_sql != current.computed_sql
 }
 
 /// Computes additive/removal operations for indexes and foreign keys in tables
@@ -494,6 +511,170 @@ mod tests {
                 column("email", SqlServerType::NVarChar, false, Some(160)),
                 column("email", SqlServerType::NVarChar, true, Some(255)),
             ))]
+        );
+    }
+
+    #[test]
+    fn column_diff_recreates_column_when_computed_expression_changes() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_lines",
+                vec![ColumnSnapshot::new(
+                    "line_total",
+                    SqlServerType::Decimal,
+                    false,
+                    false,
+                    None,
+                    None,
+                    Some("[unit_price] * [quantity]".to_string()),
+                    false,
+                    false,
+                    false,
+                    None,
+                    Some(18),
+                    Some(2),
+                )],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_lines",
+                vec![ColumnSnapshot::new(
+                    "line_total",
+                    SqlServerType::Decimal,
+                    false,
+                    false,
+                    None,
+                    None,
+                    Some("[unit_price] * [quantity] * (1 - [discount])".to_string()),
+                    false,
+                    false,
+                    false,
+                    None,
+                    Some(18),
+                    Some(2),
+                )],
+                vec![],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::DropColumn(DropColumn::new(
+                    "sales",
+                    "order_lines",
+                    "line_total",
+                )),
+                MigrationOperation::AddColumn(AddColumn::new(
+                    "sales",
+                    "order_lines",
+                    ColumnSnapshot::new(
+                        "line_total",
+                        SqlServerType::Decimal,
+                        false,
+                        false,
+                        None,
+                        None,
+                        Some("[unit_price] * [quantity] * (1 - [discount])".to_string()),
+                        false,
+                        false,
+                        false,
+                        None,
+                        Some(18),
+                        Some(2),
+                    ),
+                )),
+            ]
+        );
+    }
+
+    #[test]
+    fn column_diff_recreates_column_when_switching_between_regular_and_computed() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_lines",
+                vec![ColumnSnapshot::new(
+                    "line_total",
+                    SqlServerType::Decimal,
+                    false,
+                    false,
+                    None,
+                    None,
+                    None,
+                    false,
+                    true,
+                    true,
+                    None,
+                    Some(18),
+                    Some(2),
+                )],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "order_lines",
+                vec![ColumnSnapshot::new(
+                    "line_total",
+                    SqlServerType::Decimal,
+                    false,
+                    false,
+                    None,
+                    None,
+                    Some("[unit_price] * [quantity]".to_string()),
+                    false,
+                    false,
+                    false,
+                    None,
+                    Some(18),
+                    Some(2),
+                )],
+                vec![],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::DropColumn(DropColumn::new(
+                    "sales",
+                    "order_lines",
+                    "line_total",
+                )),
+                MigrationOperation::AddColumn(AddColumn::new(
+                    "sales",
+                    "order_lines",
+                    ColumnSnapshot::new(
+                        "line_total",
+                        SqlServerType::Decimal,
+                        false,
+                        false,
+                        None,
+                        None,
+                        Some("[unit_price] * [quantity]".to_string()),
+                        false,
+                        false,
+                        false,
+                        None,
+                        Some(18),
+                        Some(2),
+                    ),
+                )),
+            ]
         );
     }
 

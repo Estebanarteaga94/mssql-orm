@@ -542,6 +542,112 @@ mod tests {
     }
 
     #[test]
+    fn compiles_computed_column_in_create_and_add_column_definitions() {
+        let operations = vec![
+            MigrationOperation::CreateTable(CreateTable::new(
+                "sales",
+                TableSnapshot::new(
+                    "order_lines",
+                    vec![ColumnSnapshot::new(
+                        "line_total",
+                        SqlServerType::Decimal,
+                        false,
+                        false,
+                        None,
+                        None,
+                        Some("[unit_price] * [quantity]".to_string()),
+                        false,
+                        false,
+                        false,
+                        None,
+                        Some(18),
+                        Some(2),
+                    )],
+                    None,
+                    vec![],
+                    vec![],
+                    vec![],
+                ),
+            )),
+            MigrationOperation::AddColumn(AddColumn::new(
+                "sales",
+                "order_lines",
+                ColumnSnapshot::new(
+                    "discounted_total",
+                    SqlServerType::Decimal,
+                    false,
+                    false,
+                    None,
+                    None,
+                    Some("[line_total] * (1 - [discount])".to_string()),
+                    false,
+                    false,
+                    false,
+                    None,
+                    Some(18),
+                    Some(2),
+                ),
+            )),
+        ];
+
+        let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "CREATE TABLE [sales].[order_lines] (\n    [line_total] AS ([unit_price] * [quantity])\n)"
+        );
+        assert_eq!(
+            sql[1],
+            "ALTER TABLE [sales].[order_lines] ADD [discounted_total] AS ([line_total] * (1 - [discount]))"
+        );
+    }
+
+    #[test]
+    fn rejects_alter_column_for_computed_column_changes() {
+        let operation = MigrationOperation::AlterColumn(AlterColumn::new(
+            "sales",
+            "order_lines",
+            ColumnSnapshot::new(
+                "line_total",
+                SqlServerType::Decimal,
+                false,
+                false,
+                None,
+                None,
+                Some("[unit_price] * [quantity]".to_string()),
+                false,
+                false,
+                false,
+                None,
+                Some(18),
+                Some(2),
+            ),
+            ColumnSnapshot::new(
+                "line_total",
+                SqlServerType::Decimal,
+                false,
+                false,
+                None,
+                None,
+                Some("[unit_price] * [quantity] * (1 - [discount])".to_string()),
+                false,
+                false,
+                false,
+                None,
+                Some(18),
+                Some(2),
+            ),
+        ));
+
+        let error = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server alter column compilation only supports type and nullability changes in this stage"
+        );
+    }
+
+    #[test]
     fn compiles_foreign_key_migration_operations_to_sql() {
         let operations = vec![
             MigrationOperation::AddForeignKey(AddForeignKey::new(

@@ -1,6 +1,9 @@
 use insta::assert_snapshot;
 use mssql_orm_core::ReferentialAction;
-use mssql_orm_migrate::{AddForeignKey, DropForeignKey, ForeignKeySnapshot, MigrationOperation};
+use mssql_orm_migrate::{
+    AddColumn, AddForeignKey, ColumnSnapshot, DropColumn, DropForeignKey, ForeignKeySnapshot,
+    MigrationOperation,
+};
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[test]
@@ -29,6 +32,36 @@ fn snapshots_foreign_key_migration_sql() {
     let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
 
     assert_snapshot!("foreign_key_migration_sql", render_statements(&sql));
+}
+
+#[test]
+fn snapshots_computed_column_migration_sql() {
+    let operations = vec![
+        MigrationOperation::AddColumn(AddColumn::new(
+            "sales",
+            "order_lines",
+            ColumnSnapshot::new(
+                "line_total",
+                mssql_orm_core::SqlServerType::Decimal,
+                false,
+                false,
+                None,
+                None,
+                Some("[unit_price] * [quantity]".to_string()),
+                false,
+                false,
+                false,
+                None,
+                Some(18),
+                Some(2),
+            ),
+        )),
+        MigrationOperation::DropColumn(DropColumn::new("sales", "order_lines", "line_total")),
+    ];
+
+    let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+    assert_snapshot!("computed_column_migration_sql", render_statements(&sql));
 }
 
 fn render_statements(statements: &[String]) -> String {
