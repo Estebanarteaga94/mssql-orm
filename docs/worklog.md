@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Ordenamiento público por columna
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer ordenamiento público por columna (asc, desc)` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/query_order.rs` como capa pública de extensiones de ordenamiento sobre `EntityColumn<E>`.
+- La implementación expone el trait `EntityColumnOrderExt` con `asc()` y `desc()`, delegando internamente a `OrderBy::asc` y `OrderBy::desc` del AST existente.
+- Se reexportó `EntityColumnOrderExt` desde `mssql-orm` y desde la `prelude` pública, alineando la API con el shape definido en el plan maestro (`Customer::id.asc()`, `Customer::created_at.desc()`).
+- Se añadieron pruebas unitarias específicas para fijar la forma exacta de `OrderBy` generado y se amplió la prueba de superficie pública en `crates/mssql-orm/src/lib.rs`.
+- No fue necesario modificar `mssql-orm-query` ni `mssql-orm-sqlserver`, porque la representación y compilación de ordenamiento ya existían; esta subtarea solo expone la API pública encima de esa base.
+
+### Resultado
+
+- La tercera subtarea de Etapa 6 quedó completada y validada; la crate pública ya soporta ordenamiento por columna alineado con el AST y con la API objetivo del plan.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Exponer métodos fluentes en DbSetQuery para filter y order_by`, reutilizando `SelectQuery` y las nuevas extensiones públicas ya disponibles.
+
 ### Sesión: Predicados string públicos sobre `EntityColumn`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer predicados string públicos sobre EntityColumn` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

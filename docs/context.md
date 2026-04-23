@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 6 con la siguiente subtarea detallada: exponer ordenamiento público por columna, ahora que la crate pública ya soporta predicados de comparación y predicados string sobre `EntityColumn`.
+Continuar la Etapa 6 con la siguiente subtarea detallada: exponer métodos fluentes `filter` y `order_by` sobre `DbSetQuery`, ahora que la crate pública ya soporta predicados y ordenamiento directamente sobre `EntityColumn`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -64,6 +64,7 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer ordenamiento p
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
 - La crate pública `mssql-orm` ahora también expone el trait `EntityColumnPredicateExt` en su `prelude`, habilitando `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null` e `is_not_null` directamente sobre `EntityColumn`.
 - La misma extensión pública ahora también expone `contains`, `starts_with` y `ends_with`, reutilizando `Predicate::Like` con parámetros generados en la crate pública.
+- La crate pública `mssql-orm` ahora también expone `EntityColumnOrderExt`, habilitando `asc()` y `desc()` directamente sobre `EntityColumn` y produciendo `OrderBy` del AST existente.
 - `DbSet<T>` ya encapsula una conexión compartida sobre `tokio::sync::Mutex<MssqlConnection<_>>`, expone metadata de entidad y ahora también expone `query()` y `query_with(SelectQuery)` como base pública para ejecución de queries por entidad.
 - `DbSet<T>` ahora también expone `find<K>()` para primary key simple, construyendo un `SelectQuery` filtrado desde la metadata de entidad y delegando la ejecución al runner base.
 - `DbSet<T>` ahora también expone `insert<I>()`, compilando un `InsertQuery` desde `Insertable<E>` y materializando la entidad devuelta por `OUTPUT INSERTED.*`.
@@ -113,6 +114,6 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer ordenamiento p
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 6: Exponer ordenamiento público por columna`.
-2. Continuar con métodos fluentes sobre `DbSetQuery`, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
+1. Implementar `Etapa 6: Exponer métodos fluentes en DbSetQuery para filter y order_by`.
+2. Continuar con `limit`/`take` y paginación pública, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
 3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.

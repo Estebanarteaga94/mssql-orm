@@ -4,6 +4,7 @@ extern crate self as mssql_orm;
 
 mod context;
 mod dbset_query;
+mod query_order;
 mod query_predicates;
 
 pub use mssql_orm_core as core;
@@ -16,10 +17,11 @@ pub use tokio;
 
 pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
+pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
 
 pub mod prelude {
-    pub use crate::{DbContext, DbSet, DbSetQuery, EntityColumnPredicateExt};
+    pub use crate::{DbContext, DbSet, DbSetQuery, EntityColumnOrderExt, EntityColumnPredicateExt};
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
@@ -32,11 +34,11 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityColumnPredicateExt,
-        EntityMetadata, IdentityMetadata, Insertable, OrmError, PrimaryKeyMetadata, SqlServerType,
-        SqlTypeMapping, SqlValue,
+        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
+        EntityColumnPredicateExt, EntityMetadata, IdentityMetadata, Insertable, OrmError,
+        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
     };
-    use mssql_orm_query::{Expr, Predicate};
+    use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
 
     struct PublicEntity;
 
@@ -230,6 +232,10 @@ mod tests {
                 Expr::from(DerivedUser::email),
                 Expr::value(SqlValue::String("%@example.com%".to_string()))
             )
+        );
+        assert_eq!(
+            DerivedUser::email.asc(),
+            OrderBy::new(TableRef::new("auth", "users"), "email", SortDirection::Asc)
         );
     }
 
