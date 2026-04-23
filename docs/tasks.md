@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`
 - [ ] Etapa 12: Soportar estado `Deleted` con `remove(tracked)` o equivalente explícito y persistencia vía `delete`
 - [ ] Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking
 - [ ] Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes
@@ -12,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`
 - [x] Etapa 12: Implementar `save_changes()` para entidades `Modified`, reutilizando `DbSet::update` y preservando `rowversion`/`ConcurrencyConflict`
 - [x] Etapa 12: Introducir colección interna mínima de entidades trackeadas dentro de `DbContext` experimental sin romper la API explícita existente
 - [x] Etapa 12: Detectar transición `Unchanged -> Modified` al mutar `Tracked<T>` sin exigir todavía tracking automático global

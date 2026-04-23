@@ -477,7 +477,20 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let save_changes_steps = fields
+    let save_added_steps = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
+            Ok(quote! {
+                saved += self.#field_ident.save_tracked_added().await?;
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let save_modified_steps = fields
         .iter()
         .map(|field| {
             let field_ident = field
@@ -564,7 +577,8 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #(#save_changes_bounds,)*
             {
                 let mut saved = 0usize;
-                #(#save_changes_steps)*
+                #(#save_added_steps)*
+                #(#save_modified_steps)*
                 Ok(saved)
             }
         }

@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: soporte experimental de `Added` con `add_tracked(...)`
+
+- Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo esta sesión acotada a la subtarea de Etapa 12 para entidades `Added`, sin adelantar todavía soporte de `Deleted`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Soportar estado Added con add(tracked) o equivalente explícito y persistencia vía insert` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/context.rs` ahora expone `DbSet::add_tracked(entity)`, que construye `Tracked::from_added(...)`, lo registra en el `TrackingRegistry` compartido del contexto y deja explícita la entrada de nuevas entidades al pipeline experimental.
+- El mismo módulo ahora implementa `DbSet::save_tracked_added()` reutilizando `insert_entity(...)`; al persistir correctamente, sincroniza el wrapper vivo con la fila materializada devuelta por SQL Server y lo deja en estado `Unchanged`.
+- `crates/mssql-orm-macros/src/lib.rs` ahora hace que `#[derive(DbContext)]` genere `save_changes()` en dos fases por `DbSet`: primero persiste entidades `Added` y luego `Modified`, preservando la reutilización de la infraestructura CRUD ya existente.
+- `crates/mssql-orm/src/tracking.rs` añadió cobertura unitaria para fijar que el registro interno expone entidades `Added` con el estado observable correcto.
+- `crates/mssql-orm/tests/stage5_public_crud.rs` añadió una integración pública real que verifica `add_tracked(...)`, persistencia vía `db.save_changes().await?`, refresco de identidad y transición `Added -> Unchanged`.
+
+### Resultado
+
+- La Etapa 12 ya permite registrar nuevas entidades mediante `DbSet::add_tracked(...)` y persistirlas con `db.save_changes().await?`, reutilizando `insert` y manteniendo el wrapper sincronizado con la fila devuelta por la base.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El tracking experimental sigue dependiendo de que el wrapper `Tracked<T>` permanezca vivo; si se hace `drop` antes de `save_changes()`, la entidad `Added` se desregistra y deja de participar en la persistencia, igual que las `Modified`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Soportar estado Deleted con remove(tracked) o equivalente explícito y persistencia vía delete`.
+
 ### Sesión: `save_changes()` experimental para entidades `Modified`
 
 - Se mantuvo como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, acotando esta sesión a `save_changes()` solo para entidades `Modified`, sin adelantar todavía soporte de `Added` o `Deleted`.

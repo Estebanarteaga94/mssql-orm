@@ -393,6 +393,23 @@ mod tests {
     }
 
     #[test]
+    fn tracking_registry_records_added_entities() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_added(DummyEntity);
+
+        tracked.attach_registry(Arc::clone(&registry));
+
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations(),
+            vec![TrackedEntityRegistration {
+                entity_rust_name: "DummyEntity",
+                state: EntityState::Added,
+            }]
+        );
+    }
+
+    #[test]
     fn dropping_tracked_entity_unregisters_it_from_registry() {
         let registry = Arc::new(TrackingRegistry::default());
 

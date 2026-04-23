@@ -136,6 +136,40 @@ impl<E: Entity> DbSet<E> {
         Ok(tracked)
     }
 
+    /// Registers a new in-memory entity as experimentally tracked in `Added`
+    /// state so a later `save_changes()` can persist it via `insert`.
+    pub fn add_tracked(&self, entity: E) -> Tracked<E>
+    where
+        E: Clone,
+    {
+        let mut tracked = Tracked::from_added(entity);
+        tracked.attach_registry(Arc::clone(&self.tracking_registry));
+        tracked
+    }
+
+    #[doc(hidden)]
+    pub async fn save_tracked_added(&self) -> Result<usize, OrmError>
+    where
+        E: Clone + EntityPersist + FromRow + Send,
+    {
+        let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let mut saved = 0;
+
+        for tracked in tracked_entities {
+            if tracked.state() != crate::EntityState::Added {
+                continue;
+            }
+
+            let current: E = tracked.current_clone();
+            let persisted = self.insert_entity(&current).await?;
+
+            tracked.sync_persisted(persisted);
+            saved += 1;
+        }
+
+        Ok(saved)
+    }
+
     #[doc(hidden)]
     pub async fn save_tracked_modified(&self) -> Result<usize, OrmError>
     where
@@ -868,6 +902,18 @@ mod tests {
             error.message(),
             "DbSetQuery requires an initialized shared connection"
         );
+    }
+
+    #[test]
+    fn dbset_add_tracked_registers_added_entity_in_registry() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+
+        let tracked = dbset.add_tracked(TestEntity);
+
+        assert_eq!(tracked.state(), crate::EntityState::Added);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, crate::EntityState::Added);
     }
 
     #[test]

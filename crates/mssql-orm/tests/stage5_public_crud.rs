@@ -442,6 +442,63 @@ async fn public_dbcontext_save_changes_persists_modified_tracked_entities() -> R
 }
 
 #[tokio::test]
+async fn public_dbcontext_save_changes_persists_added_tracked_entities() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes added integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+
+        let mut tracked = db.users.add_tracked(PublicCrudUser {
+            id: 0,
+            name: "Tracked Added".to_string(),
+            active: true,
+        });
+
+        assert_eq!(tracked.state(), EntityState::Added);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, EntityState::Added);
+
+        tracked.active = false;
+
+        let saved = db.save_changes().await?;
+        assert_eq!(saved, 1);
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert!(tracked.id > 0);
+        assert_eq!(
+            tracked.current(),
+            &PublicCrudUser {
+                id: tracked.id,
+                name: "Tracked Added".to_string(),
+                active: false,
+            }
+        );
+        assert_eq!(tracked.original(), tracked.current());
+
+        let persisted = db.users.find(tracked.id).await?;
+        assert_eq!(persisted, Some(tracked.current().clone()));
+
+        drop(tracked);
+        assert_eq!(registry.entry_count(), 0);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
 async fn public_dbcontext_save_changes_propagates_rowversion_conflicts() -> Result<(), OrmError> {
     let Some(connection_string) = test_connection_string() else {
         eprintln!(
