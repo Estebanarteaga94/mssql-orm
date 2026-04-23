@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Consolidar la Etapa 3 con snapshot tests de SQL y orden de parámetros en `mssql-orm-sqlserver`, ahora que el AST ya compila a `CompiledQuery` con placeholders `@P1..@Pn`.
+Iniciar la Etapa 4 implementando `MssqlConnection` y configuración desde connection string en `mssql-orm-tiberius`, ahora que la salida SQL de `mssql-orm-sqlserver` ya quedó estabilizada con snapshots.
 
 ## Dirección Arquitectónica Vigente
 
@@ -46,6 +46,8 @@ Consolidar la Etapa 3 con snapshot tests de SQL y orden de parámetros en `mssql
 - El quoting actual usa corchetes SQL Server, escapa `]` como `]]` y rechaza identificadores vacíos, con caracteres de control o multipartes pasados como una sola cadena.
 - `mssql-orm-sqlserver` ya implementa compilación de `select`, `insert`, `update`, `delete` y `count` a `CompiledQuery`, incluyendo placeholders `@P1..@Pn` y preservación de orden de parámetros.
 - La compilación actual emite `OUTPUT INSERTED.*` para `insert` y `update`, usa `*` cuando `select` no tiene proyección explícita y exige `ORDER BY` antes de `OFFSET/FETCH`.
+- `mssql-orm-sqlserver` ya cuenta con snapshots versionados para `select`, `insert`, `update`, `delete` y `count`, fijando el SQL generado y la secuencia observable de parámetros.
+- La crate `mssql-orm-sqlserver` ahora usa `insta` solo como `dev-dependency` para congelar el contrato del compilador sin introducir dependencia runtime nueva.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -64,13 +66,13 @@ Consolidar la Etapa 3 con snapshot tests de SQL y orden de parámetros en `mssql
 
 ## Riesgos Inmediatos
 
-- Ya existe compilación SQL Server funcional, pero todavía no hay snapshot tests que congelen el formato exacto del SQL ni el orden de parámetros frente a cambios futuros.
-- La salida actual del compilador ya es usable, pero sigue siendo una primera iteración y conviene fijarla con cobertura más declarativa antes de avanzar a Tiberius.
+- La salida SQL ya está estabilizada por snapshots, pero todavía no existe la capa de conexión y configuración sobre Tiberius para consumir `CompiledQuery`.
+- La Etapa 4 deberá cuidar la separación de responsabilidades: conexión y ejecución en `mssql-orm-tiberius`, sin mover lógica de compilación fuera de `mssql-orm-sqlserver`.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Agregar snapshot tests para SQL y orden de parámetros sobre `select`, `insert`, `update`, `delete` y `count`.
-2. Mantener las convenciones de `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y el AST estables antes de entrar en la capa Tiberius.
-3. Empezar la Etapa 4 con `MssqlConnection` y configuración desde connection string una vez fijada la salida del compilador.
+1. Implementar `Etapa 4: MssqlConnection y configuración desde connection string` en `mssql-orm-tiberius`.
+2. Continuar con `Executor` sobre Tiberius consumiendo `CompiledQuery` sin duplicar lógica de SQL.
+3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y los snapshots del compilador mientras entra la capa de ejecución.
