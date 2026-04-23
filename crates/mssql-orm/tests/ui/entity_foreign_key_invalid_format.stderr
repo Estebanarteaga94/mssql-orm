@@ -1,4 +1,4 @@
-error: foreign_key requiere el formato "tabla.columna" o "schema.tabla.columna"
+error: foreign_key requiere el formato "tabla.columna" o "schema.tabla.columna", o la forma estructurada foreign_key(entity = Customer, column = id)
   --> tests/ui/entity_foreign_key_invalid_format.rs:10:25
    |
 10 |     #[orm(foreign_key = "customers")]

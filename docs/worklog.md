@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: Sintaxis estructurada para `foreign_key`
+
+- Se confirmó que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Rediseñar foreign_key hacia sintaxis estructurada #[orm(foreign_key(entity = Customer, column = id))] con validación en compile-time, sin exigir que la columna de destino sea primary key` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-macros/src/lib.rs` para soportar `#[orm(foreign_key(entity = Customer, column = id))]` además de la sintaxis string previa, manteniendo compatibilidad con `tabla.columna` y `schema.tabla.columna`.
+- El derive `Entity` ahora genera `__MSSQL_ORM_ENTITY_SCHEMA` y `__MSSQL_ORM_ENTITY_TABLE` sobre cada entidad derivada, y reutiliza `Customer::id` como validación compile-time mínima para resolver schema, tabla y columna de la referencia estructurada sin exigir primary key.
+- Se actualizaron `crates/mssql-orm/tests/stage9_relationship_metadata.rs` y `crates/mssql-orm/tests/trybuild.rs`, y se añadieron `crates/mssql-orm/tests/ui/entity_foreign_key_structured_valid.rs` y `crates/mssql-orm/tests/ui/entity_foreign_key_structured_missing_column.rs` con sus expectativas `.stderr`.
+- Durante la validación apareció un error de borrow parcial en `foreign_key.name`; se corrigió antes de relanzar pruebas y se ajustó también el snapshot `trybuild` del mensaje de error para formato inválido legacy.
+
+### Resultado
+
+- La Etapa 9 quedó cerrada también para el rediseño de `foreign_key`: el derive soporta la forma estructurada, valida la columna de destino en compile-time y mantiene compatibilidad con el formato string existente.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage9_relationship_metadata`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La validación compile-time de la variante estructurada todavía depende del error nativo de símbolo inexistente cuando la columna referenciada no existe; ese nivel de diagnóstico es suficiente para esta etapa y no justifica introducir una capa adicional de reflexión o registro global.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Implementar capa opcional Active Record sobre DbSet`.
+
 ### Sesión: Cobertura de integración y snapshots para joins y foreign keys
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

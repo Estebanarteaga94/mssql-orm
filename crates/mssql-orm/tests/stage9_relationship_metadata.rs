@@ -2,17 +2,35 @@ use mssql_orm::prelude::*;
 
 #[allow(dead_code)]
 #[derive(Entity, Debug, Clone)]
+#[orm(table = "customers", schema = "sales")]
+struct Customer {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+}
+
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "users", schema = "dbo")]
+struct User {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+}
+
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
 #[orm(table = "orders", schema = "sales")]
 struct Order {
     #[orm(primary_key)]
     #[orm(identity)]
     id: i64,
 
-    #[orm(foreign_key = "sales.customers.id")]
+    #[orm(foreign_key(entity = Customer, column = id))]
     customer_id: i64,
 
     #[orm(column = "approver_user_id")]
-    #[orm(foreign_key = "users.id")]
+    #[orm(foreign_key(entity = User, column = id))]
     approved_by: i64,
 
     total_cents: i64,
@@ -26,11 +44,11 @@ struct OrderNote {
     #[orm(identity)]
     id: i64,
 
-    #[orm(foreign_key = "sales.orders.id")]
+    #[orm(foreign_key(entity = Order, column = id))]
     #[orm(on_delete = "cascade")]
     order_id: i64,
 
-    #[orm(foreign_key = "users.id")]
+    #[orm(foreign_key(entity = User, column = id))]
     #[orm(on_delete = "set null")]
     reviewer_id: Option<i64>,
 }

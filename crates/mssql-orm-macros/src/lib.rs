@@ -2,8 +2,8 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{
-    Data, DeriveInput, Error, Expr, ExprLit, Field, Fields, Ident, Lit, LitStr, Path, Result, Type,
-    parse_macro_input,
+    Data, DeriveInput, Error, Expr, ExprLit, Field, Fields, Ident, Lit, LitStr, Path, Result,
+    Token, Type, parse_macro_input,
 };
 
 #[proc_macro_derive(Entity, attributes(orm))]
@@ -175,17 +175,17 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         if let Some(foreign_key) = config.foreign_key {
-            let foreign_key_name = foreign_key.name.unwrap_or_else(|| {
+            let foreign_key_name = foreign_key.name.clone().unwrap_or_else(|| {
                 generated_foreign_key_name(
                     table.value().as_str(),
                     column_name.value().as_str(),
-                    foreign_key.referenced_table.value().as_str(),
+                    foreign_key.generated_referenced_table_name.as_str(),
                     field_ident.span(),
                 )
             });
-            let referenced_schema = foreign_key.referenced_schema;
-            let referenced_table = foreign_key.referenced_table;
-            let referenced_column = foreign_key.referenced_column;
+            let referenced_schema = foreign_key.referenced_schema_tokens();
+            let referenced_table = foreign_key.referenced_table_tokens();
+            let referenced_column = foreign_key.referenced_column_tokens();
             let on_delete = config
                 .on_delete
                 .unwrap_or(ReferentialActionConfig::NoAction);
@@ -241,6 +241,12 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
 
         #[allow(non_upper_case_globals)]
         impl #ident {
+            #[doc(hidden)]
+            pub const __MSSQL_ORM_ENTITY_SCHEMA: &'static str = #schema;
+
+            #[doc(hidden)]
+            pub const __MSSQL_ORM_ENTITY_TABLE: &'static str = #table;
+
             #(#column_symbols)*
         }
 
@@ -605,7 +611,7 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
             } else if meta.path.is_ident("rowversion") {
                 config.rowversion = true;
             } else if meta.path.is_ident("foreign_key") {
-                config.foreign_key = Some(parse_foreign_key_config(meta.value()?.parse()?)?);
+                config.foreign_key = Some(parse_foreign_key_config(meta)?);
             } else if meta.path.is_ident("on_delete") {
                 config.on_delete = Some(parse_referential_action_expr(meta.value()?.parse()?)?);
             } else {
@@ -629,7 +635,42 @@ fn parse_lit_str(expr: Expr) -> Result<LitStr> {
     }
 }
 
-fn parse_foreign_key_config(expr: Expr) -> Result<ForeignKeyConfig> {
+fn parse_foreign_key_config(meta: syn::meta::ParseNestedMeta<'_>) -> Result<ForeignKeyConfig> {
+    if meta.input.peek(Token![=]) {
+        return parse_foreign_key_string_config(meta.value()?.parse()?);
+    }
+
+    let mut entity = None;
+    let mut column = None;
+    let mut name = None;
+
+    meta.parse_nested_meta(|nested| {
+        if nested.path.is_ident("entity") {
+            let path: Path = nested.value()?.parse()?;
+            entity = Some(path);
+        } else if nested.path.is_ident("column") {
+            column = Some(nested.value()?.parse::<Ident>()?);
+        } else if nested.path.is_ident("name") {
+            name = Some(parse_lit_str(nested.value()?.parse()?)?);
+        } else {
+            return Err(nested.error("foreign_key solo soporta entity, column y name"));
+        }
+
+        Ok(())
+    })?;
+
+    let entity = entity.ok_or_else(|| meta.error("foreign_key requiere entity = MiEntidad"))?;
+    let column = column.ok_or_else(|| meta.error("foreign_key requiere column = id"))?;
+    let generated_table_name = default_table_name_from_path(&entity)?;
+
+    Ok(ForeignKeyConfig {
+        name,
+        generated_referenced_table_name: generated_table_name,
+        target: ForeignKeyTarget::Structured { entity, column },
+    })
+}
+
+fn parse_foreign_key_string_config(expr: Expr) -> Result<ForeignKeyConfig> {
     let value = parse_lit_str(expr)?;
     let raw = value.value();
     let segments = raw.split('.').collect::<Vec<_>>();
@@ -648,7 +689,7 @@ fn parse_foreign_key_config(expr: Expr) -> Result<ForeignKeyConfig> {
         _ => {
             return Err(Error::new_spanned(
                 value,
-                "foreign_key requiere el formato \"tabla.columna\" o \"schema.tabla.columna\"",
+                "foreign_key requiere el formato \"tabla.columna\" o \"schema.tabla.columna\", o la forma estructurada foreign_key(entity = Customer, column = id)",
             ));
         }
     };
@@ -665,9 +706,12 @@ fn parse_foreign_key_config(expr: Expr) -> Result<ForeignKeyConfig> {
 
     Ok(ForeignKeyConfig {
         name: None,
-        referenced_schema,
-        referenced_table,
-        referenced_column,
+        generated_referenced_table_name: referenced_table.value(),
+        target: ForeignKeyTarget::Legacy {
+            referenced_schema,
+            referenced_table,
+            referenced_column,
+        },
     })
 }
 
@@ -968,6 +1012,18 @@ fn default_table_name(ident: &Ident) -> String {
     pluralize(&to_snake_case(&ident.to_string()))
 }
 
+fn default_table_name_from_path(path: &Path) -> Result<String> {
+    let ident = path
+        .segments
+        .last()
+        .map(|segment| &segment.ident)
+        .ok_or_else(|| {
+            Error::new_spanned(path, "foreign_key requiere una ruta de entidad válida")
+        })?;
+
+    Ok(default_table_name(ident))
+}
+
 fn to_snake_case(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
 
@@ -1073,9 +1129,55 @@ struct IndexConfig {
 
 struct ForeignKeyConfig {
     name: Option<LitStr>,
-    referenced_schema: LitStr,
-    referenced_table: LitStr,
-    referenced_column: LitStr,
+    generated_referenced_table_name: String,
+    target: ForeignKeyTarget,
+}
+
+impl ForeignKeyConfig {
+    fn referenced_schema_tokens(&self) -> TokenStream2 {
+        match &self.target {
+            ForeignKeyTarget::Legacy {
+                referenced_schema, ..
+            } => quote! { #referenced_schema },
+            ForeignKeyTarget::Structured { entity, .. } => {
+                quote! { #entity::__MSSQL_ORM_ENTITY_SCHEMA }
+            }
+        }
+    }
+
+    fn referenced_table_tokens(&self) -> TokenStream2 {
+        match &self.target {
+            ForeignKeyTarget::Legacy {
+                referenced_table, ..
+            } => quote! { #referenced_table },
+            ForeignKeyTarget::Structured { entity, .. } => {
+                quote! { #entity::__MSSQL_ORM_ENTITY_TABLE }
+            }
+        }
+    }
+
+    fn referenced_column_tokens(&self) -> TokenStream2 {
+        match &self.target {
+            ForeignKeyTarget::Legacy {
+                referenced_column, ..
+            } => quote! { #referenced_column },
+            ForeignKeyTarget::Structured { entity, column } => {
+                quote! { #entity::#column.column_name() }
+            }
+        }
+    }
+}
+
+enum ForeignKeyTarget {
+    Legacy {
+        referenced_schema: LitStr,
+        referenced_table: LitStr,
+        referenced_column: LitStr,
+    },
+    Structured {
+        entity: Path,
+        column: Ident,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

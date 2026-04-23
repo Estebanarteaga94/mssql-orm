@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key
 - [ ] Etapa 10: Implementar capa opcional Active Record sobre `DbSet`
 - [ ] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
 - [ ] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
@@ -12,9 +11,9 @@
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso
-- [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key
 - [x] Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys
 - [x] Etapa 9: Exponer joins explícitos mínimos en la crate pública
 - [x] Etapa 9: Compilar joins explícitos a SQL Server parametrizado

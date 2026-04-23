@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 con el rediseño estructurado de `foreign_key`, ahora que metadata, DDL, joins y cobertura observable básica ya quedaron cerrados.
+Avanzar desde la Etapa 9 ya cerrada hacia la primera tarea pendiente de la Etapa 10, manteniendo la API pública concentrada en `mssql-orm` y sin reabrir fundamentos ya estabilizados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -31,13 +31,13 @@ Continuar la Etapa 9 con el rediseño estructurado de `foreign_key`, ahora que m
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
-- `mssql-orm-macros` ahora también soporta `#[orm(foreign_key = "tabla.columna")]` y `#[orm(foreign_key = "schema.tabla.columna")]`.
+- `mssql-orm-macros` ahora soporta `#[orm(foreign_key = "tabla.columna")]`, `#[orm(foreign_key = "schema.tabla.columna")]` y la sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]`.
 - Sobre esos campos, el derive ya acepta además `#[orm(on_delete = "no action" | "cascade" | "set null")]`, generando `ForeignKeyMetadata` con `on_delete` configurable y `on_update = NoAction` en esta etapa.
 - El derive valida en compile-time que `#[orm(on_delete = "set null")]` solo pueda usarse sobre columnas nullable.
-- Queda pendiente una evolución del atributo `foreign_key` hacia una sintaxis estructurada del estilo `#[orm(foreign_key(entity = Customer, column = id))]`, y esa futura validación no debe exigir que la columna de destino sea primary key porque SQL Server también permite FKs hacia columnas no PK.
+- La sintaxis estructurada valida en compile-time la existencia de la columna de destino apoyándose en los símbolos generados por `#[derive(Entity)]` sobre la entidad referenciada, y no exige que esa columna sea primary key porque SQL Server también permite FKs hacia columnas no PK.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
-- La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren casos válidos de entidades con `foreign_key`, schema por defecto `dbo` para referencias abreviadas y errores de compilación esperados para ausencia de PK, `identity` inválido, `rowversion` inválido y segmentos vacíos/formato inválido en `foreign_key`.
+- La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren casos válidos de entidades con `foreign_key`, schema por defecto `dbo` para referencias abreviadas, la sintaxis estructurada y errores de compilación esperados para ausencia de PK, `identity` inválido, `rowversion` inválido, segmentos vacíos/formato inválido en `foreign_key` y columnas de destino inexistentes en el formato estructurado.
 - La crate pública `mssql-orm` ahora también incluye una batería dedicada `stage9_relationship_metadata.rs` para fijar la metadata relacional generada por `#[derive(Entity)]`, incluyendo múltiples foreign keys, nombres generados y helpers de lookup sobre metadata.
 - `mssql-orm-core` ya define `SqlValue`, `ColumnValue`, `Row`, `FromRow`, `Insertable<E>` y `Changeset<E>` como contratos base de mapping y persistencia.
 - `mssql-orm-core` ya define `SqlTypeMapping` con implementaciones base para `bool`, `i32`, `i64`, `f64`, `String`, `Vec<u8>`, `Uuid`, `Decimal`, `NaiveDate`, `NaiveDateTime` y `Option<T>`, alineadas con las convenciones actuales del plan.
@@ -162,8 +162,8 @@ Continuar la Etapa 9 con el rediseño estructurado de `foreign_key`, ahora que m
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
-- La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices, joins explícitos ya existen en AST, compilación SQL Server y surface pública mínima, y la cobertura observable básica ya quedó añadida; el siguiente frente real de Etapa 9 pasa a ser el rediseño estructurado de `foreign_key`.
+- La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
+- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; el siguiente frente real del backlog pasa a ser la primera tarea pendiente de Etapa 10.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -174,6 +174,6 @@ Continuar la Etapa 9 con el rediseño estructurado de `foreign_key`, ahora que m
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Rediseñar foreign_key hacia sintaxis estructurada #[orm(foreign_key(entity = Customer, column = id))] con validación en compile-time, sin exigir que la columna de destino sea primary key`.
-2. Mantener el alcance acotado al derive y a la validación de metadata, sin reabrir todavía aliases ni features de roadmap posteriores.
-3. Preservar compatibilidad razonable con el shape actual de metadata y con el pipeline de migraciones ya estabilizado.
+1. Implementar `Etapa 10: Implementar capa opcional Active Record sobre DbSet`.
+2. Mantener la nueva sintaxis estructurada de `foreign_key` como contrato soportado y evitar romper la compatibilidad con la forma string existente mientras no haya una migración de API explícita.
+3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
