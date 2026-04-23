@@ -2,6 +2,20 @@
 
 ## 2026-04-23
 
+### Sesión: Modo `KEEP_TEST_TABLES` para inspección manual
+
+- Se ajustó `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs` para aceptar la variable de entorno `KEEP_TEST_TABLES=1`.
+- Cuando esa variable está activa, las pruebas de integración conservan la tabla creada en `tempdb.dbo` y escriben en la salida el nombre exacto de la tabla para inspección manual posterior.
+- El comportamiento por defecto no cambió: si `KEEP_TEST_TABLES` no está activa, la prueba sigue limpiando la tabla al finalizar.
+
+### Resultado
+
+- Ahora existe un flujo opt-in para inspeccionar manualmente en SQL Server los datos creados por la prueba real sin editar el archivo de tests.
+
+### Próximo paso recomendado
+
+- Ejecutar la prueba con `KEEP_TEST_TABLES=1` cuando se quiera inspección manual, y luego borrar la tabla explícitamente tras revisar el contenido.
+
 ### Sesión: Pruebas de integración reales contra SQL Server
 
 - Se movió en `docs/tasks.md` la tarea `Etapa 4: Agregar pruebas de integración contra SQL Server real` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

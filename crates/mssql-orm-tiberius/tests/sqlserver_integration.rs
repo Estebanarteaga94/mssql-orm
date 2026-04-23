@@ -5,6 +5,7 @@ use mssql_orm_query::CompiledQuery;
 use mssql_orm_tiberius::MssqlConnection;
 
 const TEST_CONNECTION_ENV: &str = "MSSQL_ORM_TEST_CONNECTION_STRING";
+const KEEP_TABLES_ENV: &str = "KEEP_TEST_TABLES";
 
 static NEXT_TABLE_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -38,8 +39,10 @@ async fn sqlserver_adapter_executes_and_maps_rows_against_real_database() -> Res
     let table_name = unique_table_name();
     let first_created_at = fixed_datetime(2026, 4, 23, 10, 20, 30);
     let second_created_at = fixed_datetime(2026, 4, 23, 11, 21, 31);
+    let keep_tables = keep_test_tables();
 
     create_test_table(&mut connection, &table_name).await?;
+    announce_test_table(&table_name, keep_tables);
 
     let insert_first = connection
         .execute(CompiledQuery::new(
@@ -111,7 +114,7 @@ async fn sqlserver_adapter_executes_and_maps_rows_against_real_database() -> Res
         ]
     );
 
-    drop_test_table(&mut connection, &table_name).await?;
+    cleanup_test_table(&mut connection, &table_name, keep_tables).await?;
 
     Ok(())
 }
@@ -125,8 +128,10 @@ async fn sqlserver_adapter_surfaces_missing_rows_as_none() -> Result<(), OrmErro
 
     let mut connection = MssqlConnection::connect(&connection_string).await?;
     let table_name = unique_table_name();
+    let keep_tables = keep_test_tables();
 
     create_test_table(&mut connection, &table_name).await?;
+    announce_test_table(&table_name, keep_tables);
 
     let fetched = connection
         .fetch_one::<IntegrationUser>(CompiledQuery::new(
@@ -140,7 +145,7 @@ async fn sqlserver_adapter_surfaces_missing_rows_as_none() -> Result<(), OrmErro
 
     assert_eq!(fetched, None);
 
-    drop_test_table(&mut connection, &table_name).await?;
+    cleanup_test_table(&mut connection, &table_name, keep_tables).await?;
 
     Ok(())
 }
@@ -171,6 +176,26 @@ fn unique_table_name() -> String {
     let process_id = std::process::id();
 
     format!("tempdb.dbo.mssql_orm_integration_{process_id}_{table_id}")
+}
+
+fn keep_test_tables() -> bool {
+    matches!(
+        std::env::var(KEEP_TABLES_ENV)
+            .ok()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+fn announce_test_table(table_name: &str, keep_tables: bool) {
+    if keep_tables {
+        eprintln!(
+            "keeping SQL Server integration table `{table_name}` because {KEEP_TABLES_ENV}=1"
+        );
+    } else {
+        eprintln!("created SQL Server integration table `{table_name}`");
+    }
 }
 
 async fn create_test_table(
@@ -206,4 +231,16 @@ async fn drop_test_table(
         .await?;
 
     Ok(())
+}
+
+async fn cleanup_test_table(
+    connection: &mut MssqlConnection,
+    table_name: &str,
+    keep_tables: bool,
+) -> Result<(), OrmError> {
+    if keep_tables {
+        return Ok(());
+    }
+
+    drop_test_table(connection, table_name).await
 }
