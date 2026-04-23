@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 4: Implementar `Executor` sobre Tiberius con binding de parámetros
 - [ ] Etapa 4: Implementar wrapper `MssqlRow` y conversión de errores a `OrmError`
 - [ ] Etapa 4: Agregar pruebas de integración contra SQL Server real
 - [ ] Etapa 5: Implementar `DbContext` trait, `DbSet<T>` y `#[derive(DbContext)]`
@@ -52,3 +51,4 @@
 - [x] Etapa 3: Compilar `select`, `insert`, `update`, `delete` y `count` a SQL parametrizado `@P1..@Pn`
 - [x] Etapa 3: Agregar snapshot tests para SQL y orden de parámetros
 - [x] Etapa 4: Implementar `MssqlConnection` y configuración desde connection string
+- [x] Etapa 4: Implementar `Executor` sobre Tiberius con binding de parámetros
