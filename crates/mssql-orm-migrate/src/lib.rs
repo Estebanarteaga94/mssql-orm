@@ -17,6 +17,7 @@ pub use filesystem::{
 pub use operation::{
     AddColumn, AddForeignKey, AlterColumn, CreateIndex, CreateSchema, CreateTable, DropColumn,
     DropForeignKey, DropIndex, DropSchema, DropTable, MigrationOperation, RenameColumn,
+    RenameTable,
 };
 pub use snapshot::{
     ColumnSnapshot, ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot,
@@ -38,7 +39,8 @@ mod tests {
         AddColumn, AddForeignKey, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateIndex,
         CreateSchema, CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
         ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
-        MigrationOperation, ModelSnapshot, RenameColumn, SchemaSnapshot, TableSnapshot,
+        MigrationOperation, ModelSnapshot, RenameColumn, RenameTable, SchemaSnapshot,
+        TableSnapshot,
     };
     use mssql_orm_core::{
         ColumnMetadata, EntityMetadata, ForeignKeyMetadata, IdentityMetadata, IndexColumnMetadata,
@@ -110,6 +112,7 @@ mod tests {
         rust_name: "Customer",
         schema: "sales",
         table: "customers",
+        renamed_from: None,
         columns: &CUSTOMER_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(Some("pk_customers"), &CUSTOMER_PK_COLUMNS),
         indexes: &CUSTOMER_INDEXES,
@@ -158,6 +161,7 @@ mod tests {
         rust_name: "Tenant",
         schema: "admin",
         table: "tenants",
+        renamed_from: None,
         columns: &TENANT_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(None, &TENANT_PK_COLUMNS),
         indexes: &[],
@@ -231,6 +235,7 @@ mod tests {
         rust_name: "CompositeOrder",
         schema: "sales",
         table: "orders",
+        renamed_from: None,
         columns: &COMPOSITE_ORDER_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &COMPOSITE_ORDER_PK_COLUMNS),
         indexes: &COMPOSITE_ORDER_INDEXES,
@@ -288,6 +293,7 @@ mod tests {
         rust_name: "Order",
         schema: "sales",
         table: "orders",
+        renamed_from: None,
         columns: &ORDER_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &ORDER_PK_COLUMNS),
         indexes: &[],
@@ -361,6 +367,7 @@ mod tests {
         rust_name: "OrderAllocation",
         schema: "sales",
         table: "order_allocations",
+        renamed_from: None,
         columns: &ORDER_ALLOCATION_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(
             Some("pk_order_allocations"),
@@ -588,6 +595,8 @@ mod tests {
             "email",
             "email_address",
         ));
+        let rename_table =
+            MigrationOperation::RenameTable(RenameTable::new("sales", "customers", "clients"));
         let alter_column = MigrationOperation::AlterColumn(AlterColumn::new(
             "sales",
             "customers",
@@ -649,6 +658,7 @@ mod tests {
         assert_eq!(add_column.table_name(), Some("customers"));
         assert_eq!(drop_column.table_name(), Some("customers"));
         assert_eq!(rename_column.table_name(), Some("customers"));
+        assert_eq!(rename_table.table_name(), Some("clients"));
         assert_eq!(alter_column.table_name(), Some("customers"));
         assert_eq!(create_index.table_name(), Some("customers"));
         assert_eq!(drop_index.table_name(), Some("customers"));

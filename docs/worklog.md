@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: `RenameTable` explícito en snapshots, diff y DDL SQL Server
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 13: Soportar RenameTable explícito en snapshots, diff y DDL SQL Server` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `mssql-orm-core` ahora expone `EntityMetadata::renamed_from`, y `mssql-orm-macros` acepta `#[orm(renamed_from = "...")]` también a nivel de entidad para declarar renombres explícitos de tabla sin inferencia heurística.
+- `mssql-orm-migrate` ahora preserva ese hint en `TableSnapshot`, incorpora `MigrationOperation::RenameTable` y hace que `diff_schema_and_table_operations` emita `RenameTable` cuando una tabla actual apunta explícitamente a un nombre previo dentro del mismo schema.
+- El diff de columnas y el diff relacional ahora reutilizan esa misma correspondencia de tabla renombrada como contexto compartido, por lo que cambios posteriores de columnas, índices o foreign keys siguen comparándose contra la tabla previa correcta y no degradan el rename a `DropTable + CreateTable`.
+- `mssql-orm-sqlserver` ahora compila `RenameTable` a `EXEC sp_rename ... 'OBJECT'`, y se añadieron cobertura unitaria y snapshot observable para ese SQL.
+- La crate pública `mssql-orm` añadió un caso `trybuild` válido para fijar la nueva surface del derive con `#[orm(renamed_from = "...")]` a nivel de entidad.
+
+### Resultado
+
+- La Etapa 13 quedó cerrada también en renombres explícitos de tabla: metadata derivada, snapshot, diff y DDL SQL Server ya soportan `RenameTable` explícito dentro del mismo schema sin degradarlo a recreación destructiva de la tabla.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-sqlserver --lib migration`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El soporte actual de `RenameTable` es explícito y limitado a renombres dentro del mismo schema; mover tablas entre schemas sigue siendo responsabilidad de operaciones separadas (`CreateSchema`/`CreateTable`/`DropTable`) y no se infiere como rename.
+
+### Próximo paso recomendado
+
+- Empezar la Etapa 14 por `Implementar pooling opcional, timeouts, tracing, slow query logs y health checks`.
+
 ### Sesión: ampliación de validación real de Etapa 13 con foreign keys
 
 - A pedido del usuario se amplió la validación real previa de Etapa 13 para no quedarse solo en la ejecución del script, sino revisar también el resultado efectivo dentro de SQL Server sobre datos reales.

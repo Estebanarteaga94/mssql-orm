@@ -4,6 +4,7 @@ fn entity_derive_ui() {
 
     tests.pass("tests/ui/entity_valid.rs");
     tests.pass("tests/ui/entity_renamed_from_valid.rs");
+    tests.pass("tests/ui/entity_table_renamed_from_valid.rs");
     tests.pass("tests/ui/entity_composite_index_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_default_schema_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_structured_valid.rs");

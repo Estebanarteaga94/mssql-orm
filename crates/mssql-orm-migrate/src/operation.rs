@@ -7,6 +7,7 @@ pub enum MigrationOperation {
     DropSchema(DropSchema),
     CreateTable(CreateTable),
     DropTable(DropTable),
+    RenameTable(RenameTable),
     RenameColumn(RenameColumn),
     AddColumn(AddColumn),
     DropColumn(DropColumn),
@@ -24,6 +25,7 @@ impl MigrationOperation {
             Self::DropSchema(operation) => &operation.schema_name,
             Self::CreateTable(operation) => &operation.schema_name,
             Self::DropTable(operation) => &operation.schema_name,
+            Self::RenameTable(operation) => &operation.schema_name,
             Self::RenameColumn(operation) => &operation.schema_name,
             Self::AddColumn(operation) => &operation.schema_name,
             Self::DropColumn(operation) => &operation.schema_name,
@@ -40,6 +42,7 @@ impl MigrationOperation {
             Self::CreateSchema(_) | Self::DropSchema(_) => None,
             Self::CreateTable(operation) => Some(&operation.table.name),
             Self::DropTable(operation) => Some(&operation.table_name),
+            Self::RenameTable(operation) => Some(&operation.next_table_name),
             Self::RenameColumn(operation) => Some(&operation.table_name),
             Self::AddColumn(operation) => Some(&operation.table_name),
             Self::DropColumn(operation) => Some(&operation.table_name),
@@ -108,6 +111,28 @@ impl DropTable {
         Self {
             schema_name: schema_name.into(),
             table_name: table_name.into(),
+        }
+    }
+}
+
+/// Rename an existing table inside the same schema without recreating it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenameTable {
+    pub schema_name: String,
+    pub previous_table_name: String,
+    pub next_table_name: String,
+}
+
+impl RenameTable {
+    pub fn new(
+        schema_name: impl Into<String>,
+        previous_table_name: impl Into<String>,
+        next_table_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            previous_table_name: previous_table_name.into(),
+            next_table_name: next_table_name.into(),
         }
     }
 }

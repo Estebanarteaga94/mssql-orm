@@ -70,6 +70,7 @@ impl SchemaSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TableSnapshot {
     pub name: String,
+    pub renamed_from: Option<String>,
     pub columns: Vec<ColumnSnapshot>,
     pub primary_key_name: Option<String>,
     pub primary_key_columns: Vec<String>,
@@ -88,6 +89,7 @@ impl TableSnapshot {
     ) -> Self {
         Self {
             name: name.into(),
+            renamed_from: None,
             columns,
             primary_key_name,
             primary_key_columns,
@@ -98,6 +100,11 @@ impl TableSnapshot {
 
     pub fn column(&self, name: &str) -> Option<&ColumnSnapshot> {
         self.columns.iter().find(|column| column.name == name)
+    }
+
+    pub fn with_renamed_from(mut self, renamed_from: impl Into<String>) -> Self {
+        self.renamed_from = Some(renamed_from.into());
+        self
     }
 
     pub fn index(&self, name: &str) -> Option<&IndexSnapshot> {
@@ -318,6 +325,7 @@ impl From<&EntityMetadata> for TableSnapshot {
     fn from(entity: &EntityMetadata) -> Self {
         Self {
             name: entity.table.to_string(),
+            renamed_from: entity.renamed_from.map(str::to_owned),
             columns: entity.columns.iter().map(ColumnSnapshot::from).collect(),
             primary_key_name: entity.primary_key.name.map(str::to_owned),
             primary_key_columns: entity

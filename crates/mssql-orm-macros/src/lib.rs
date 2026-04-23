@@ -44,6 +44,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let EntityConfig {
         table: entity_table,
         schema: entity_schema,
+        renamed_from: entity_renamed_from,
         indexes: entity_indexes,
     } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
@@ -62,6 +63,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let schema = entity_schema.unwrap_or_else(|| LitStr::new("dbo", Span::call_site()));
     let table =
         entity_table.unwrap_or_else(|| LitStr::new(&default_table_name(&ident), ident.span()));
+    let renamed_from = option_lit_str(entity_renamed_from);
     let rust_name = LitStr::new(&ident.to_string(), ident.span());
 
     let mut columns = Vec::new();
@@ -385,6 +387,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             rust_name: #rust_name,
             schema: #schema,
             table: #table,
+            renamed_from: #renamed_from,
             columns: &[#(#columns),*],
             primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
                 None,
@@ -866,6 +869,8 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                 config.table = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("schema") {
                 config.schema = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("renamed_from") {
+                config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("index") {
                 config.indexes.push(parse_entity_index_config(meta)?);
             } else {
@@ -1476,6 +1481,7 @@ fn generated_foreign_key_name(
 struct EntityConfig {
     table: Option<LitStr>,
     schema: Option<LitStr>,
+    renamed_from: Option<LitStr>,
     indexes: Vec<EntityIndexConfig>,
 }
 

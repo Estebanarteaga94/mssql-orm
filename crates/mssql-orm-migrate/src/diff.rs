@@ -1,7 +1,8 @@
 use crate::{
     AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema, CreateTable,
     DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable, ForeignKeySnapshot,
-    IndexSnapshot, MigrationOperation, ModelSnapshot, RenameColumn, SchemaSnapshot, TableSnapshot,
+    IndexSnapshot, MigrationOperation, ModelSnapshot, RenameColumn, RenameTable, SchemaSnapshot,
+    TableSnapshot,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -32,18 +33,45 @@ pub fn diff_schema_and_table_operations(
 
         let previous_tables = table_map(previous_schemas[schema_name]);
         let current_tables = table_map(current_schema);
+        let mut consumed_previous_tables = BTreeSet::new();
 
-        for (table_name, table) in &current_tables {
+        for (table_name, current_table) in &current_tables {
+            if let Some(renamed_from) = current_table
+                .renamed_from
+                .as_deref()
+                .filter(|renamed_from| *renamed_from != table_name)
+                .filter(|renamed_from| !current_tables.contains_key(*renamed_from))
+                .filter(|_| !previous_tables.contains_key(table_name))
+            {
+                if previous_tables.contains_key(renamed_from)
+                    && consumed_previous_tables.insert(renamed_from.to_string())
+                {
+                    operations.push(MigrationOperation::RenameTable(RenameTable::new(
+                        schema_name.clone(),
+                        renamed_from.to_string(),
+                        table_name.clone(),
+                    )));
+                    continue;
+                }
+            }
+
+            if previous_tables.contains_key(table_name) {
+                consumed_previous_tables.insert(table_name.clone());
+                continue;
+            }
+
             if !previous_tables.contains_key(table_name) {
                 operations.push(MigrationOperation::CreateTable(CreateTable::new(
                     schema_name.clone(),
-                    (*table).clone(),
+                    (*current_table).clone(),
                 )));
             }
         }
 
         for table_name in previous_tables.keys() {
-            if !current_tables.contains_key(table_name) {
+            if !current_tables.contains_key(table_name)
+                && !consumed_previous_tables.contains(table_name)
+            {
                 operations.push(MigrationOperation::DropTable(DropTable::new(
                     schema_name.clone(),
                     table_name.clone(),
@@ -89,14 +117,9 @@ pub fn diff_column_operations(
             continue;
         };
 
-        let previous_tables = table_map(previous_schema);
-        let current_tables = table_map(current_schema);
-
-        for (table_name, current_table) in &current_tables {
-            let Some(previous_table) = previous_tables.get(table_name) else {
-                continue;
-            };
-
+        for (table_name, previous_table, current_table) in
+            matched_table_pairs(previous_schema, current_schema)
+        {
             let previous_columns = column_map(previous_table);
             let current_columns = column_map(current_table);
             let mut consumed_previous_columns = BTreeSet::new();
@@ -112,14 +135,14 @@ pub fn diff_column_operations(
                         consumed_previous_columns.insert(renamed_from.to_string());
                         operations.push(MigrationOperation::RenameColumn(RenameColumn::new(
                             schema_name.clone(),
-                            table_name.clone(),
+                            table_name.to_string(),
                             renamed_from.to_string(),
                             column_name.clone(),
                         )));
                         push_followup_column_change(
                             &mut operations,
                             schema_name,
-                            table_name,
+                            &table_name,
                             renamed_previous_column(previous_column, current_column),
                             current_column,
                         );
@@ -130,7 +153,7 @@ pub fn diff_column_operations(
                 match previous_columns.get(column_name) {
                     None => operations.push(MigrationOperation::AddColumn(AddColumn::new(
                         schema_name.clone(),
-                        table_name.clone(),
+                        table_name.to_string(),
                         (*current_column).clone(),
                     ))),
                     Some(previous_column) => {
@@ -138,7 +161,7 @@ pub fn diff_column_operations(
                         push_followup_column_change(
                             &mut operations,
                             schema_name,
-                            table_name,
+                            &table_name,
                             (*previous_column).clone(),
                             current_column,
                         );
@@ -227,14 +250,9 @@ pub fn diff_relational_operations(
             continue;
         };
 
-        let previous_tables = table_map(previous_schema);
-        let current_tables = table_map(current_schema);
-
-        for (table_name, current_table) in &current_tables {
-            let Some(previous_table) = previous_tables.get(table_name) else {
-                continue;
-            };
-
+        for (table_name, previous_table, current_table) in
+            matched_table_pairs(previous_schema, current_schema)
+        {
             let previous_indexes = index_map(previous_table);
             let current_indexes = index_map(current_table);
 
@@ -242,18 +260,18 @@ pub fn diff_relational_operations(
                 match previous_indexes.get(index_name) {
                     None => operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
                         schema_name.clone(),
-                        table_name.clone(),
+                        table_name.to_string(),
                         (*index).clone(),
                     ))),
                     Some(previous_index) if *previous_index != *index => {
                         operations.push(MigrationOperation::DropIndex(DropIndex::new(
                             schema_name.clone(),
-                            table_name.clone(),
+                            table_name.to_string(),
                             index_name.clone(),
                         )));
                         operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
                             schema_name.clone(),
-                            table_name.clone(),
+                            table_name.to_string(),
                             (*index).clone(),
                         )));
                     }
@@ -265,7 +283,7 @@ pub fn diff_relational_operations(
                 if !current_indexes.contains_key(index_name) {
                     operations.push(MigrationOperation::DropIndex(DropIndex::new(
                         schema_name.clone(),
-                        table_name.clone(),
+                        table_name.to_string(),
                         index_name.clone(),
                     )));
                 }
@@ -278,18 +296,18 @@ pub fn diff_relational_operations(
                 match previous_foreign_keys.get(foreign_key_name) {
                     None => operations.push(MigrationOperation::AddForeignKey(AddForeignKey::new(
                         schema_name.clone(),
-                        table_name.clone(),
+                        table_name.to_string(),
                         (*foreign_key).clone(),
                     ))),
                     Some(previous_foreign_key) if *previous_foreign_key != *foreign_key => {
                         operations.push(MigrationOperation::DropForeignKey(DropForeignKey::new(
                             schema_name.clone(),
-                            table_name.clone(),
+                            table_name.to_string(),
                             foreign_key_name.clone(),
                         )));
                         operations.push(MigrationOperation::AddForeignKey(AddForeignKey::new(
                             schema_name.clone(),
-                            table_name.clone(),
+                            table_name.to_string(),
                             (*foreign_key).clone(),
                         )));
                     }
@@ -301,7 +319,7 @@ pub fn diff_relational_operations(
                 if !current_foreign_keys.contains_key(foreign_key_name) {
                     operations.push(MigrationOperation::DropForeignKey(DropForeignKey::new(
                         schema_name.clone(),
-                        table_name.clone(),
+                        table_name.to_string(),
                         foreign_key_name.clone(),
                     )));
                 }
@@ -326,6 +344,39 @@ fn table_map(schema: &SchemaSnapshot) -> BTreeMap<String, &TableSnapshot> {
         .iter()
         .map(|table| (table.name.clone(), table))
         .collect()
+}
+
+fn matched_table_pairs<'a>(
+    previous_schema: &'a SchemaSnapshot,
+    current_schema: &'a SchemaSnapshot,
+) -> Vec<(String, &'a TableSnapshot, &'a TableSnapshot)> {
+    let previous_tables = table_map(previous_schema);
+    let current_tables = table_map(current_schema);
+    let mut consumed_previous_tables = BTreeSet::new();
+    let mut pairs = Vec::new();
+
+    for (table_name, current_table) in &current_tables {
+        if let Some(previous_table) = previous_tables.get(table_name) {
+            consumed_previous_tables.insert(table_name.clone());
+            pairs.push((table_name.clone(), *previous_table, *current_table));
+            continue;
+        }
+
+        if let Some(renamed_from) = current_table
+            .renamed_from
+            .as_deref()
+            .filter(|renamed_from| *renamed_from != table_name)
+            .filter(|renamed_from| !current_tables.contains_key(*renamed_from))
+        {
+            if let Some(previous_table) = previous_tables.get(renamed_from) {
+                if consumed_previous_tables.insert(renamed_from.to_string()) {
+                    pairs.push((table_name.clone(), *previous_table, *current_table));
+                }
+            }
+        }
+    }
+
+    pairs
 }
 
 fn column_map(table: &TableSnapshot) -> BTreeMap<String, &ColumnSnapshot> {
@@ -361,7 +412,7 @@ mod tests {
         AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema,
         CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
         ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationOperation, ModelSnapshot,
-        RenameColumn, SchemaSnapshot, TableSnapshot,
+        RenameColumn, RenameTable, SchemaSnapshot, TableSnapshot,
     };
     use mssql_orm_core::{IdentityMetadata, ReferentialAction, SqlServerType};
 
@@ -522,6 +573,29 @@ mod tests {
     }
 
     #[test]
+    fn schema_and_table_diff_emits_explicit_table_rename_without_drop_and_add() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table("customers", vec![], vec![], vec![])],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table("clients", vec![], vec![], vec![]).with_renamed_from("customers")],
+        )]);
+
+        let operations = diff_schema_and_table_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![MigrationOperation::RenameTable(RenameTable::new(
+                "sales",
+                "customers",
+                "clients",
+            ))]
+        );
+    }
+
+    #[test]
     fn column_diff_detects_add_and_drop_in_shared_table() {
         let previous = ModelSnapshot::new(vec![schema(
             "sales",
@@ -677,6 +751,45 @@ mod tests {
                         .with_renamed_from("email"),
                 )),
             ]
+        );
+    }
+
+    #[test]
+    fn column_diff_uses_renamed_table_as_shared_context() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("id", SqlServerType::BigInt, false, None)],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![
+                table(
+                    "clients",
+                    vec![
+                        column("id", SqlServerType::BigInt, false, None),
+                        column("email", SqlServerType::NVarChar, false, Some(180)),
+                    ],
+                    vec![],
+                    vec![],
+                )
+                .with_renamed_from("customers"),
+            ],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![MigrationOperation::AddColumn(AddColumn::new(
+                "sales",
+                "clients",
+                column("email", SqlServerType::NVarChar, false, Some(180)),
+            ))]
         );
     }
 

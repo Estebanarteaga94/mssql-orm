@@ -2,7 +2,7 @@ use insta::assert_snapshot;
 use mssql_orm_core::ReferentialAction;
 use mssql_orm_migrate::{
     AddColumn, AddForeignKey, ColumnSnapshot, DropColumn, DropForeignKey, ForeignKeySnapshot,
-    MigrationOperation, RenameColumn,
+    MigrationOperation, RenameColumn, RenameTable,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -107,6 +107,19 @@ fn snapshots_rename_column_migration_sql() {
     let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
 
     assert_snapshot!("rename_column_migration_sql", render_statements(&sql));
+}
+
+#[test]
+fn snapshots_rename_table_migration_sql() {
+    let operations = vec![MigrationOperation::RenameTable(RenameTable::new(
+        "sales",
+        "customers",
+        "clients",
+    ))];
+
+    let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+    assert_snapshot!("rename_table_migration_sql", render_statements(&sql));
 }
 
 fn render_statements(statements: &[String]) -> String {

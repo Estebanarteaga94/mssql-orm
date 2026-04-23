@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 13: Soportar `RenameTable` explícito en snapshots, diff y DDL SQL Server
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
@@ -9,6 +8,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 13: Soportar `RenameTable` explícito en snapshots, diff y DDL SQL Server
 - [x] Operativo: Ampliar validación real de Etapa 13 con verificación de comportamiento de foreign keys en SQL Server
 - [x] Operativo: Validar Etapa 13 contra SQL Server real y ajustar `database update` para índices sobre computed columns
 - [x] Operativo: Descomponer la subtarea de renombres explícitos de Etapa 13 en `RenameColumn` y `RenameTable`
