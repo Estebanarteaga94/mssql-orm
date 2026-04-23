@@ -141,11 +141,6 @@ fn compile_alter_column(operation: &AlterColumn) -> Result<String, OrmError> {
 }
 
 fn compile_add_foreign_key(operation: &AddForeignKey) -> Result<String, OrmError> {
-    reject_unsupported_foreign_key_actions(
-        operation.foreign_key.on_delete,
-        operation.foreign_key.on_update,
-    )?;
-
     let table = quote_qualified_identifier(&operation.schema_name, &operation.table_name)?;
     let constraint = quote_identifier(&operation.foreign_key.name)?;
     let columns = operation
@@ -166,9 +161,11 @@ fn compile_add_foreign_key(operation: &AddForeignKey) -> Result<String, OrmError
         .map(|column| quote_identifier(column))
         .collect::<Result<Vec<_>, _>>()?
         .join(", ");
+    let on_delete = render_foreign_key_action_clause("DELETE", operation.foreign_key.on_delete)?;
+    let on_update = render_foreign_key_action_clause("UPDATE", operation.foreign_key.on_update)?;
 
     Ok(format!(
-        "ALTER TABLE {table} ADD CONSTRAINT {constraint} FOREIGN KEY ({columns}) REFERENCES {referenced_table} ({referenced_columns})"
+        "ALTER TABLE {table} ADD CONSTRAINT {constraint} FOREIGN KEY ({columns}) REFERENCES {referenced_table} ({referenced_columns}){on_delete}{on_update}"
     ))
 }
 
@@ -180,17 +177,22 @@ fn compile_drop_foreign_key(operation: &DropForeignKey) -> Result<String, OrmErr
     ))
 }
 
-fn reject_unsupported_foreign_key_actions(
-    on_delete: ReferentialAction,
-    on_update: ReferentialAction,
-) -> Result<(), OrmError> {
-    if on_delete != ReferentialAction::NoAction || on_update != ReferentialAction::NoAction {
-        return Err(OrmError::new(
-            "SQL Server foreign key migration compilation only supports NO ACTION in this stage",
-        ));
-    }
+fn render_foreign_key_action_clause(
+    action_kind: &str,
+    action: ReferentialAction,
+) -> Result<String, OrmError> {
+    let action_sql = match action {
+        ReferentialAction::NoAction => "NO ACTION",
+        ReferentialAction::Cascade => "CASCADE",
+        ReferentialAction::SetNull => "SET NULL",
+        ReferentialAction::SetDefault => {
+            return Err(OrmError::new(
+                "SQL Server foreign key migration compilation only supports NO ACTION, CASCADE and SET NULL in this stage",
+            ));
+        }
+    };
 
-    Ok(())
+    Ok(format!(" ON {action_kind} {action_sql}"))
 }
 
 fn compile_unsupported_index() -> Result<String, OrmError> {
@@ -514,8 +516,8 @@ mod tests {
                     "sales",
                     "customers",
                     vec!["id".to_string()],
-                    ReferentialAction::NoAction,
-                    ReferentialAction::NoAction,
+                    ReferentialAction::Cascade,
+                    ReferentialAction::SetNull,
                 ),
             )),
             MigrationOperation::DropForeignKey(DropForeignKey::new(
@@ -529,7 +531,7 @@ mod tests {
 
         assert_eq!(
             sql[0],
-            "ALTER TABLE [sales].[orders] ADD CONSTRAINT [fk_orders_customer_id_customers] FOREIGN KEY ([customer_id]) REFERENCES [sales].[customers] ([id])"
+            "ALTER TABLE [sales].[orders] ADD CONSTRAINT [fk_orders_customer_id_customers] FOREIGN KEY ([customer_id]) REFERENCES [sales].[customers] ([id]) ON DELETE CASCADE ON UPDATE SET NULL"
         );
         assert_eq!(
             sql[1],
@@ -538,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_foreign_key_actions_until_delete_behavior_stage() {
+    fn compiles_foreign_key_no_action_clauses_explicitly() {
         let operation = MigrationOperation::AddForeignKey(AddForeignKey::new(
             "sales",
             "orders",
@@ -548,7 +550,31 @@ mod tests {
                 "sales",
                 "customers",
                 vec!["id".to_string()],
-                ReferentialAction::Cascade,
+                ReferentialAction::NoAction,
+                ReferentialAction::NoAction,
+            ),
+        ));
+
+        let sql = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "ALTER TABLE [sales].[orders] ADD CONSTRAINT [fk_orders_customer_id_customers] FOREIGN KEY ([customer_id]) REFERENCES [sales].[customers] ([id]) ON DELETE NO ACTION ON UPDATE NO ACTION"
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_set_default_foreign_key_action() {
+        let operation = MigrationOperation::AddForeignKey(AddForeignKey::new(
+            "sales",
+            "orders",
+            ForeignKeySnapshot::new(
+                "fk_orders_customer_id_customers",
+                vec!["customer_id".to_string()],
+                "sales",
+                "customers",
+                vec!["id".to_string()],
+                ReferentialAction::SetDefault,
                 ReferentialAction::NoAction,
             ),
         ));
@@ -557,7 +583,7 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "SQL Server foreign key migration compilation only supports NO ACTION in this stage"
+            "SQL Server foreign key migration compilation only supports NO ACTION, CASCADE and SET NULL in this stage"
         );
     }
 

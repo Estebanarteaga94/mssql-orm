@@ -186,6 +186,18 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             let referenced_schema = foreign_key.referenced_schema;
             let referenced_table = foreign_key.referenced_table;
             let referenced_column = foreign_key.referenced_column;
+            let on_delete = config
+                .on_delete
+                .unwrap_or(ReferentialActionConfig::NoAction);
+
+            if on_delete == ReferentialActionConfig::SetNull && !nullable {
+                return Err(Error::new_spanned(
+                    &field.ty,
+                    "on_delete = \"set null\" requiere un campo nullable",
+                ));
+            }
+
+            let on_delete = referential_action_tokens(on_delete);
 
             foreign_keys.push(quote! {
                 ::mssql_orm::core::ForeignKeyMetadata::new(
@@ -194,7 +206,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     #referenced_schema,
                     #referenced_table,
                     &[#referenced_column],
-                    ::mssql_orm::core::ReferentialAction::NoAction,
+                    #on_delete,
                     ::mssql_orm::core::ReferentialAction::NoAction,
                 )
             });
@@ -594,6 +606,8 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
                 config.rowversion = true;
             } else if meta.path.is_ident("foreign_key") {
                 config.foreign_key = Some(parse_foreign_key_config(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("on_delete") {
+                config.on_delete = Some(parse_referential_action_expr(meta.value()?.parse()?)?);
             } else {
                 return Err(meta.error("atributo orm no soportado a nivel de campo"));
             }
@@ -655,6 +669,19 @@ fn parse_foreign_key_config(expr: Expr) -> Result<ForeignKeyConfig> {
         referenced_table,
         referenced_column,
     })
+}
+
+fn parse_referential_action_expr(expr: Expr) -> Result<ReferentialActionConfig> {
+    let value = parse_lit_str(expr)?;
+    match value.value().to_ascii_lowercase().as_str() {
+        "no action" => Ok(ReferentialActionConfig::NoAction),
+        "cascade" => Ok(ReferentialActionConfig::Cascade),
+        "set null" => Ok(ReferentialActionConfig::SetNull),
+        _ => Err(Error::new_spanned(
+            value,
+            "solo se soportan los valores \"no action\", \"cascade\" y \"set null\"",
+        )),
+    }
 }
 
 fn parse_u32_expr(expr: Expr) -> Result<u32> {
@@ -742,6 +769,20 @@ where
     match value {
         Some(value) => quote! { Some(#value) },
         None => quote! { None },
+    }
+}
+
+fn referential_action_tokens(action: ReferentialActionConfig) -> TokenStream2 {
+    match action {
+        ReferentialActionConfig::NoAction => {
+            quote! { ::mssql_orm::core::ReferentialAction::NoAction }
+        }
+        ReferentialActionConfig::Cascade => {
+            quote! { ::mssql_orm::core::ReferentialAction::Cascade }
+        }
+        ReferentialActionConfig::SetNull => {
+            quote! { ::mssql_orm::core::ReferentialAction::SetNull }
+        }
     }
 }
 
@@ -1021,6 +1062,7 @@ struct FieldConfig {
     scale: Option<u8>,
     indexes: Vec<IndexConfig>,
     foreign_key: Option<ForeignKeyConfig>,
+    on_delete: Option<ReferentialActionConfig>,
 }
 
 #[derive(Default)]
@@ -1034,6 +1076,13 @@ struct ForeignKeyConfig {
     referenced_schema: LitStr,
     referenced_table: LitStr,
     referenced_column: LitStr,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReferentialActionConfig {
+    NoAction,
+    Cascade,
+    SetNull,
 }
 
 struct TypeInfo {

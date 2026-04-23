@@ -521,6 +521,7 @@ dependencies = [
 name = "mssql-orm"
 version = "0.1.0"
 dependencies = [
+ "insta",
  "mssql-orm-core",
  "mssql-orm-macros",
  "mssql-orm-migrate",
@@ -536,6 +537,7 @@ name = "mssql-orm-cli"
 version = "0.1.0"
 dependencies = [
  "mssql-orm-migrate",
+ "mssql-orm-sqlserver",
 ]
 
 [[package]]
@@ -561,7 +563,6 @@ name = "mssql-orm-migrate"
 version = "0.1.0"
 dependencies = [
  "mssql-orm-core",
- "mssql-orm-sqlserver",
 ]
 
 [[package]]
@@ -577,6 +578,7 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "mssql-orm-core",
+ "mssql-orm-migrate",
  "mssql-orm-query",
 ]
 

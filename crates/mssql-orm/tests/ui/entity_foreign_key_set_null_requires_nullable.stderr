@@ -1,0 +1,5 @@
+error: on_delete = "set null" requiere un campo nullable
+  --> tests/ui/entity_foreign_key_set_null_requires_nullable.rs:12:22
+   |
+12 |     pub customer_id: i64,
+   |                      ^^^

@@ -18,6 +18,23 @@ struct Order {
     total_cents: i64,
 }
 
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "order_notes", schema = "sales")]
+struct OrderNote {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(foreign_key = "sales.orders.id")]
+    #[orm(on_delete = "cascade")]
+    order_id: i64,
+
+    #[orm(foreign_key = "users.id")]
+    #[orm(on_delete = "set null")]
+    reviewer_id: Option<i64>,
+}
+
 #[test]
 fn derives_relationship_metadata_for_multiple_foreign_keys() {
     let metadata = Order::metadata();
@@ -84,4 +101,24 @@ fn relationship_metadata_helpers_filter_generated_foreign_keys() {
             .foreign_keys_referencing("dbo", "accounts")
             .is_empty()
     );
+}
+
+#[test]
+fn derives_delete_behavior_metadata_for_foreign_keys() {
+    let metadata = OrderNote::metadata();
+
+    let order_fk = metadata
+        .foreign_key("fk_order_notes_order_id_orders")
+        .expect("order foreign key metadata");
+    assert_eq!(order_fk.on_delete, ReferentialAction::Cascade);
+    assert_eq!(order_fk.on_update, ReferentialAction::NoAction);
+
+    let reviewer_fk = metadata
+        .foreign_key("fk_order_notes_reviewer_id_users")
+        .expect("reviewer foreign key metadata");
+    assert_eq!(reviewer_fk.on_delete, ReferentialAction::SetNull);
+    assert_eq!(reviewer_fk.on_update, ReferentialAction::NoAction);
+    assert_eq!(reviewer_fk.columns, &["reviewer_id"]);
+    assert_eq!(reviewer_fk.referenced_schema, "dbo");
+    assert_eq!(reviewer_fk.referenced_table, "users");
 }

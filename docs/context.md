@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de foreign keys ya compilado para SQL Server.
+Continuar la Etapa 9 cerrando el DDL pendiente de índices (`CreateIndex`/`DropIndex`) antes de avanzar a joins explícitos.
 
 ## Dirección Arquitectónica Vigente
 
@@ -31,7 +31,9 @@ Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de fore
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
 - `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
-- `mssql-orm-macros` ahora también soporta `#[orm(foreign_key = "tabla.columna")]` y `#[orm(foreign_key = "schema.tabla.columna")]`, generando `ForeignKeyMetadata` con `NoAction` por defecto sobre update/delete en esta etapa.
+- `mssql-orm-macros` ahora también soporta `#[orm(foreign_key = "tabla.columna")]` y `#[orm(foreign_key = "schema.tabla.columna")]`.
+- Sobre esos campos, el derive ya acepta además `#[orm(on_delete = "no action" | "cascade" | "set null")]`, generando `ForeignKeyMetadata` con `on_delete` configurable y `on_update = NoAction` en esta etapa.
+- El derive valida en compile-time que `#[orm(on_delete = "set null")]` solo pueda usarse sobre columnas nullable.
 - Queda pendiente una evolución del atributo `foreign_key` hacia una sintaxis estructurada del estilo `#[orm(foreign_key(entity = Customer, column = id))]`, y esa futura validación no debe exigir que la columna de destino sea primary key porque SQL Server también permite FKs hacia columnas no PK.
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
@@ -108,7 +110,8 @@ Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de fore
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
 - `mssql-orm-sqlserver` ya compila `AddForeignKey` y `DropForeignKey` a DDL SQL Server básico usando `ALTER TABLE ... ADD/DROP CONSTRAINT`.
-- En esta etapa, la compilación de foreign keys solo acepta `ReferentialAction::NoAction`; cualquier otra acción sigue rechazándose explícitamente hasta la siguiente subtarea de `delete behavior`.
+- `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE` y `SET NULL`.
+- `ReferentialAction::SetDefault` sigue rechazado explícitamente en DDL, porque todavía no forma parte del alcance activo.
 - Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
@@ -154,7 +157,7 @@ Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de fore
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- Aunque el DDL básico de foreign keys ya existe, todavía falta soportar `cascade`/`set null`, sumar DDL de índices y luego exponer joins explícitos en query/query-public.
+- Aunque el `delete behavior` inicial ya quedó soportado, todavía falta sumar DDL de índices y luego exponer joins explícitos en query/query-public.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -165,6 +168,6 @@ Continuar la Etapa 9 incorporando `delete behavior` inicial sobre el DDL de fore
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Soportar delete behavior inicial (no action, cascade, set null) en metadata y DDL`.
-2. Reutilizar la compilación actual de `AddForeignKey`/`DropForeignKey` y extender solo el renderizado de acciones soportadas, sin reabrir el shape de snapshots ni del diff.
-3. Mantener joins e índices fuera de alcance hasta cerrar primero la semántica mínima de acciones referenciales.
+1. Implementar `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones`.
+2. Mantener ese trabajo acotado a la crate `mssql-orm-sqlserver`, reutilizando `IndexSnapshot` y `MigrationOperation` ya definidos.
+3. Retomar joins explícitos solo después de cerrar el hueco de migraciones relacionales que todavía queda abierto.

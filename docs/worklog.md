@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: Delete behavior inicial para foreign keys
+
+- Se confirmó otra vez que el plan maestro usado como fuente de verdad está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, no en la raíz del repositorio.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Soportar delete behavior inicial (no action, cascade, set null) en metadata y DDL` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-macros/src/lib.rs` para aceptar `#[orm(on_delete = "no action" | "cascade" | "set null")]` en campos con `foreign_key`, manteniendo `on_update` en `NoAction` dentro del alcance actual.
+- El derive `Entity` ahora emite `ForeignKeyMetadata::on_delete` configurable y rechaza en compile-time `on_delete = "set null"` cuando la columna local no es nullable.
+- Se amplió `crates/mssql-orm/tests/stage9_relationship_metadata.rs` para fijar metadata derivada con `Cascade` y `SetNull`, y se añadió el caso `trybuild` `entity_foreign_key_set_null_requires_nullable`.
+- Se actualizó `crates/mssql-orm-sqlserver/src/migration.rs` para compilar `AddForeignKey` con `ON DELETE` y `ON UPDATE` usando `NO ACTION`, `CASCADE` y `SET NULL`, rechazando todavía `SET DEFAULT` con error explícito de etapa.
+- Se añadieron pruebas unitarias en la crate SQL Server para renderizado explícito de `NO ACTION`, `CASCADE`, `SET NULL` y rechazo de `SET DEFAULT`.
+- Se registró en `docs/tasks.md` una nueva subtarea pendiente: `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones`, porque esa parte sigue rechazada explícitamente y era un hueco real no trazado en el backlog.
+- `Cargo.lock` se sincronizó con los manifests actuales del workspace durante la validación, incorporando dependencias ya declaradas que no estaban reflejadas en el lockfile versionado.
+
+### Resultado
+
+- La Etapa 9 ya soporta `delete behavior` inicial de foreign keys tanto en metadata derivada como en DDL SQL Server, con validación temprana para el caso `set null` sobre columnas no nullable.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage9_relationship_metadata`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `CreateIndex` y `DropIndex` siguen rechazados explícitamente en `mssql-orm-sqlserver`; por eso se añadió la subtarea dedicada al backlog en esta misma sesión.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones`.
+
 ### Sesión: DDL SQL Server base para foreign keys
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
