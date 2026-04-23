@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: Conversión desde metadata hacia `ModelSnapshot`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar conversión desde metadata de entidades hacia ModelSnapshot` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-migrate/src/snapshot.rs` con conversiones directas desde metadata estática del core: `ColumnSnapshot: From<&ColumnMetadata>`, `IndexColumnSnapshot: From<&IndexColumnMetadata>`, `IndexSnapshot: From<&IndexMetadata>` y `TableSnapshot: From<&EntityMetadata>`.
+- Se añadió `ModelSnapshot::from_entities(&[&EntityMetadata])`, agrupando entidades por schema con `BTreeMap` y ordenando tablas por nombre para obtener snapshots deterministas e independientes del orden de entrada.
+- La conversión preserva orden de columnas, nombre y columnas de primary key e índices declarados, sin adelantar todavía foreign keys, operaciones de migración ni diff engine.
+- Se añadieron pruebas unitarias nuevas en `crates/mssql-orm-migrate/src/lib.rs` para fijar la conversión de `EntityMetadata -> TableSnapshot` y la agrupación/orden determinista de `ModelSnapshot`.
+
+### Resultado
+
+- `mssql-orm-migrate` ya puede materializar snapshots mínimos a partir de metadata code-first real del workspace, dejando lista la base para definir `MigrationOperation` y luego el diff engine.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Definir MigrationOperation y payloads básicos para schema, tabla y columna`, alineando el shape mínimo con los snapshots ya fijados.
+
 ### Sesión: Definición de `ModelSnapshot` base para migraciones
 
 - Se revisó la ruta real del plan maestro y se confirmó que la fuente de verdad vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`, no un archivo en la raíz.

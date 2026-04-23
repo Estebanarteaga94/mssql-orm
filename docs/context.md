@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 implementando la conversión desde metadata de entidades hacia `ModelSnapshot`, ahora que la base de snapshots mínimos ya quedó definida y validada en `mssql-orm-migrate`.
+Continuar la Etapa 7 definiendo `MigrationOperation` y sus payloads mínimos para schema, tabla y columna, ahora que la conversión desde metadata code-first a `ModelSnapshot` ya quedó implementada y validada.
 
 ## Dirección Arquitectónica Vigente
 
@@ -78,6 +78,9 @@ Continuar la Etapa 7 implementando la conversión desde metadata de entidades ha
 - `mssql-orm-migrate` ya dejó de ser solo un marker crate y ahora expone `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot` e `IndexColumnSnapshot` como base del sistema de migraciones.
 - El snapshot actual usa `String` y `Vec<_>` para ser persistible fuera de metadata estática, pero conserva el shape relevante de SQL Server (`SqlServerType`, `IdentityMetadata`, nullability, defaults, computed, rowversion, longitudes, precisión/escala, PK e índices).
 - `TableSnapshot` conserva nombre de PK y columnas de PK además de columnas e índices, permitiendo que la siguiente subtarea convierta metadata code-first a snapshot sin redefinir el contrato base.
+- `mssql-orm-migrate` ahora también implementa conversión directa desde metadata estática: `ColumnSnapshot: From<&ColumnMetadata>`, `IndexColumnSnapshot: From<&IndexColumnMetadata>`, `IndexSnapshot: From<&IndexMetadata>` y `TableSnapshot: From<&EntityMetadata>`.
+- `ModelSnapshot::from_entities(&[&EntityMetadata])` ya agrupa entidades por schema usando orden determinista y ordena tablas por nombre dentro de cada schema, dejando una base estable para snapshots persistidos y futuros diffs.
+- La conversión actual conserva el orden original de columnas, el nombre y columnas de primary key, y los índices declarados en metadata; foreign keys siguen fuera de alcance hasta etapas posteriores.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -121,6 +124,6 @@ Continuar la Etapa 7 implementando la conversión desde metadata de entidades ha
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Implementar conversión desde metadata de entidades hacia ModelSnapshot`.
-2. Definir luego `MigrationOperation` y recién después el diff engine, reutilizando el contrato de snapshot ya fijado.
-3. Mantener la generación SQL de migraciones fuera de esta subtarea y exclusivamente en la crate SQL Server cuando corresponda.
+1. Implementar `Etapa 7: Definir MigrationOperation y payloads básicos para schema, tabla y columna`.
+2. Mantener el diff engine apoyado en `ModelSnapshot` y `MigrationOperation`, sin mezclar aún generación SQL ni CLI.
+3. Dejar fuera por ahora foreign keys, renombres y operaciones avanzadas hasta que el MVP básico del diff esté cerrado.
