@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Paginación pública con `PageRequest`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer paginación pública en DbSetQuery con request explícito y contrato estable` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/page_request.rs` con el contrato público `PageRequest { page, page_size }`.
+- `PageRequest` expone `new(page, page_size)` y la conversión estable a `Pagination`, fijando en la crate pública el request explícito descrito por el plan maestro.
+- Se extendió `crates/mssql-orm/src/dbset_query.rs` para exponer `DbSetQuery::paginate(PageRequest)`, reutilizando `SelectQuery::paginate` y `Pagination::page`.
+- Se reexportó `PageRequest` desde `mssql-orm` y desde la `prelude`, y se añadió cobertura unitaria tanto para la conversión `PageRequest -> Pagination` como para el `SelectQuery` generado por `DbSetQuery::paginate`.
+- Se eligió explícitamente no implementar en esta subtarea la variante `paginate(1, 20)` porque el backlog pedía un request explícito y contrato estable; esa sobrecarga queda fuera del alcance actual.
+
+### Resultado
+
+- La crate pública ya soporta paginación explícita y tipada sobre `DbSetQuery`, alineada con la forma `PageRequest` del plan maestro y sin introducir un segundo contrato de paginación.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: composición lógica pública de predicados (and, or, not)` sin introducir un AST paralelo.
+
 ### Sesión: `limit` y `take` en `DbSetQuery`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer limit y take en DbSetQuery` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

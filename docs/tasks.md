@@ -1,10 +1,9 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 6: Exponer paginación pública en `DbSetQuery` con request explícito y contrato estable
-- [ ] Etapa 6: Implementar composición lógica pública de predicados (`and`, `or`, `not`) sin introducir un AST paralelo
 - [ ] Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado
 - [ ] Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público
+- [ ] Etapa 6: Implementar composición lógica pública de predicados (`and`, `or`, `not`) sin introducir un AST paralelo
 - [ ] Etapa 7: Implementar `ModelSnapshot`, diff engine y operaciones básicas de migración
 - [ ] Etapa 7: Implementar generación SQL y tabla `__mssql_orm_migrations`
 - [ ] Etapa 7: Implementar CLI mínima con `migration add`, `database update` y `migration list`
@@ -26,6 +25,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 6: Exponer paginación pública en `DbSetQuery` con request explícito y contrato estable
 - [x] Etapa 6: Exponer `limit` y `take` en `DbSetQuery` reutilizando `Pagination` sin duplicar semántica
 - [x] Etapa 6: Exponer métodos fluentes en `DbSetQuery` para `filter` y `order_by` reutilizando `SelectQuery`
 - [x] Etapa 6: Exponer ordenamiento público por columna (`asc`, `desc`) alineado con el AST existente

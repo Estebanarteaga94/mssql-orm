@@ -1,4 +1,5 @@
 use crate::context::SharedConnection;
+use crate::page_request::PageRequest;
 use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
 use mssql_orm_query::{CountQuery, OrderBy, Pagination, Predicate, SelectQuery};
 use mssql_orm_sqlserver::SqlServerCompiler;
@@ -41,6 +42,11 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub fn take(self, limit: u64) -> Self {
         self.limit(limit)
+    }
+
+    pub fn paginate(mut self, request: PageRequest) -> Self {
+        self.select_query = self.select_query.paginate(request.to_pagination());
+        self
     }
 
     pub fn select_query(&self) -> &SelectQuery {
@@ -129,6 +135,7 @@ impl FromRow for CountRow {
 mod tests {
     use super::DbSetQuery;
     use crate::context::DbSet;
+    use crate::page_request::PageRequest;
     use mssql_orm_core::{
         Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
     };
@@ -271,6 +278,18 @@ mod tests {
         let taken = dbset.query().take(10).into_select_query();
 
         assert_eq!(limited, taken);
+    }
+
+    #[test]
+    fn dbset_query_paginate_uses_page_request_contract() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset.query().paginate(PageRequest::new(3, 25));
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>().paginate(Pagination::new(50, 25))
+        );
     }
 
     #[test]
