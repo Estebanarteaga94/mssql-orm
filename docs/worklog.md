@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: Definición de `MigrationOperation` base
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Definir MigrationOperation y payloads básicos para schema, tabla y columna` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se creó `crates/mssql-orm-migrate/src/operation.rs` para separar el contrato de operaciones de migración del modelo de snapshots.
+- Se definió `MigrationOperation` con el subset mínimo necesario para el MVP inmediato: `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`.
+- Los payloads de tabla reutilizan `TableSnapshot` completo y los payloads de columna reutilizan `ColumnSnapshot`, evitando duplicar shape mientras el diff engine aún no existe.
+- Se añadieron helpers `schema_name()` y `table_name()` en `MigrationOperation` para facilitar ordenamiento, inspección y aserciones en el futuro diff engine.
+- Se agregaron pruebas unitarias en `crates/mssql-orm-migrate/src/lib.rs` para fijar la superficie mínima de operaciones y la preservación explícita de `previous` y `next` en `AlterColumn`.
+
+### Resultado
+
+- `mssql-orm-migrate` ya tiene el contrato mínimo de operaciones sobre el que puede apoyarse el diff engine de Etapa 7 sin introducir aún SQL, CLI ni features avanzadas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas`, emitiendo operaciones ordenadas y deterministas.
+
 ### Sesión: Conversión desde metadata hacia `ModelSnapshot`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar conversión desde metadata de entidades hacia ModelSnapshot` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 definiendo `MigrationOperation` y sus payloads mínimos para schema, tabla y columna, ahora que la conversión desde metadata code-first a `ModelSnapshot` ya quedó implementada y validada.
+Continuar la Etapa 7 implementando el diff engine básico para creación y eliminación de schemas y tablas, ahora que `ModelSnapshot` y `MigrationOperation` mínimos ya están definidos y validados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -81,6 +81,9 @@ Continuar la Etapa 7 definiendo `MigrationOperation` y sus payloads mínimos par
 - `mssql-orm-migrate` ahora también implementa conversión directa desde metadata estática: `ColumnSnapshot: From<&ColumnMetadata>`, `IndexColumnSnapshot: From<&IndexColumnMetadata>`, `IndexSnapshot: From<&IndexMetadata>` y `TableSnapshot: From<&EntityMetadata>`.
 - `ModelSnapshot::from_entities(&[&EntityMetadata])` ya agrupa entidades por schema usando orden determinista y ordena tablas por nombre dentro de cada schema, dejando una base estable para snapshots persistidos y futuros diffs.
 - La conversión actual conserva el orden original de columnas, el nombre y columnas de primary key, y los índices declarados en metadata; foreign keys siguen fuera de alcance hasta etapas posteriores.
+- `mssql-orm-migrate` ahora también expone `MigrationOperation` en un módulo separado, con payloads mínimos para `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`.
+- Las operaciones de tabla reutilizan `TableSnapshot` completo y las de columna reutilizan `ColumnSnapshot`, evitando duplicar contratos antes de implementar el diff engine.
+- `MigrationOperation` ya expone helpers de lectura para `schema_name()` y `table_name()`, lo que simplifica ordenamiento y aserciones del futuro diff básico sin introducir aún generación SQL.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -124,6 +127,6 @@ Continuar la Etapa 7 definiendo `MigrationOperation` y sus payloads mínimos par
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Definir MigrationOperation y payloads básicos para schema, tabla y columna`.
-2. Mantener el diff engine apoyado en `ModelSnapshot` y `MigrationOperation`, sin mezclar aún generación SQL ni CLI.
-3. Dejar fuera por ahora foreign keys, renombres y operaciones avanzadas hasta que el MVP básico del diff esté cerrado.
+1. Implementar `Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas`.
+2. Reutilizar `ModelSnapshot` y `MigrationOperation` ya definidos para emitir una lista ordenada y determinista de operaciones básicas.
+3. Mantener fuera por ahora columnas, foreign keys, renombres, generación SQL y CLI hasta cerrar el primer diff de schemas/tablas.

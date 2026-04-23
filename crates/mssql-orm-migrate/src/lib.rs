@@ -2,8 +2,13 @@
 
 use mssql_orm_core::CrateIdentity;
 
+mod operation;
 mod snapshot;
 
+pub use operation::{
+    AddColumn, AlterColumn, CreateSchema, CreateTable, DropColumn, DropSchema, DropTable,
+    MigrationOperation,
+};
 pub use snapshot::{
     ColumnSnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot, SchemaSnapshot,
     TableSnapshot,
@@ -21,8 +26,9 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 #[cfg(test)]
 mod tests {
     use super::{
-        CRATE_IDENTITY, ColumnSnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
-        ModelSnapshot, SchemaSnapshot, TableSnapshot,
+        AddColumn, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateSchema, CreateTable,
+        DropColumn, DropSchema, DropTable, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
+        MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
     };
     use mssql_orm_core::{
         ColumnMetadata, EntityMetadata, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
@@ -331,5 +337,79 @@ mod tests {
                 .max_length,
             Some(160)
         );
+    }
+
+    #[test]
+    fn migration_operations_cover_minimum_stage_seven_surface() {
+        let create_schema = MigrationOperation::CreateSchema(CreateSchema::new("sales"));
+        let drop_schema = MigrationOperation::DropSchema(DropSchema::new("legacy"));
+        let create_table = MigrationOperation::CreateTable(CreateTable::new(
+            "sales",
+            TableSnapshot::from(&CUSTOMER_METADATA),
+        ));
+        let drop_table = MigrationOperation::DropTable(DropTable::new("sales", "customers"));
+        let add_column = MigrationOperation::AddColumn(AddColumn::new(
+            "sales",
+            "customers",
+            ColumnSnapshot::from(&CUSTOMER_COLUMNS[1]),
+        ));
+        let drop_column =
+            MigrationOperation::DropColumn(DropColumn::new("sales", "customers", "email"));
+        let alter_column = MigrationOperation::AlterColumn(AlterColumn::new(
+            "sales",
+            "customers",
+            ColumnSnapshot::from(&CUSTOMER_COLUMNS[1]),
+            ColumnSnapshot::new(
+                "email",
+                SqlServerType::NVarChar,
+                false,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                Some(255),
+                None,
+                None,
+            ),
+        ));
+
+        assert_eq!(create_schema.schema_name(), "sales");
+        assert_eq!(drop_schema.schema_name(), "legacy");
+        assert_eq!(create_table.schema_name(), "sales");
+        assert_eq!(create_table.table_name(), Some("customers"));
+        assert_eq!(drop_table.table_name(), Some("customers"));
+        assert_eq!(add_column.table_name(), Some("customers"));
+        assert_eq!(drop_column.table_name(), Some("customers"));
+        assert_eq!(alter_column.table_name(), Some("customers"));
+    }
+
+    #[test]
+    fn alter_column_retains_previous_and_next_shapes() {
+        let previous = ColumnSnapshot::from(&CUSTOMER_COLUMNS[1]);
+        let next = ColumnSnapshot::new(
+            "email",
+            SqlServerType::NVarChar,
+            true,
+            false,
+            None,
+            Some("'unknown'".to_string()),
+            None,
+            false,
+            true,
+            true,
+            Some(255),
+            None,
+            None,
+        );
+
+        let operation = AlterColumn::new("sales", "customers", previous.clone(), next.clone());
+
+        assert_eq!(operation.schema_name, "sales");
+        assert_eq!(operation.table_name, "customers");
+        assert_eq!(operation.previous, previous);
+        assert_eq!(operation.next, next);
     }
 }

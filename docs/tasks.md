@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7: Definir `MigrationOperation` y payloads básicos para schema, tabla y columna
 - [ ] Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas
 - [ ] Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas
 - [ ] Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos
@@ -25,6 +24,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 7: Definir `MigrationOperation` y payloads básicos para schema, tabla y columna
 - [x] Etapa 7: Implementar conversión desde metadata de entidades hacia `ModelSnapshot`
 - [x] Etapa 7: Definir `ModelSnapshot` y snapshots mínimos de schema, tabla, columna e índice
 - [x] Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público
