@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 7 implementando `ModelSnapshot`, el diff engine y las operaciones básicas de migración, ahora que la Etapa 6 del query builder público quedó completada y validada.
+Continuar la Etapa 7 implementando la conversión desde metadata de entidades hacia `ModelSnapshot`, ahora que la base de snapshots mínimos ya quedó definida y validada en `mssql-orm-migrate`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -75,6 +75,9 @@ Iniciar la Etapa 7 implementando `ModelSnapshot`, el diff engine y las operacion
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `limit`, `take`, `paginate`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ahora también cuenta con una batería específica de pruebas públicas del query builder: una prueba de integración sobre la forma del AST y un caso `trybuild` que valida el encadenamiento desde código consumidor.
 - La crate pública `mssql-orm` ahora también cuenta con snapshots del SQL generado desde el query builder público y con una prueba explícita de seguridad para confirmar que valores no confiables quedan parametrizados y no se interpolan en el SQL.
+- `mssql-orm-migrate` ya dejó de ser solo un marker crate y ahora expone `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot` e `IndexColumnSnapshot` como base del sistema de migraciones.
+- El snapshot actual usa `String` y `Vec<_>` para ser persistible fuera de metadata estática, pero conserva el shape relevante de SQL Server (`SqlServerType`, `IdentityMetadata`, nullability, defaults, computed, rowversion, longitudes, precisión/escala, PK e índices).
+- `TableSnapshot` conserva nombre de PK y columnas de PK además de columnas e índices, permitiendo que la siguiente subtarea convierta metadata code-first a snapshot sin redefinir el contrato base.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -118,6 +121,6 @@ Iniciar la Etapa 7 implementando `ModelSnapshot`, el diff engine y las operacion
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: ModelSnapshot, diff engine y operaciones básicas de migración`.
-2. Reutilizar la metadata code-first ya disponible en `mssql-orm-core` y mantener la generación SQL exclusivamente en las crates correspondientes.
-3. Mantener estable la superficie pública ya validada de Etapa 5 y Etapa 6 mientras entra la base de migraciones.
+1. Implementar `Etapa 7: Implementar conversión desde metadata de entidades hacia ModelSnapshot`.
+2. Definir luego `MigrationOperation` y recién después el diff engine, reutilizando el contrato de snapshot ya fijado.
+3. Mantener la generación SQL de migraciones fuera de esta subtarea y exclusivamente en la crate SQL Server cuando corresponda.

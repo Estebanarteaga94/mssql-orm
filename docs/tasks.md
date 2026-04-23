@@ -1,7 +1,11 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7: Implementar `ModelSnapshot`, diff engine y operaciones básicas de migración
+- [ ] Etapa 7: Implementar conversión desde metadata de entidades hacia `ModelSnapshot`
+- [ ] Etapa 7: Definir `MigrationOperation` y payloads básicos para schema, tabla y columna
+- [ ] Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas
+- [ ] Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas
+- [ ] Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos
 - [ ] Etapa 7: Implementar generación SQL y tabla `__mssql_orm_migrations`
 - [ ] Etapa 7: Implementar CLI mínima con `migration add`, `database update` y `migration list`
 - [ ] Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real
@@ -22,6 +26,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 7: Definir `ModelSnapshot` y snapshots mínimos de schema, tabla, columna e índice
 - [x] Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público
 - [x] Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado
 - [x] Etapa 6: Implementar composición lógica pública de predicados (`and`, `or`, `not`) sin introducir un AST paralelo

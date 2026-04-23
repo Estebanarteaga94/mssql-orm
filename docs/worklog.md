@@ -2,6 +2,54 @@
 
 ## 2026-04-23
 
+### Sesión: Definición de `ModelSnapshot` base para migraciones
+
+- Se revisó la ruta real del plan maestro y se confirmó que la fuente de verdad vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`, no un archivo en la raíz.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Definir ModelSnapshot y snapshots mínimos de schema, tabla, columna e índice` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se creó `crates/mssql-orm-migrate/src/snapshot.rs` con los tipos públicos `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot` e `IndexColumnSnapshot`.
+- El contrato de snapshot se definió con `String` y `Vec<_>` para que pueda persistirse fuera de metadata estática, pero preservando el shape SQL Server ya fijado en `core`: `SqlServerType`, `IdentityMetadata`, nullability, PK, defaults, computed SQL, rowversion, longitudes y precisión/escala.
+- `TableSnapshot` retiene además `primary_key_name` y `primary_key_columns` para no perder información estructural necesaria en la siguiente subtarea de conversión desde metadata.
+- Se actualizó `crates/mssql-orm-migrate/src/lib.rs` para reexportar el módulo de snapshots y se añadieron pruebas unitarias que fijan lookups por schema/tabla/columna/índice y la preservación de shape específico de SQL Server.
+
+### Resultado
+
+- `mssql-orm-migrate` ya tiene una base estructural real para migraciones code-first y dejó de ser únicamente un marker crate.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Implementar conversión desde metadata de entidades hacia ModelSnapshot`, reutilizando directamente `EntityMetadata`, `ColumnMetadata` e `IndexMetadata` de `mssql-orm-core`.
+
+### Sesión: Desglose detallado de la Etapa 7
+
+- Se revisó el estado actual de `mssql-orm-migrate` y se confirmó que la tarea original de Etapa 7 seguía siendo demasiado amplia para ejecutarla como una sola unidad verificable.
+- Se reestructuró `docs/tasks.md` para dividir la Etapa 7 en subtareas concretas y secuenciales: definición de `ModelSnapshot`, conversión desde metadata, definición de `MigrationOperation`, diff de schemas/tablas, diff de columnas y pruebas unitarias del diff engine.
+- Se mantuvieron como tareas posteriores separadas la generación SQL de migraciones, la tabla `__mssql_orm_migrations`, la CLI y la validación real contra SQL Server.
+- Se actualizó `docs/context.md` para fijar como próximo foco la primera subtarea concreta de migraciones, en lugar de la etapa completa.
+
+### Resultado
+
+- La Etapa 7 quedó descompuesta en entregables pequeños, trazables y cerrables, evitando arrancar implementación sobre una tarea demasiado ambigua.
+
+### Validación
+
+- No se ejecutaron validaciones de Cargo porque esta sesión solo modificó documentación operativa.
+- Se verificó manualmente la consistencia del backlog y del nuevo foco operativo en `docs/tasks.md` y `docs/context.md`.
+
+### Próximo paso recomendado
+
+- Mover a `En Progreso` la subtarea `Etapa 7: Definir ModelSnapshot y snapshots mínimos de schema, tabla, columna e índice` e implementarla primero.
+
 ### Sesión: Snapshots y seguridad de parámetros del query builder público
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Agregar pruebas snapshot y de seguridad de parámetros para el query builder público` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
