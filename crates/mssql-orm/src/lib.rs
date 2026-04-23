@@ -4,6 +4,7 @@ extern crate self as mssql_orm;
 
 mod context;
 mod dbset_query;
+mod query_predicates;
 
 pub use mssql_orm_core as core;
 pub use mssql_orm_macros as macros;
@@ -15,9 +16,10 @@ pub use tokio;
 
 pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
+pub use query_predicates::EntityColumnPredicateExt;
 
 pub mod prelude {
-    pub use crate::{DbContext, DbSet, DbSetQuery};
+    pub use crate::{DbContext, DbSet, DbSetQuery, EntityColumnPredicateExt};
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
@@ -30,10 +32,11 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityMetadata,
-        IdentityMetadata, Insertable, OrmError, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
-        SqlValue,
+        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityColumnPredicateExt,
+        EntityMetadata, IdentityMetadata, Insertable, OrmError, PrimaryKeyMetadata, SqlServerType,
+        SqlTypeMapping, SqlValue,
     };
+    use mssql_orm_query::{Expr, Predicate};
 
     struct PublicEntity;
 
@@ -206,6 +209,21 @@ mod tests {
 
         assert_eq!(payload.entity_metadata().table, "audit_entries");
         assert_eq!(payload.metadata().column_name, "payload");
+    }
+
+    #[test]
+    fn exposes_public_column_predicate_extensions() {
+        assert_eq!(
+            DerivedUser::email.eq("ana@example.com".to_string()),
+            Predicate::eq(
+                Expr::from(DerivedUser::email),
+                Expr::value(SqlValue::String("ana@example.com".to_string()))
+            )
+        );
+        assert_eq!(
+            DerivedUser::display_name.is_null(),
+            Predicate::is_null(Expr::from(DerivedUser::display_name))
+        );
     }
 
     #[test]

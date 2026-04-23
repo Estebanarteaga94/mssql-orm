@@ -2,6 +2,62 @@
 
 ## 2026-04-23
 
+### Sesión: Predicados de comparación públicos sobre `EntityColumn`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer predicados de comparación públicos sobre EntityColumn` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/query_predicates.rs` como capa pública de extensiones sobre `EntityColumn<E>`.
+- La implementación se resolvió en la crate pública `mssql-orm` mediante el trait `EntityColumnPredicateExt`, evitando introducir una dependencia desde `mssql-orm-core` hacia `mssql-orm-query`.
+- La nueva API pública expone `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null` e `is_not_null`, devolviendo `Predicate` del AST existente.
+- La `prelude` pública y los reexports de `mssql-orm` ahora incluyen `EntityColumnPredicateExt`, habilitando llamadas estilo `Customer::active.eq(true)` desde código consumidor.
+- Se añadieron pruebas unitarias específicas para fijar la forma exacta de los `Predicate` generados y una prueba adicional en `crates/mssql-orm/src/lib.rs` para verificar que la extensión está disponible desde la superficie pública.
+- Fue necesario añadir una excepción puntual de `clippy::wrong_self_convention` porque el plan maestro exige explícitamente los nombres `is_null` e `is_not_null` como API pública.
+
+### Resultado
+
+- La primera subtarea de Etapa 6 quedó implementada y validada, dejando lista la base pública para continuar con predicados string y ordenamiento sin romper los límites arquitectónicos del workspace.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Exponer predicados string públicos sobre EntityColumn (contains, starts_with, ends_with)`, reutilizando la misma estrategia de trait público en `mssql-orm`.
+
+### Sesión: Desglose detallado de la Etapa 6
+
+- Se revisó la ruta real del plan maestro y se mantuvo como fuente de verdad `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se detectó que la tarea abierta de Etapa 6 seguía siendo demasiado amplia para ejecutarla sin mezclar varias responsabilidades públicas en una sola sesión.
+- Se reestructuró `docs/tasks.md` para dividir Etapa 6 en subtareas cerrables y secuenciales: predicados de comparación, predicados string, ordenamiento, `filter`/`order_by` en `DbSetQuery`, `limit`/`take`, paginación explícita, composición lógica de predicados, pruebas unitarias de API y snapshots de seguridad de parámetros.
+- Se retiró la tarea amplia de `En Progreso` y se dejó la sección sin trabajo activo, evitando que el backlog quede con una tarea ambigua o parcialmente definida.
+- Se actualizó `docs/context.md` para que el foco operativo ya no sea “Etapa 6” en general, sino la primera subtarea concreta a ejecutar en la siguiente sesión.
+
+### Resultado
+
+- El backlog quedó más granular, ordenado y listo para atacar Etapa 6 sin dejar subtareas implícitas ni mezclas de alcance.
+
+### Validación
+
+- No se ejecutaron validaciones de Cargo porque esta sesión solo reestructuró documentación operativa y no modificó código fuente.
+- Se verificó manualmente la consistencia del backlog revisando `docs/tasks.md` tras el desglose.
+
+### Próximo paso recomendado
+
+- Mover a `En Progreso` la subtarea `Etapa 6: Exponer predicados de comparación públicos sobre EntityColumn` e implementarla primero.
+
+### Sesión: Registrar connection string operativa de test
+
+- Se registró en `docs/context.md` la connection string local actualmente usada para validaciones reales e integraciones sobre SQL Server.
+- La referencia quedó indicada para `MSSQL_ORM_TEST_CONNECTION_STRING` y `DATABASE_URL`, de modo que futuras sesiones autónomas reutilicen la misma configuración cuando el entorno local no haya cambiado.
+- Se dejó nota explícita de que esta cadena es específica del entorno actual y debe actualizarse si cambian host, base o credenciales.
+
+### Resultado
+
+- La documentación operativa ahora contiene la configuración local concreta que se viene usando en validaciones reales, evitando ambigüedad entre sesiones.
+
 ### Sesión: Ejemplo funcional `basic-crud`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 5: Crear ejemplo funcional basic-crud` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

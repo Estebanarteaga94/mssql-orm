@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Iniciar la Etapa 6 implementando el query builder público con filtros, composición lógica, ordenamiento, limit y paginación, ahora que la Etapa 5 ya dejó CRUD base validado y un ejemplo funcional ejecutable.
+Continuar la Etapa 6 con la siguiente subtarea detallada: exponer predicados string públicos sobre `EntityColumn`, ahora que la base de predicados de comparación ya quedó disponible en la API pública.
 
 ## Dirección Arquitectónica Vigente
 
@@ -62,6 +62,7 @@ Iniciar la Etapa 6 implementando el query builder público con filtros, composic
 - La validación manual de esta sesión confirmó conectividad real con SQL Server local usando el login `sa`; la cadena original con `Database=test` no fue usable porque esa base no estaba accesible, así que la verificación se ejecutó contra `master`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
+- La crate pública `mssql-orm` ahora también expone el trait `EntityColumnPredicateExt` en su `prelude`, habilitando `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null` e `is_not_null` directamente sobre `EntityColumn`.
 - `DbSet<T>` ya encapsula una conexión compartida sobre `tokio::sync::Mutex<MssqlConnection<_>>`, expone metadata de entidad y ahora también expone `query()` y `query_with(SelectQuery)` como base pública para ejecución de queries por entidad.
 - `DbSet<T>` ahora también expone `find<K>()` para primary key simple, construyendo un `SelectQuery` filtrado desde la metadata de entidad y delegando la ejecución al runner base.
 - `DbSet<T>` ahora también expone `insert<I>()`, compilando un `InsertQuery` desde `Insertable<E>` y materializando la entidad devuelta por `OUTPUT INSERTED.*`.
@@ -91,6 +92,13 @@ Iniciar la Etapa 6 implementando el query builder público con filtros, composic
 - Historial de sesiones: `docs/worklog.md`
 - Arquitectura y decisiones: `README.md`, `docs/architecture/overview.md`, `docs/adr/`
 
+## Configuración Operativa Local
+
+- Connection string actualmente usada para validaciones reales e integraciones locales:
+  `Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;`
+- Usarla para `MSSQL_ORM_TEST_CONNECTION_STRING` en pruebas reales y para `DATABASE_URL` en el ejemplo `examples/basic-crud/` mientras el entorno local siga siendo el mismo.
+- Esta configuración es específica del entorno local actual; si SQL Server, credenciales o base cambian, debe actualizarse el mismo día en esta sección y en el `worklog`.
+
 ## Riesgos Inmediatos
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
@@ -104,6 +112,6 @@ Iniciar la Etapa 6 implementando el query builder público con filtros, composic
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 6: query builder público con filtros, composición lógica, ordenamiento, limit y paginación`.
-2. Reutilizar `DbSetQuery<T>` y el AST de `mssql-orm-query` como base, en lugar de introducir una segunda representación paralela.
+1. Implementar `Etapa 6: Exponer predicados string públicos sobre EntityColumn`.
+2. Continuar con ordenamiento y métodos fluentes sobre `DbSetQuery`, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
 3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
