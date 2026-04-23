@@ -380,6 +380,127 @@ async fn public_dbset_update_uses_rowversion_to_prevent_stale_writes() -> Result
 }
 
 #[tokio::test]
+async fn public_dbcontext_save_changes_persists_modified_tracked_entities() -> Result<(), OrmError>
+{
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewPublicCrudUser {
+                name: "Tracked".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+        let mut tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+
+        tracked.name = "Tracked Saved".to_string();
+        tracked.active = false;
+
+        let saved = db.save_changes().await?;
+        assert_eq!(saved, 1);
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(
+            tracked.current(),
+            &PublicCrudUser {
+                id: inserted.id,
+                name: "Tracked Saved".to_string(),
+                active: false,
+            }
+        );
+        assert_eq!(tracked.original(), tracked.current());
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, Some(tracked.current().clone()));
+
+        drop(tracked);
+        assert_eq!(registry.entry_count(), 0);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_save_changes_propagates_rowversion_conflicts() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes rowversion integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_versioned_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = VersionedPublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewVersionedPublicCrudUser {
+                name: "Tracked".to_string(),
+            })
+            .await?;
+
+        let mut tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+
+        tracked.name = "Tracked Stale".to_string();
+
+        let externally_updated = db
+            .users
+            .update(
+                inserted.id,
+                UpdateVersionedPublicCrudUser {
+                    name: Some("External Update".to_string()),
+                    version: Some(inserted.version.clone()),
+                },
+            )
+            .await?
+            .expect("external update should succeed");
+
+        let error = db.save_changes().await.unwrap_err();
+        assert_eq!(error, OrmError::ConcurrencyConflict);
+        assert_eq!(tracked.state(), EntityState::Modified);
+        assert_eq!(tracked.current().name, "Tracked Stale");
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, Some(externally_updated));
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_versioned_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
 async fn public_dbcontext_shares_tracking_registry_across_dbsets() -> Result<(), OrmError> {
     let Some(connection_string) = test_connection_string() else {
         eprintln!(
@@ -414,8 +535,8 @@ async fn public_dbcontext_shares_tracking_registry_across_dbsets() -> Result<(),
 
         assert_eq!(registry.entry_count(), 0);
 
-        let _ = db.users.find_tracked(inserted.id).await?;
-        let _ = db.versioned_users.find_tracked(versioned.id).await?;
+        let tracked_user = db.users.find_tracked(inserted.id).await?;
+        let tracked_versioned_user = db.versioned_users.find_tracked(versioned.id).await?;
 
         let registrations = registry.registrations();
         assert_eq!(registrations.len(), 2);
@@ -423,6 +544,10 @@ async fn public_dbcontext_shares_tracking_registry_across_dbsets() -> Result<(),
         assert_eq!(registrations[0].state, EntityState::Unchanged);
         assert_eq!(registrations[1].entity_rust_name, "VersionedPublicCrudUser");
         assert_eq!(registrations[1].state, EntityState::Unchanged);
+
+        drop(tracked_user);
+        drop(tracked_versioned_user);
+        assert_eq!(registry.entry_count(), 0);
 
         Ok(())
     }

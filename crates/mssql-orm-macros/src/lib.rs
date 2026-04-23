@@ -477,6 +477,39 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         })
         .collect::<Result<Vec<_>>>()?;
 
+    let save_changes_steps = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
+            Ok(quote! {
+                saved += self.#field_ident.save_tracked_modified().await?;
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let save_changes_bounds = fields
+        .iter()
+        .map(|field| {
+            let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "DbContext requiere campos con tipo DbSet<Entidad>",
+                )
+            })?;
+
+            Ok(quote! {
+                #entity_type: ::core::clone::Clone
+                    + ::mssql_orm::EntityPersist
+                    + ::mssql_orm::EntityPrimaryKey
+                    + ::mssql_orm::core::FromRow
+                    + ::core::marker::Send
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     Ok(quote! {
         impl ::mssql_orm::DbContext for #ident {
             fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
@@ -524,6 +557,15 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 T: Send,
             {
                 <Self as ::mssql_orm::DbContext>::transaction(self, operation).await
+            }
+
+            pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
+            where
+                #(#save_changes_bounds,)*
+            {
+                let mut saved = 0usize;
+                #(#save_changes_steps)*
+                Ok(saved)
             }
         }
 

@@ -2,11 +2,12 @@
 //!
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
-//! - persist changes through `save_changes()`
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs
 
 use core::ops::{Deref, DerefMut};
 use mssql_orm_core::Entity;
+use std::any::TypeId;
+use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 /// Lifecycle state for an experimentally tracked entity.
@@ -23,11 +24,10 @@ pub enum EntityState {
 /// `Tracked<T>` keeps the original snapshot together with the current value so
 /// later stages can compare and persist changes without relying on runtime
 /// proxies or reflection.
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tracked<T> {
-    original: T,
-    current: T,
-    state: EntityState,
+    inner: Box<TrackedInner<T>>,
+    registration_id: Option<usize>,
+    tracking_registry: Option<TrackingRegistryHandle>,
 }
 
 #[doc(hidden)]
@@ -40,28 +40,63 @@ pub struct TrackedEntityRegistration {
 #[doc(hidden)]
 #[derive(Debug, Default)]
 pub struct TrackingRegistry {
-    entries: Mutex<Vec<TrackedEntityRegistration>>,
+    state: Mutex<TrackingRegistryState>,
 }
 
 #[doc(hidden)]
 pub type TrackingRegistryHandle = Arc<TrackingRegistry>;
 
+struct TrackedInner<T> {
+    original: T,
+    current: T,
+    state: EntityState,
+}
+
+#[derive(Debug, Default)]
+struct TrackingRegistryState {
+    next_registration_id: usize,
+    entries: Vec<TrackingRegistration>,
+}
+
+#[derive(Debug)]
+struct TrackingRegistration {
+    registration_id: usize,
+    entity_type_id: TypeId,
+    entity_rust_name: &'static str,
+    inner_address: usize,
+    state_reader: unsafe fn(*const ()) -> EntityState,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RegisteredTracked<E> {
+    inner_address: usize,
+    _entity: PhantomData<fn() -> E>,
+}
+
 impl<T: Clone> Tracked<T> {
     /// Creates a tracked value loaded from persistence.
     pub fn from_loaded(entity: T) -> Self {
         Self {
-            original: entity.clone(),
-            current: entity,
-            state: EntityState::Unchanged,
+            inner: Box::new(TrackedInner {
+                original: entity.clone(),
+                current: entity,
+                state: EntityState::Unchanged,
+            }),
+            registration_id: None,
+            tracking_registry: None,
         }
     }
 
     /// Creates a tracked value that represents a new entity pending insertion.
     pub fn from_added(entity: T) -> Self {
         Self {
-            original: entity.clone(),
-            current: entity,
-            state: EntityState::Added,
+            inner: Box::new(TrackedInner {
+                original: entity.clone(),
+                current: entity,
+                state: EntityState::Added,
+            }),
+            registration_id: None,
+            tracking_registry: None,
         }
     }
 }
@@ -69,35 +104,45 @@ impl<T: Clone> Tracked<T> {
 impl<T> Tracked<T> {
     /// Returns the original snapshot captured when tracking started.
     pub fn original(&self) -> &T {
-        &self.original
+        &self.inner.original
     }
 
     /// Returns the current in-memory value.
     pub fn current(&self) -> &T {
-        &self.current
+        &self.inner.current
     }
 
     /// Returns the current tracking state.
     pub const fn state(&self) -> EntityState {
-        self.state
+        self.inner.state
     }
 
     /// Returns mutable access to the current value and marks the entity as
     /// modified when it was previously loaded as unchanged.
     pub fn current_mut(&mut self) -> &mut T {
         self.mark_modified_if_unchanged();
-        &mut self.current
-    }
-
-    /// Consumes the tracked wrapper and returns the current entity value.
-    pub fn into_current(self) -> T {
-        self.current
+        &mut self.inner.current
     }
 
     fn mark_modified_if_unchanged(&mut self) {
-        if self.state == EntityState::Unchanged {
-            self.state = EntityState::Modified;
+        if self.inner.state == EntityState::Unchanged {
+            self.inner.state = EntityState::Modified;
         }
+    }
+}
+
+impl<T: Clone> Tracked<T> {
+    /// Consumes the tracked wrapper and returns the current entity value.
+    pub fn into_current(self) -> T {
+        self.current().clone()
+    }
+}
+
+impl<T: Entity> Tracked<T> {
+    pub(crate) fn attach_registry(&mut self, registry: TrackingRegistryHandle) {
+        let registration_id = registry.register(self);
+        self.registration_id = Some(registration_id);
+        self.tracking_registry = Some(registry);
     }
 }
 
@@ -116,28 +161,131 @@ impl<T> DerefMut for Tracked<T> {
 }
 
 impl TrackingRegistry {
-    pub fn register_loaded<E: Entity>(&self, tracked: &Tracked<E>) {
-        self.entries
-            .lock()
-            .expect("tracking registry mutex poisoned")
-            .push(TrackedEntityRegistration {
-                entity_rust_name: E::metadata().rust_name,
-                state: tracked.state(),
-            });
+    pub(crate) fn register<E: Entity>(&self, tracked: &Tracked<E>) -> usize {
+        let mut state = self.state.lock().expect("tracking registry mutex poisoned");
+        let registration_id = state.next_registration_id;
+        state.next_registration_id += 1;
+        state.entries.push(TrackingRegistration {
+            registration_id,
+            entity_type_id: TypeId::of::<E>(),
+            entity_rust_name: E::metadata().rust_name,
+            inner_address: tracked.inner.as_ref() as *const TrackedInner<E> as usize,
+            state_reader: state_reader::<E>,
+        });
+        registration_id
+    }
+
+    pub(crate) fn unregister(&self, registration_id: usize) {
+        let mut state = self.state.lock().expect("tracking registry mutex poisoned");
+        state
+            .entries
+            .retain(|entry| entry.registration_id != registration_id);
+    }
+
+    pub(crate) fn tracked_for<E: Entity>(&self) -> Vec<RegisteredTracked<E>> {
+        let state = self.state.lock().expect("tracking registry mutex poisoned");
+
+        state
+            .entries
+            .iter()
+            .filter(|entry| entry.entity_type_id == TypeId::of::<E>())
+            .map(|entry| RegisteredTracked::<E> {
+                inner_address: entry.inner_address,
+                _entity: PhantomData,
+            })
+            .collect()
     }
 
     pub fn entry_count(&self) -> usize {
-        self.entries
+        self.state
             .lock()
             .expect("tracking registry mutex poisoned")
+            .entries
             .len()
     }
 
     pub fn registrations(&self) -> Vec<TrackedEntityRegistration> {
-        self.entries
+        self.state
             .lock()
             .expect("tracking registry mutex poisoned")
-            .clone()
+            .entries
+            .iter()
+            .map(|entry| TrackedEntityRegistration {
+                entity_rust_name: entry.entity_rust_name,
+                state: unsafe { (entry.state_reader)(entry.inner_address as *const ()) },
+            })
+            .collect()
+    }
+}
+
+impl<E: Clone> RegisteredTracked<E> {
+    pub(crate) fn state(&self) -> EntityState {
+        unsafe { (&*(self.inner_address as *const TrackedInner<E>)).state }
+    }
+
+    pub(crate) fn current_clone(&self) -> E {
+        unsafe {
+            (&*(self.inner_address as *const TrackedInner<E>))
+                .current
+                .clone()
+        }
+    }
+
+    pub(crate) fn sync_persisted(&self, persisted: E) {
+        unsafe {
+            let inner = self.inner_address as *mut TrackedInner<E>;
+            (*inner).original = persisted.clone();
+            (*inner).current = persisted;
+            (*inner).state = EntityState::Unchanged;
+        }
+    }
+}
+
+unsafe fn state_reader<E>(ptr: *const ()) -> EntityState {
+    unsafe { (&*(ptr.cast::<TrackedInner<E>>())).state }
+}
+
+impl<T: Clone> Clone for Tracked<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Box::new(TrackedInner {
+                original: self.original().clone(),
+                current: self.current().clone(),
+                state: self.state(),
+            }),
+            registration_id: None,
+            tracking_registry: None,
+        }
+    }
+}
+
+impl<T: core::fmt::Debug> core::fmt::Debug for Tracked<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Tracked")
+            .field("original", self.original())
+            .field("current", self.current())
+            .field("state", &self.state())
+            .finish()
+    }
+}
+
+impl<T: PartialEq> PartialEq for Tracked<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.original() == other.original()
+            && self.current() == other.current()
+            && self.state() == other.state()
+    }
+}
+
+impl<T: Eq> Eq for Tracked<T> {}
+
+impl<T> Drop for Tracked<T> {
+    fn drop(&mut self) {
+        if let (Some(registration_id), Some(registry)) =
+            (self.registration_id.take(), self.tracking_registry.take())
+        {
+            registry.unregister(registration_id);
+        }
     }
 }
 
@@ -145,6 +293,7 @@ impl TrackingRegistry {
 mod tests {
     use super::{EntityState, Tracked, TrackedEntityRegistration, TrackingRegistry};
     use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata};
+    use std::sync::Arc;
 
     #[derive(Clone)]
     struct DummyEntity;
@@ -228,10 +377,10 @@ mod tests {
 
     #[test]
     fn tracking_registry_records_loaded_entities() {
-        let registry = TrackingRegistry::default();
-        let tracked = Tracked::from_loaded(DummyEntity);
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
 
-        registry.register_loaded::<DummyEntity>(&tracked);
+        tracked.attach_registry(Arc::clone(&registry));
 
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(
@@ -241,5 +390,18 @@ mod tests {
                 state: EntityState::Unchanged,
             }]
         );
+    }
+
+    #[test]
+    fn dropping_tracked_entity_unregisters_it_from_registry() {
+        let registry = Arc::new(TrackingRegistry::default());
+
+        {
+            let mut tracked = Tracked::from_loaded(DummyEntity);
+            tracked.attach_registry(Arc::clone(&registry));
+            assert_eq!(registry.entry_count(), 1);
+        }
+
+        assert_eq!(registry.entry_count(), 0);
     }
 }

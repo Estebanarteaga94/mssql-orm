@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 ya tiene carga trackeada mínima, transición local a `Modified` y un registro interno compartido por `DbContext` derivado para entidades cargadas experimentalmente. El siguiente foco natural es implementar `save_changes()` para entidades `Modified`.
+La Etapa 12 ya permite cargar entidades trackeadas, marcarlas como `Modified` y persistirlas mediante `db.save_changes().await?`. El siguiente foco natural es extender el tracking experimental a `Added`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -181,11 +181,12 @@ La Etapa 12 ya tiene carga trackeada mínima, transición local a `Modified` y u
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
 - La Etapa 12 ya no figura como tarea monolítica en el backlog; quedó dividida en entregables pequeños para evitar que una sola sesión mezcle modelado base, carga trackeada, wiring de contexto, persistencia y cobertura.
 - La crate pública `mssql-orm` ahora expone `Tracked<T>` y `EntityState` como surface experimental mínima de tracking.
-- `Tracked<T>` quedó definido como wrapper snapshot-based con `original`, `current` y `state`, y hoy expone constructores mínimos (`from_loaded`, `from_added`), accessors de lectura y acceso mutable observado (`current_mut`, `Deref`, `DerefMut`), sin persistencia todavía.
-- La documentación del módulo de tracking deja explícitas las exclusiones vigentes de esta etapa: no hay `save_changes` y no se reemplaza la API explícita de `DbSet`/`ActiveRecord`.
+- `Tracked<T>` quedó definido como wrapper snapshot-based con `original`, `current` y `state`, y hoy expone constructores mínimos (`from_loaded`, `from_added`), accessors de lectura y acceso mutable observado (`current_mut`, `Deref`, `DerefMut`), además de `into_current()` por clon seguro del valor actual.
+- La documentación del módulo de tracking deja explícitas las exclusiones vigentes de esta etapa: todavía no hay soporte de `Added`/`Deleted` ni reemplazo de la API explícita de `DbSet`/`ActiveRecord`.
 - `DbSet::find_tracked(id)` ya está disponible para entidades con PK simple y reutiliza exactamente `find(...)` para cargar la fila y construir `Tracked::from_loaded(...)`.
 - El estado `Tracked<T>::state()` ya transiciona de `Unchanged` a `Modified` en cuanto se solicita acceso mutable a la entidad actual; en esta etapa no existe todavía diff estructural entre snapshots.
 - `#[derive(DbContext)]` ahora crea un `TrackingRegistry` interno compartido por todos los `DbSet` del contexto derivado, y `find_tracked(...)` registra allí las entidades cargadas como base experimental para pasos posteriores.
+- `#[derive(DbContext)]` ahora también genera `save_changes()`, que hoy persiste únicamente entidades trackeadas vivas en estado `Modified` reutilizando `DbSet::update`.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y sigue retornando `Option<E>` para ausencia de fila, pero los mismatches detectados por `rowversion` ahora salen como `OrmError::ConcurrencyConflict`.
@@ -193,7 +194,8 @@ La Etapa 12 ya tiene carga trackeada mínima, transición local a `Modified` y u
 - `save` también queda limitado a PK simple; en PK con `identity` depende de la convención explícita `0 => insert`, y para PK natural simple usa una comprobación previa de existencia antes de decidir entre inserción o actualización.
 - El futuro change tracking debe montarse sobre la infraestructura ya existente de `DbSet`, `save`, `delete`, `rowversion` y `ConcurrencyConflict`; no debe crear un segundo pipeline de persistencia.
 - `Tracked<T>` y `save_changes` siguen siendo explícitamente experimentales y no deben reemplazar la API CRUD actual ni introducir reflexión/proxies tipo EF Core.
-- El tracking ya observa acceso mutable local sobre el wrapper y ya existe una colección interna compartida en `DbContext`, pero esa colección todavía solo registra cargas y no contiene referencias vivas sincronizadas con las mutaciones posteriores del wrapper.
+- El tracking ya observa acceso mutable local sobre el wrapper, mantiene referencias vivas a entidades trackeadas mientras el wrapper exista y `save_changes()` ya persiste `Modified`; sin embargo, al hacer `drop` del wrapper este deja de participar en la unidad de trabajo experimental.
+- `save_changes()` actual solo cubre entidades `Modified`; `Added` y `Deleted` siguen pendientes y no deben inferirse automáticamente en esta etapa.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - `crates/mssql-orm/tests/stage5_public_crud.rs` comparte nombres de tabla fijos entre tests; para evitar interferencia entre casos, su ejecución fiable sigue siendo serial (`-- --test-threads=1`) mientras no se aíslen los recursos por prueba.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
@@ -201,7 +203,7 @@ La Etapa 12 ya tiene carga trackeada mínima, transición local a `Modified` y u
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 12: save_changes() para entidades Modified, reutilizando DbSet::update y preservando rowversion/ConcurrencyConflict`.
-2. Después extender el tracking experimental a `Added` y `Deleted` sin duplicar la semántica CRUD existente.
+1. Implementar `Etapa 12: Soportar estado Added con add(tracked) o equivalente explícito y persistencia vía insert`.
+2. Después extender el tracking experimental a `Deleted` sin duplicar la semántica CRUD existente.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

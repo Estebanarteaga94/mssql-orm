@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: `save_changes()` experimental para entidades `Modified`
+
+- Se mantuvo como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, acotando esta sesión a `save_changes()` solo para entidades `Modified`, sin adelantar todavía soporte de `Added` o `Deleted`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Implementar save_changes() para entidades Modified, reutilizando DbSet::update y preservando rowversion/ConcurrencyConflict` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/tracking.rs` dejó de registrar solo metadata estática y ahora mantiene referencias estables a wrappers `Tracked<T>` vivos mediante almacenamiento heap-stable; además limpia automáticamente sus entradas del registro al hacer `drop` del wrapper.
+- `Tracked<T>` preserva la surface observable ya fijada (`original`, `current`, `state`, `current_mut`, `Deref`, `DerefMut`), pero ahora `into_current()` devuelve un clon del valor actual para evitar romper seguridad al combinar `Drop` con el registro interno.
+- `crates/mssql-orm/src/context.rs` ahora implementa `DbSet::save_tracked_modified()` como primitive interna que recorre las entidades trackeadas vivas del tipo correspondiente, filtra las que están en `Modified`, ejecuta `update` reutilizando la infraestructura existente y sincroniza el snapshot del wrapper a `Unchanged` cuando la persistencia tiene éxito.
+- `crates/mssql-orm-macros/src/lib.rs` ahora genera `save_changes()` en `#[derive(DbContext)]`, sumando los resultados de cada `DbSet` derivado y devolviendo la cantidad total de entidades `Modified` persistidas.
+- La semántica de concurrencia se preservó: si una entidad trackeada con `rowversion` queda stale, `save_changes()` propaga `OrmError::ConcurrencyConflict` y deja el wrapper en estado `Modified`, sin sobreescribir el snapshot local.
+- Se añadieron integraciones nuevas en `crates/mssql-orm/tests/stage5_public_crud.rs` para cubrir `save_changes()` exitoso sobre una entidad trackeada y el conflicto real de `rowversion` al guardar un wrapper stale.
+- Se ajustaron fixtures de compilación válidos (`dbcontext_valid.rs`, `query_builder_public_valid.rs`) para que las entidades de prueba implementen `FromRow`, porque `#[derive(DbContext)]` ahora expone también `save_changes()` sobre la crate pública.
+
+### Resultado
+
+- La Etapa 12 ya permite persistir entidades `Modified` cargadas vía `find_tracked(...)` usando `db.save_changes().await?`, manteniendo `rowversion` y `ConcurrencyConflict` alineados con la infraestructura ya cerrada en la Etapa 11.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+- `cargo test -p mssql-orm --test trybuild`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `save_changes()` actual solo opera sobre wrappers `Tracked<T>` que siguen vivos; si un wrapper se descarta, su entrada se elimina del registro y deja de participar en la persistencia experimental, lo cual es consistente con el diseño actual pero debe mantenerse explícito mientras no exista una unidad de trabajo más rica.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Soportar estado Added con add(tracked) o equivalente explícito y persistencia vía insert`.
+
 ### Sesión: colección interna mínima de entidades trackeadas en `DbContext`
 
 - Se mantuvo como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md` y se acotó la subtarea a introducir una colección interna compartida, sin adelantar todavía `save_changes()`, `add` o `remove`.

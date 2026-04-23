@@ -4,7 +4,7 @@ use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::EntityPersist;
+use crate::{EntityPersist, EntityPrimaryKey};
 use mssql_orm_core::{
     Changeset, Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping, SqlValue,
 };
@@ -124,16 +124,47 @@ impl<E: Entity> DbSet<E> {
         E: Clone + FromRow + Send,
         K: SqlTypeMapping,
     {
-        let tracked = self
+        let mut tracked = self
             .find(key)
             .await
             .map(|entity| entity.map(Tracked::from_loaded))?;
 
-        if let Some(entity) = tracked.as_ref() {
-            self.tracking_registry.register_loaded::<E>(entity);
+        if let Some(entity) = tracked.as_mut() {
+            entity.attach_registry(Arc::clone(&self.tracking_registry));
         }
 
         Ok(tracked)
+    }
+
+    #[doc(hidden)]
+    pub async fn save_tracked_modified(&self) -> Result<usize, OrmError>
+    where
+        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send,
+    {
+        let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let mut saved = 0;
+
+        for tracked in tracked_entities {
+            if tracked.state() != crate::EntityState::Modified {
+                continue;
+            }
+
+            let current: E = tracked.current_clone();
+            let key = current.primary_key_value()?;
+            let persisted = self
+                .update_entity_by_sql_value(key, &current, current.concurrency_token()?)
+                .await?
+                .ok_or_else(|| {
+                    OrmError::new(
+                        "save_changes could not update a tracked entity for the current primary key",
+                    )
+                })?;
+
+            tracked.sync_persisted(persisted);
+            saved += 1;
+        }
+
+        Ok(saved)
     }
 
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
