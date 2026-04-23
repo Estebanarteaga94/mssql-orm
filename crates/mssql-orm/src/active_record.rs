@@ -81,7 +81,7 @@ pub trait ActiveRecord: Entity + Sized {
                             <Self as EntityPersist>::sync_persisted(self, persisted);
                         } else {
                             return Err(OrmError::new(
-                                "ActiveRecord save detected a rowversion mismatch while updating the current entity",
+                                "ActiveRecord save could not update a row for the current primary key",
                             ));
                         }
                     } else {

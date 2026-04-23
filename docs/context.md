@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 11 ya arrancó con soporte técnico de `rowversion`; el siguiente foco inmediato es cerrar la semántica pública de conflicto devolviendo `OrmError::ConcurrencyConflict`.
+La Etapa 11 quedó cerrada: ya existe soporte técnico de `rowversion` y los conflictos se expresan como `OrmError::ConcurrencyConflict`. El siguiente foco natural pasa a la Etapa 12.
 
 ## Dirección Arquitectónica Vigente
 
@@ -145,9 +145,11 @@ La Etapa 11 ya arrancó con soporte técnico de `rowversion`; el siguiente foco 
 - `#[derive(Entity)]` ahora genera además contratos ocultos de persistencia para Active Record: valores insertables, cambios actualizables, sincronización desde la fila materializada y estrategia de persistencia basada en la PK simple.
 - La estrategia actual de `save` es explícita y mínima: PK simple `identity` con valor `0` inserta y refresca la entidad; PK simple sin `identity` usa `find` por PK para decidir entre inserción y actualización; cualquier PK compuesta sigue rechazándose en esta etapa.
 - `mssql-orm-core` ahora también expone `EntityMetadata::rowversion_column()` y `Changeset::concurrency_token()` para permitir que la concurrencia optimista se apoye en metadata y contracts ya presentes.
+- `mssql-orm-core` ahora modela `OrmError` como enum estable con `Message(&'static str)` y `ConcurrencyConflict`, manteniendo `OrmError::new(...)` como constructor de compatibilidad para errores simples del estado actual.
 - `#[derive(Changeset)]` ahora detecta campos mapeados a columnas `rowversion`: no los incluye en el `SET`, pero sí los usa como token de concurrencia para construir el `WHERE ... AND [version] = @Pn`.
 - `DbSet::update(...)` ya soporta predicados de concurrencia optimista cuando el `Changeset` aporta token; si el token es viejo, la operación retorna `None` y no pisa datos silenciosamente.
-- `ActiveRecord::save(&db)` y `entity.delete(&db)` también reutilizan `rowversion` cuando la entidad lo tiene; `save` ya devuelve error genérico ante mismatch y `delete` devuelve `false` si la fila dejó de coincidir.
+- `DbSet::update(...)`, las rutas internas de borrado/update por `SqlValue` y Active Record ya elevan los mismatches reales de `rowversion` a `OrmError::ConcurrencyConflict` cuando la PK todavía existe.
+- `ActiveRecord::save(&db)` y `entity.delete(&db)` también reutilizan `rowversion` cuando la entidad lo tiene y ahora propagan `OrmError::ConcurrencyConflict` en lugar de mensaje genérico o `false`.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable`, `Changeset` y `DbContext`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
@@ -176,19 +178,18 @@ La Etapa 11 ya arrancó con soporte técnico de `rowversion`; el siguiente foco 
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
-- La primera subtarea de la Etapa 11 también quedó cerrada: la infraestructura actual ya incorpora `rowversion` en update/delete/save sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
+- La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
-- `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila; con `rowversion` ya implementado, `None` también puede significar conflicto de concurrencia hasta que se cierre la subtarea siguiente de `ConcurrencyConflict`.
-- `delete` tampoco soporta primary key compuesta en esta etapa y retorna `bool` para distinguir entre fila eliminada y ausencia de fila; con `rowversion`, `false` ya cubre también mismatch de concurrencia hasta que exista el error dedicado.
+- `update` tampoco soporta primary key compuesta en esta etapa y sigue retornando `Option<E>` para ausencia de fila, pero los mismatches detectados por `rowversion` ahora salen como `OrmError::ConcurrencyConflict`.
+- `delete` tampoco soporta primary key compuesta en esta etapa y sigue retornando `bool` para ausencia de fila cuando no hay token de concurrencia; con `rowversion`, los mismatches también salen como `OrmError::ConcurrencyConflict`.
 - `save` también queda limitado a PK simple; en PK con `identity` depende de la convención explícita `0 => insert`, y para PK natural simple usa una comprobación previa de existencia antes de decidir entre inserción o actualización.
-- La semántica observable de conflicto todavía no está unificada: hoy `DbSet::update` devuelve `None`, `entity.delete(&db)` devuelve `false` y `entity.save(&db)` devuelve un `OrmError` genérico cuando el token `rowversion` no coincide.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 11: Retornar OrmError::ConcurrencyConflict en conflictos de actualización o borrado`.
-2. Reutilizar la ruta actual de `update/save/delete` sobre `DbSet` y Active Record, promoviendo los no-op detectados por `rowversion` a un error semántico estable.
+1. Iniciar `Etapa 12: Implementar change tracking experimental con Tracked<T> y save_changes`.
+2. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

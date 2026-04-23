@@ -329,8 +329,9 @@ async fn public_dbset_update_uses_rowversion_to_prevent_stale_writes() -> Result
                     version: Some(inserted.version.clone()),
                 },
             )
-            .await?;
-        assert_eq!(stale, None);
+            .await
+            .unwrap_err();
+        assert_eq!(stale, OrmError::ConcurrencyConflict);
 
         let persisted = db.users.find(updated.id).await?;
         assert_eq!(persisted, Some(updated.clone()));

@@ -122,10 +122,26 @@ impl<E: Entity> DbSet<E> {
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
-        let compiled = SqlServerCompiler::compile_update(&self.update_query(key, &changeset)?)?;
+        let key = key.to_sql_value();
+        let concurrency_token = changeset.concurrency_token()?;
+        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
+            key.clone(),
+            changeset.changes(),
+            concurrency_token.clone(),
+        )?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await;
-        connection.fetch_one(compiled).await
+        let updated = connection.fetch_one(compiled).await?;
+        drop(connection);
+
+        if updated.is_none()
+            && concurrency_token.is_some()
+            && self.find_by_sql_value(key).await?.is_some()
+        {
+            return Err(OrmError::concurrency_conflict());
+        }
+
+        Ok(updated)
     }
 
     pub async fn delete<K>(&self, key: K) -> Result<bool, OrmError>
@@ -196,13 +212,23 @@ impl<E: Entity> DbSet<E> {
         E: FromRow + Send,
     {
         let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
-            key,
+            key.clone(),
             changes,
-            concurrency_token,
+            concurrency_token.clone(),
         )?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await;
-        connection.fetch_one(compiled).await
+        let updated = connection.fetch_one(compiled).await?;
+        drop(connection);
+
+        if updated.is_none()
+            && concurrency_token.is_some()
+            && self.find_by_sql_value(key).await?.is_some()
+        {
+            return Err(OrmError::concurrency_conflict());
+        }
+
+        Ok(updated)
     }
 
     pub(crate) async fn update_entity_by_sql_value(
@@ -266,6 +292,7 @@ impl<E: Entity> DbSet<E> {
         InsertQuery::for_entity::<E, _>(&RawInsertable(values))
     }
 
+    #[cfg(test)]
     fn update_query<K, C>(&self, key: K, changeset: &C) -> Result<UpdateQuery, OrmError>
     where
         K: SqlTypeMapping,

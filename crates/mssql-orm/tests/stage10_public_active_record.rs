@@ -281,13 +281,10 @@ async fn public_active_record_respects_rowversion_on_save_and_delete() -> Result
         stale.name = "Stale".to_string();
 
         let save_error = stale.save(&db).await.unwrap_err();
-        assert_eq!(
-            save_error.message(),
-            "ActiveRecord save detected a rowversion mismatch while updating the current entity"
-        );
+        assert_eq!(save_error, OrmError::ConcurrencyConflict);
 
-        let deleted = stale.delete(&db).await?;
-        assert!(!deleted);
+        let delete_error = stale.delete(&db).await.unwrap_err();
+        assert_eq!(delete_error, OrmError::ConcurrencyConflict);
 
         let deleted_current = user.delete(&db).await?;
         assert!(deleted_current);

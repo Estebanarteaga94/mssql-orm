@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
 - [ ] Etapa 12: Implementar change tracking experimental con `Tracked<T>` y `save_changes`
 - [ ] Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
@@ -11,6 +10,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 11: Retornar `OrmError::ConcurrencyConflict` en conflictos de actualización o borrado
 - [x] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
 - [x] Etapa 10: Diseñar e implementar `entity.save(&db)` sobre Active Record con estrategia explícita de PK y persistencia
 - [x] Etapa 10: Diseñar e implementar `entity.delete(&db)` sobre Active Record sin duplicar la lógica de `DbSet`

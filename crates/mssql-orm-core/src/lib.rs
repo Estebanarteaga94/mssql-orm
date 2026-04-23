@@ -8,23 +8,31 @@ use uuid::Uuid;
 
 /// Common error type placeholder for the workspace foundations.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OrmError {
-    message: &'static str,
+pub enum OrmError {
+    Message(&'static str),
+    ConcurrencyConflict,
 }
 
 impl OrmError {
     pub const fn new(message: &'static str) -> Self {
-        Self { message }
+        Self::Message(message)
+    }
+
+    pub const fn concurrency_conflict() -> Self {
+        Self::ConcurrencyConflict
     }
 
     pub const fn message(&self) -> &'static str {
-        self.message
+        match self {
+            Self::Message(message) => message,
+            Self::ConcurrencyConflict => "concurrency conflict",
+        }
     }
 }
 
 impl fmt::Display for OrmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.message)
+        f.write_str(self.message())
     }
 }
 
@@ -727,6 +735,14 @@ mod tests {
         let error = OrmError::new("foundation");
         assert_eq!(error.message(), "foundation");
         assert_eq!(error.to_string(), "foundation");
+    }
+
+    #[test]
+    fn exposes_concurrency_conflict_error() {
+        let error = OrmError::concurrency_conflict();
+        assert_eq!(error, OrmError::ConcurrencyConflict);
+        assert_eq!(error.message(), "concurrency conflict");
+        assert_eq!(error.to_string(), "concurrency conflict");
     }
 
     #[test]

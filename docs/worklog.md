@@ -2,6 +2,40 @@
 
 ## 2026-04-23
 
+### Sesión: `OrmError::ConcurrencyConflict` para conflictos de actualización y borrado
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó como referencia para cerrar la segunda subtarea de la Etapa 11.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 11: Retornar OrmError::ConcurrencyConflict en conflictos de actualización o borrado` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-core/src/lib.rs` ahora modela `OrmError` como enum estable con `Message(&'static str)` y `ConcurrencyConflict`, preservando `OrmError::new(...)` para el resto del workspace y alineando la surface con el shape previsto por el plan.
+- `crates/mssql-orm/src/context.rs` ahora distingue entre “no hubo fila” y “hubo conflicto de concurrencia”: cuando `update` o las rutas internas de update/delete operan con token `rowversion`, no afectan filas y la PK todavía existe, se promueve el resultado a `OrmError::ConcurrencyConflict`.
+- `crates/mssql-orm/src/active_record.rs` dejó de exponer un mensaje ad hoc para el mismatch de `rowversion`; `save(&db)` y `delete(&db)` ahora propagan `OrmError::ConcurrencyConflict` desde `DbSet`.
+- Se actualizaron `crates/mssql-orm/tests/stage5_public_crud.rs` y `crates/mssql-orm/tests/stage10_public_active_record.rs` para fijar la nueva semántica observable: stale update y stale delete ya no se ven como `None`, `false` o mensaje genérico, sino como `OrmError::ConcurrencyConflict`.
+
+### Resultado
+
+- La Etapa 11 quedó cerrada: el ORM ya evita overwrites silenciosos con `rowversion` y además expresa esos conflictos con un error público estable.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-core --lib`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test stage5_public_crud`
+- `cargo test -p mssql-orm --test stage10_public_active_record`
+- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La conversión a `ConcurrencyConflict` se activa solo cuando realmente existe token `rowversion`; operaciones sin token siguen preservando su contrato previo (`Option`/`bool`/mensajes existentes).
+
+### Próximo paso recomendado
+
+- Iniciar la Etapa 12 con el diseño de `Tracked<T>` y `save_changes`, reutilizando la semántica de conflicto ya fijada en la Etapa 11.
+
 ### Sesión: soporte de concurrencia optimista con `rowversion`
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad para la primera subtarea de la Etapa 11.
