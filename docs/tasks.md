@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 6: Exponer `limit` y `take` en `DbSetQuery` reutilizando `Pagination` sin duplicar semántica
 - [ ] Etapa 6: Exponer paginación pública en `DbSetQuery` con request explícito y contrato estable
 - [ ] Etapa 6: Implementar composición lógica pública de predicados (`and`, `or`, `not`) sin introducir un AST paralelo
 - [ ] Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado
@@ -27,6 +26,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 6: Exponer `limit` y `take` en `DbSetQuery` reutilizando `Pagination` sin duplicar semántica
 - [x] Etapa 6: Exponer métodos fluentes en `DbSetQuery` para `filter` y `order_by` reutilizando `SelectQuery`
 - [x] Etapa 6: Exponer ordenamiento público por columna (`asc`, `desc`) alineado con el AST existente
 - [x] Etapa 6: Exponer predicados string públicos sobre `EntityColumn` (`contains`, `starts_with`, `ends_with`)

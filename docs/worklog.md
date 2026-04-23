@@ -2,6 +2,28 @@
 
 ## 2026-04-23
 
+### Sesión: `limit` y `take` en `DbSetQuery`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer limit y take en DbSetQuery` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/dbset_query.rs` para exponer `DbSetQuery::limit(u64)` y `DbSetQuery::take(u64)`.
+- La implementación reutiliza `Pagination::new(0, limit)`, dejando `take` como alias directo de `limit` y evitando crear una semántica paralela para recorte de resultados.
+- Se añadieron pruebas unitarias para validar que `limit` genera paginación con `offset = 0` y que `take` produce exactamente el mismo `SelectQuery` interno.
+- No fue necesario modificar `mssql-orm-query` ni `mssql-orm-sqlserver`, porque esta subtarea solo hizo accesible desde la API pública una capacidad ya soportada por `Pagination` y por la compilación SQL existente.
+
+### Resultado
+
+- `DbSetQuery` ya soporta recorte básico de resultados con `limit` y `take`, alineado con la API objetivo del plan maestro y sin duplicar contratos internos.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Exponer paginación pública en DbSetQuery con request explícito y contrato estable`.
+
 ### Sesión: Métodos fluentes `filter` y `order_by` en `DbSetQuery`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer métodos fluentes en DbSetQuery para filter y order_by` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

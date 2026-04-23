@@ -1,6 +1,6 @@
 use crate::context::SharedConnection;
 use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
-use mssql_orm_query::{CountQuery, OrderBy, Predicate, SelectQuery};
+use mssql_orm_query::{CountQuery, OrderBy, Pagination, Predicate, SelectQuery};
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[derive(Clone)]
@@ -32,6 +32,15 @@ impl<E: Entity> DbSetQuery<E> {
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.select_query = self.select_query.order_by(order);
         self
+    }
+
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.select_query = self.select_query.paginate(Pagination::new(0, limit));
+        self
+    }
+
+    pub fn take(self, limit: u64) -> Self {
+        self.limit(limit)
     }
 
     pub fn select_query(&self) -> &SelectQuery {
@@ -123,7 +132,9 @@ mod tests {
     use mssql_orm_core::{
         Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
     };
-    use mssql_orm_query::{Expr, OrderBy, Predicate, SelectQuery, SortDirection, TableRef};
+    use mssql_orm_query::{
+        Expr, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
+    };
 
     struct TestEntity;
 
@@ -238,6 +249,28 @@ mod tests {
                     SortDirection::Asc,
                 ))
         );
+    }
+
+    #[test]
+    fn dbset_query_limit_builds_zero_offset_pagination() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset.query().limit(25);
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>().paginate(Pagination::new(0, 25))
+        );
+    }
+
+    #[test]
+    fn dbset_query_take_is_alias_for_limit() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let limited = dbset.query().limit(10).into_select_query();
+        let taken = dbset.query().take(10).into_select_query();
+
+        assert_eq!(limited, taken);
     }
 
     #[test]
