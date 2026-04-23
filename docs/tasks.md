@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos
 - [ ] Etapa 7: Implementar generación SQL y tabla `__mssql_orm_migrations`
 - [ ] Etapa 7: Implementar CLI mínima con `migration add`, `database update` y `migration list`
 - [ ] Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real
@@ -22,6 +21,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos
 - [x] Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas
 - [x] Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas
 - [x] Etapa 7: Definir `MigrationOperation` y payloads básicos para schema, tabla y columna

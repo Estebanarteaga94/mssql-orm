@@ -156,3 +156,282 @@ fn column_map(table: &TableSnapshot) -> BTreeMap<String, &ColumnSnapshot> {
         .map(|column| (column.name.clone(), column))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{diff_column_operations, diff_schema_and_table_operations};
+    use crate::{
+        AddColumn, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn, DropSchema,
+        DropTable, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+    };
+    use mssql_orm_core::{IdentityMetadata, SqlServerType};
+
+    fn column(
+        name: &str,
+        sql_type: SqlServerType,
+        nullable: bool,
+        max_length: Option<u32>,
+    ) -> ColumnSnapshot {
+        ColumnSnapshot::new(
+            name,
+            sql_type,
+            nullable,
+            name == "id",
+            (name == "id").then(|| IdentityMetadata::new(1, 1)),
+            None,
+            None,
+            name == "version",
+            name != "id" && name != "version",
+            name != "id" && name != "version",
+            max_length,
+            None,
+            None,
+        )
+    }
+
+    fn table(name: &str, columns: Vec<ColumnSnapshot>) -> TableSnapshot {
+        TableSnapshot::new(
+            name,
+            columns,
+            Some(format!("pk_{name}")),
+            vec!["id".to_string()],
+            vec![],
+        )
+    }
+
+    fn schema(name: &str, tables: Vec<TableSnapshot>) -> SchemaSnapshot {
+        SchemaSnapshot::new(name, tables)
+    }
+
+    #[test]
+    fn schema_and_table_diff_keeps_safe_operation_order() {
+        let previous = ModelSnapshot::new(vec![
+            schema("legacy", vec![table("old_orders", vec![])]),
+            schema("sales", vec![table("orders", vec![])]),
+        ]);
+        let current = ModelSnapshot::new(vec![
+            schema("reporting", vec![table("daily_sales", vec![])]),
+            schema("sales", vec![table("orders", vec![])]),
+        ]);
+
+        let operations = diff_schema_and_table_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateSchema(CreateSchema::new("reporting")),
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "reporting",
+                    table("daily_sales", vec![]),
+                )),
+                MigrationOperation::DropTable(DropTable::new("legacy", "old_orders")),
+                MigrationOperation::DropSchema(DropSchema::new("legacy")),
+            ]
+        );
+    }
+
+    #[test]
+    fn schema_and_table_diff_detects_table_creation_and_deletion_in_existing_schema() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table("customers", vec![]), table("orders", vec![])],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table("customers", vec![]), table("invoices", vec![])],
+        )]);
+
+        let operations = diff_schema_and_table_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "sales",
+                    table("invoices", vec![])
+                )),
+                MigrationOperation::DropTable(DropTable::new("sales", "orders")),
+            ]
+        );
+    }
+
+    #[test]
+    fn schema_and_table_diff_returns_empty_for_equal_snapshots() {
+        let snapshot = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("id", SqlServerType::BigInt, false, None)],
+            )],
+        )]);
+
+        let operations = diff_schema_and_table_operations(&snapshot, &snapshot);
+
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn column_diff_detects_add_and_drop_in_shared_table() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![
+                    column("id", SqlServerType::BigInt, false, None),
+                    column("email", SqlServerType::NVarChar, false, Some(160)),
+                ],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![
+                    column("id", SqlServerType::BigInt, false, None),
+                    column("version", SqlServerType::RowVersion, false, None),
+                ],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::AddColumn(AddColumn::new(
+                    "sales",
+                    "customers",
+                    column("version", SqlServerType::RowVersion, false, None),
+                )),
+                MigrationOperation::DropColumn(DropColumn::new("sales", "customers", "email")),
+            ]
+        );
+    }
+
+    #[test]
+    fn column_diff_detects_basic_alterations() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("email", SqlServerType::NVarChar, false, Some(160))],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("email", SqlServerType::NVarChar, true, Some(255))],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![MigrationOperation::AlterColumn(AlterColumn::new(
+                "sales",
+                "customers",
+                column("email", SqlServerType::NVarChar, false, Some(160)),
+                column("email", SqlServerType::NVarChar, true, Some(255)),
+            ))]
+        );
+    }
+
+    #[test]
+    fn column_diff_ignores_tables_handled_by_table_diff() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![column("email", SqlServerType::NVarChar, false, Some(160))],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "orders",
+                vec![column("customer_id", SqlServerType::BigInt, false, None)],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn full_diff_on_minimal_snapshots_is_stable_when_combined() {
+        let previous = ModelSnapshot::new(vec![schema(
+            "sales",
+            vec![table(
+                "customers",
+                vec![
+                    column("id", SqlServerType::BigInt, false, None),
+                    column("email", SqlServerType::NVarChar, false, Some(160)),
+                ],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![
+            schema(
+                "reporting",
+                vec![table(
+                    "daily_sales",
+                    vec![column("id", SqlServerType::BigInt, false, None)],
+                )],
+            ),
+            schema(
+                "sales",
+                vec![
+                    table(
+                        "customers",
+                        vec![
+                            column("id", SqlServerType::BigInt, false, None),
+                            column("email", SqlServerType::NVarChar, true, Some(255)),
+                            column("version", SqlServerType::RowVersion, false, None),
+                        ],
+                    ),
+                    table(
+                        "orders",
+                        vec![column("id", SqlServerType::BigInt, false, None)],
+                    ),
+                ],
+            ),
+        ]);
+
+        let mut operations = diff_schema_and_table_operations(&previous, &current);
+        operations.extend(diff_column_operations(&previous, &current));
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateSchema(CreateSchema::new("reporting")),
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "reporting",
+                    table(
+                        "daily_sales",
+                        vec![column("id", SqlServerType::BigInt, false, None)],
+                    ),
+                )),
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "sales",
+                    table(
+                        "orders",
+                        vec![column("id", SqlServerType::BigInt, false, None)]
+                    ),
+                )),
+                MigrationOperation::AlterColumn(AlterColumn::new(
+                    "sales",
+                    "customers",
+                    column("email", SqlServerType::NVarChar, false, Some(160)),
+                    column("email", SqlServerType::NVarChar, true, Some(255)),
+                )),
+                MigrationOperation::AddColumn(AddColumn::new(
+                    "sales",
+                    "customers",
+                    column("version", SqlServerType::RowVersion, false, None),
+                )),
+            ]
+        );
+    }
+}

@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: Batería unitaria dedicada del diff engine
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se consolidaron las pruebas del diff engine directamente en `crates/mssql-orm-migrate/src/diff.rs`, en un módulo `#[cfg(test)]` dedicado a esa responsabilidad.
+- Se añadieron helpers mínimos de snapshots para construir schemas, tablas y columnas sin depender de metadata más amplia de la crate pública.
+- La batería dedicada fija orden seguro de operaciones sobre schemas/tablas, detección de altas/bajas de columnas, alteraciones básicas, no-op sobre snapshots iguales y un caso combinado de diff completo sobre snapshots mínimos.
+- Se retiró de `crates/mssql-orm-migrate/src/lib.rs` la cobertura de diff que había quedado mezclada allí, manteniendo ese archivo centrado en reexports, boundaries y contratos base.
+
+### Resultado
+
+- El diff engine de Etapa 7 ya quedó cubierto por una batería unitaria específica, más mantenible y con mejor trazabilidad para futuras iteraciones del sistema de migraciones.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Implementar generación SQL y tabla __mssql_orm_migrations`.
+
 ### Sesión: Diff engine básico de columnas
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
