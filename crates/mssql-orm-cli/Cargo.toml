@@ -6,3 +6,4 @@ description = "Command-line tooling for mssql-orm."
 
 [dependencies]
 mssql-orm-migrate.workspace = true
+mssql-orm-sqlserver.workspace = true

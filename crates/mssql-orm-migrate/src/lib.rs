@@ -3,10 +3,15 @@
 use mssql_orm_core::CrateIdentity;
 
 mod diff;
+mod filesystem;
 mod operation;
 mod snapshot;
 
 pub use diff::{diff_column_operations, diff_schema_and_table_operations};
+pub use filesystem::{
+    MigrationEntry, MigrationScaffold, build_database_update_script, create_migration_scaffold,
+    list_migrations,
+};
 pub use operation::{
     AddColumn, AlterColumn, CreateSchema, CreateTable, DropColumn, DropSchema, DropTable,
     MigrationOperation,

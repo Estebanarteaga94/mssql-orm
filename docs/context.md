@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 con la CLI mínima de migraciones (`migration add`, `database update`, `migration list`) y luego la validación real contra SQL Server, ahora que snapshots, diff engine y generación SQL básica ya quedaron implementados.
+Continuar la Etapa 7 validando migraciones iniciales e incrementales contra SQL Server real, ahora que snapshots, diff engine, generación SQL e interfaz CLI mínima ya quedaron implementados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -97,6 +97,9 @@ Continuar la Etapa 7 con la CLI mínima de migraciones (`migration add`, `databa
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
+- `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
+- `mssql-orm-cli` ya implementa `migration add <Name>`, `migration list` y `database update`, delegando la lógica de scaffolding/listado/script al crate de migraciones y reutilizando la creación SQL de `__mssql_orm_migrations` desde `mssql-orm-sqlserver`.
+- La CLI actual genera y lista migraciones locales y produce un script SQL acumulado para `database update`; la ejecución real contra SQL Server queda explícitamente como siguiente subtarea del backlog.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -140,6 +143,6 @@ Continuar la Etapa 7 con la CLI mínima de migraciones (`migration add`, `databa
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Implementar CLI mínima con migration add, database update y migration list`.
-2. Reutilizar directamente `ModelSnapshot`, el diff engine y la compilación SQL ya disponibles, sin duplicar lógica de migraciones dentro del CLI.
-3. Después de eso, ejecutar `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real`.
+1. Implementar `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real`.
+2. Usar la connection string local ya registrada y validar al menos creación inicial de schema y un cambio incremental de columna.
+3. Si durante esa validación aparecen gaps de ejecución en `database update`, corregirlos sin ampliar todavía el alcance a features avanzadas del roadmap.

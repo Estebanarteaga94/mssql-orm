@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: CLI mínima de migraciones
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar CLI mínima con migration add, database update y migration list` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `mssql-orm-migrate` con `crates/mssql-orm-migrate/src/filesystem.rs`, agregando helpers para crear scaffolds de migración, listar migraciones locales y construir un script SQL acumulado de `database update`.
+- `migration add` ahora crea `migrations/<timestamp>_<slug>/` con `up.sql`, `down.sql` y `model_snapshot.json`.
+- `migration list` ahora enumera directorios de migración ordenados por id.
+- `database update` ahora genera un script SQL acumulado que incluye la creación de `dbo.__mssql_orm_migrations` y un bloque `IF NOT EXISTS ... BEGIN ... INSERT INTO __mssql_orm_migrations ... END` por cada migración local.
+- Se reemplazó el placeholder de `crates/mssql-orm-cli/src/main.rs` por una CLI mínima real, con parser simple de argumentos y delegación hacia `mssql-orm-migrate` y `mssql-orm-sqlserver`.
+- Se añadió además la dependencia de `mssql-orm-sqlserver` en la CLI para reutilizar la compilación de la tabla de historial y no duplicar SQL allí.
+- Se agregaron pruebas unitarias tanto en `mssql-orm-migrate` como en `mssql-orm-cli` para scaffolding, listado, construcción del script y parseo/ejecución mínima de comandos.
+
+### Resultado
+
+- El workspace ya dispone de una CLI mínima funcional para crear migraciones locales, listarlas y generar un script de actualización SQL Server sin volver a introducir lógica duplicada fuera de las crates correctas.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real`.
+
 ### Sesión: Generación SQL de migraciones e historial base
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar generación SQL y tabla __mssql_orm_migrations` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
