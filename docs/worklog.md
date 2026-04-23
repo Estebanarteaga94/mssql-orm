@@ -2,6 +2,32 @@
 
 ## 2026-04-23
 
+### Sesión: Diff engine básico de schemas y tablas
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se creó `crates/mssql-orm-migrate/src/diff.rs` con la función pública `diff_schema_and_table_operations(previous, current)`.
+- La implementación compara `ModelSnapshot` con mapas ordenados (`BTreeMap`) para emitir una secuencia determinista de operaciones sobre schemas y tablas.
+- El orden de salida quedó fijado para este MVP como: `CreateSchema` antes de `CreateTable`, y `DropTable` antes de `DropSchema`, evitando secuencias inválidas al aplicar operaciones.
+- Se agregaron pruebas unitarias en `crates/mssql-orm-migrate/src/lib.rs` para cubrir creación/eliminación de schema completo, altas/bajas de tablas en schema existente y el caso sin cambios.
+
+### Resultado
+
+- `mssql-orm-migrate` ya puede producir el primer diff funcional del sistema de migraciones para schemas y tablas, sin adelantar todavía diff de columnas ni generación SQL.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas`.
+
 ### Sesión: Definición de `MigrationOperation` base
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Definir MigrationOperation y payloads básicos para schema, tabla y columna` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

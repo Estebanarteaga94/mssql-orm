@@ -2,9 +2,11 @@
 
 use mssql_orm_core::CrateIdentity;
 
+mod diff;
 mod operation;
 mod snapshot;
 
+pub use diff::diff_schema_and_table_operations;
 pub use operation::{
     AddColumn, AlterColumn, CreateSchema, CreateTable, DropColumn, DropSchema, DropTable,
     MigrationOperation,
@@ -29,6 +31,7 @@ mod tests {
         AddColumn, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateSchema, CreateTable,
         DropColumn, DropSchema, DropTable, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
         MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+        diff_schema_and_table_operations,
     };
     use mssql_orm_core::{
         ColumnMetadata, EntityMetadata, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
@@ -411,5 +414,99 @@ mod tests {
         assert_eq!(operation.table_name, "customers");
         assert_eq!(operation.previous, previous);
         assert_eq!(operation.next, next);
+    }
+
+    #[test]
+    fn diff_engine_creates_schema_before_tables_and_drops_tables_before_schema() {
+        let previous = ModelSnapshot::new(vec![
+            SchemaSnapshot::new(
+                "legacy",
+                vec![TableSnapshot::new(
+                    "old_orders",
+                    vec![],
+                    None,
+                    vec![],
+                    vec![],
+                )],
+            ),
+            SchemaSnapshot::new(
+                "sales",
+                vec![TableSnapshot::new("orders", vec![], None, vec![], vec![])],
+            ),
+        ]);
+        let current = ModelSnapshot::new(vec![
+            SchemaSnapshot::new(
+                "reporting",
+                vec![TableSnapshot::new(
+                    "daily_sales",
+                    vec![],
+                    None,
+                    vec![],
+                    vec![],
+                )],
+            ),
+            SchemaSnapshot::new(
+                "sales",
+                vec![TableSnapshot::new("orders", vec![], None, vec![], vec![])],
+            ),
+        ]);
+
+        let operations = diff_schema_and_table_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateSchema(CreateSchema::new("reporting")),
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "reporting",
+                    TableSnapshot::new("daily_sales", vec![], None, vec![], vec![]),
+                )),
+                MigrationOperation::DropTable(DropTable::new("legacy", "old_orders")),
+                MigrationOperation::DropSchema(DropSchema::new("legacy")),
+            ]
+        );
+    }
+
+    #[test]
+    fn diff_engine_detects_table_creation_and_deletion_in_existing_schema() {
+        let previous = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![
+                TableSnapshot::new("customers", vec![], None, vec![], vec![]),
+                TableSnapshot::new("orders", vec![], None, vec![], vec![]),
+            ],
+        )]);
+        let current = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![
+                TableSnapshot::new("customers", vec![], None, vec![], vec![]),
+                TableSnapshot::new("invoices", vec![], None, vec![], vec![]),
+            ],
+        )]);
+
+        let operations = diff_schema_and_table_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateTable(CreateTable::new(
+                    "sales",
+                    TableSnapshot::new("invoices", vec![], None, vec![], vec![]),
+                )),
+                MigrationOperation::DropTable(DropTable::new("sales", "orders")),
+            ]
+        );
+    }
+
+    #[test]
+    fn diff_engine_ignores_unchanged_schemas_and_tables() {
+        let snapshot = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::from(&CUSTOMER_METADATA)],
+        )]);
+
+        let operations = diff_schema_and_table_operations(&snapshot, &snapshot);
+
+        assert!(operations.is_empty());
     }
 }
