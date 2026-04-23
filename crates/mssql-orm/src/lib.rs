@@ -224,6 +224,13 @@ mod tests {
             DerivedUser::display_name.is_null(),
             Predicate::is_null(Expr::from(DerivedUser::display_name))
         );
+        assert_eq!(
+            DerivedUser::email.contains("@example.com"),
+            Predicate::like(
+                Expr::from(DerivedUser::email),
+                Expr::value(SqlValue::String("%@example.com%".to_string()))
+            )
+        );
     }
 
     #[test]

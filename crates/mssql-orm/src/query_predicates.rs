@@ -31,6 +31,12 @@ pub trait EntityColumnPredicateExt<E: Entity> {
     fn is_null(self) -> Predicate;
 
     fn is_not_null(self) -> Predicate;
+
+    fn contains(self, value: impl Into<String>) -> Predicate;
+
+    fn starts_with(self, value: impl Into<String>) -> Predicate;
+
+    fn ends_with(self, value: impl Into<String>) -> Predicate;
 }
 
 impl<E: Entity> EntityColumnPredicateExt<E> for EntityColumn<E> {
@@ -82,6 +88,36 @@ impl<E: Entity> EntityColumnPredicateExt<E> for EntityColumn<E> {
 
     fn is_not_null(self) -> Predicate {
         Predicate::is_not_null(Expr::from(self))
+    }
+
+    fn contains(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "%{}%",
+                value.into()
+            ))),
+        )
+    }
+
+    fn starts_with(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "{}%",
+                value.into()
+            ))),
+        )
+    }
+
+    fn ends_with(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "%{}",
+                value.into()
+            ))),
+        )
     }
 }
 
@@ -205,6 +241,37 @@ mod tests {
         assert_eq!(
             TestEntity::name.is_not_null(),
             Predicate::is_not_null(expected_column)
+        );
+    }
+
+    #[test]
+    fn string_predicate_methods_build_expected_like_patterns() {
+        let expected_column = Expr::Column(ColumnRef::new(
+            TableRef::new("dbo", "test_entities"),
+            "name",
+            "name",
+        ));
+
+        assert_eq!(
+            TestEntity::name.contains("ana"),
+            Predicate::like(
+                expected_column.clone(),
+                Expr::Value(SqlValue::String("%ana%".to_string()))
+            )
+        );
+        assert_eq!(
+            TestEntity::name.starts_with("ana"),
+            Predicate::like(
+                expected_column.clone(),
+                Expr::Value(SqlValue::String("ana%".to_string()))
+            )
+        );
+        assert_eq!(
+            TestEntity::name.ends_with("ana"),
+            Predicate::like(
+                expected_column,
+                Expr::Value(SqlValue::String("%ana".to_string()))
+            )
         );
     }
 }

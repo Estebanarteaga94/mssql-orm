@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 6: Exponer predicados string públicos sobre `EntityColumn` (`contains`, `starts_with`, `ends_with`)
 - [ ] Etapa 6: Exponer ordenamiento público por columna (`asc`, `desc`) alineado con el AST existente
 - [ ] Etapa 6: Exponer métodos fluentes en `DbSetQuery` para `filter` y `order_by` reutilizando `SelectQuery`
 - [ ] Etapa 6: Exponer `limit` y `take` en `DbSetQuery` reutilizando `Pagination` sin duplicar semántica
@@ -30,6 +29,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 6: Exponer predicados string públicos sobre `EntityColumn` (`contains`, `starts_with`, `ends_with`)
 - [x] Etapa 6: Exponer predicados de comparación públicos sobre `EntityColumn` (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null`, `is_not_null`)
 - [x] Etapa 5: Crear ejemplo funcional `basic-crud`
 - [x] Etapa 5: Agregar pruebas de integración de la API CRUD base en la crate pública

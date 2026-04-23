@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: Predicados string públicos sobre `EntityColumn`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer predicados string públicos sobre EntityColumn` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/query_predicates.rs` para exponer `contains`, `starts_with` y `ends_with` como parte del trait público `EntityColumnPredicateExt`.
+- La implementación reutiliza `Predicate::like` del AST existente y construye patrones parametrizados (`%valor%`, `valor%`, `%valor`) dentro de la crate pública, sin introducir operadores nuevos ni mover lógica al core.
+- Se añadió cobertura unitaria específica para fijar la forma exacta de los predicados `LIKE` generados y se amplió la prueba de superficie pública en `crates/mssql-orm/src/lib.rs`.
+- No fue necesario modificar `mssql-orm-query` ni `mssql-orm-sqlserver`, porque la compilación de `LIKE` ya existía y esta subtarea solo expone una API pública encima del AST.
+
+### Resultado
+
+- La segunda subtarea de Etapa 6 quedó completada y validada; la crate pública ya expone la base de filtros string sobre columnas para el query builder fluido.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Exponer ordenamiento público por columna (asc, desc)`, reutilizando `OrderBy` sin crear una representación paralela.
+
 ### Sesión: Predicados de comparación públicos sobre `EntityColumn`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer predicados de comparación públicos sobre EntityColumn` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
