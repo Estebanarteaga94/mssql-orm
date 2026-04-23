@@ -1,8 +1,10 @@
 use crate::connection::MssqlConnection;
+use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use crate::parameter::PreparedQuery;
+use crate::row::MssqlRow;
 use async_trait::async_trait;
 use futures_io::{AsyncRead, AsyncWrite};
-use mssql_orm_core::OrmError;
+use mssql_orm_core::{FromRow, OrmError};
 use mssql_orm_query::CompiledQuery;
 use tiberius::QueryStream;
 
@@ -28,6 +30,12 @@ impl ExecuteResult {
 #[async_trait]
 pub trait Executor {
     async fn execute(&mut self, query: CompiledQuery) -> Result<ExecuteResult, OrmError>;
+    async fn fetch_one<T>(&mut self, query: CompiledQuery) -> Result<Option<T>, OrmError>
+    where
+        T: FromRow + Send;
+    async fn fetch_all<T>(&mut self, query: CompiledQuery) -> Result<Vec<T>, OrmError>
+    where
+        T: FromRow + Send;
 }
 
 #[async_trait]
@@ -37,6 +45,20 @@ where
 {
     async fn execute(&mut self, query: CompiledQuery) -> Result<ExecuteResult, OrmError> {
         MssqlConnection::execute(self, query).await
+    }
+
+    async fn fetch_one<T>(&mut self, query: CompiledQuery) -> Result<Option<T>, OrmError>
+    where
+        T: FromRow + Send,
+    {
+        MssqlConnection::fetch_one(self, query).await
+    }
+
+    async fn fetch_all<T>(&mut self, query: CompiledQuery) -> Result<Vec<T>, OrmError>
+    where
+        T: FromRow + Send,
+    {
+        MssqlConnection::fetch_all(self, query).await
     }
 }
 
@@ -61,6 +83,38 @@ where
         prepared.validate_parameter_count()?;
 
         prepared.query(self.client_mut()).await
+    }
+
+    pub async fn fetch_one<T>(&mut self, query: CompiledQuery) -> Result<Option<T>, OrmError>
+    where
+        T: FromRow + Send,
+    {
+        let row = self
+            .query_raw(query)
+            .await?
+            .into_row()
+            .await
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+
+        row.as_ref()
+            .map(|row| T::from_row(&MssqlRow::new(row)))
+            .transpose()
+    }
+
+    pub async fn fetch_all<T>(&mut self, query: CompiledQuery) -> Result<Vec<T>, OrmError>
+    where
+        T: FromRow + Send,
+    {
+        let rows = self
+            .query_raw(query)
+            .await?
+            .into_first_result()
+            .await
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+
+        rows.iter()
+            .map(|row| T::from_row(&MssqlRow::new(row)))
+            .collect()
     }
 }
 

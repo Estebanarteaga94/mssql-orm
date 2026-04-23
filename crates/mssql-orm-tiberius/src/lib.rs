@@ -2,8 +2,10 @@
 
 mod config;
 mod connection;
+mod error;
 mod executor;
 mod parameter;
+mod row;
 
 use mssql_orm_core::CrateIdentity;
 
@@ -14,6 +16,7 @@ pub struct TiberiusAdapter;
 pub use config::MssqlConnectionConfig;
 pub use connection::{MssqlConnection, TokioConnectionStream};
 pub use executor::{ExecuteResult, Executor};
+pub use row::MssqlRow;
 
 pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
     name: "mssql-orm-tiberius",
@@ -22,7 +25,7 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 
 #[cfg(test)]
 mod tests {
-    use super::{CRATE_IDENTITY, ExecuteResult, MssqlConnectionConfig, TiberiusAdapter};
+    use super::{CRATE_IDENTITY, ExecuteResult, MssqlConnectionConfig, MssqlRow, TiberiusAdapter};
 
     #[test]
     fn declares_execution_boundary() {
@@ -46,5 +49,12 @@ mod tests {
         let result = ExecuteResult::new(vec![1, 2]);
 
         assert_eq!(result.total(), 3);
+    }
+
+    #[test]
+    fn reexports_mssql_row_wrapper() {
+        let wrapper = core::mem::size_of::<MssqlRow<'static>>();
+
+        assert!(wrapper > 0);
     }
 }

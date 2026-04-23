@@ -1,3 +1,4 @@
+use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use mssql_orm_core::{OrmError, SqlValue};
 use mssql_orm_query::CompiledQuery;
 use tiberius::numeric::Numeric;
@@ -60,7 +61,7 @@ impl PreparedQuery {
         query
             .execute(client)
             .await
-            .map_err(|_| OrmError::new("failed to execute SQL Server query"))
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))
     }
 
     pub async fn query<'a, S>(self, client: &'a mut Client<S>) -> Result<QueryStream<'a>, OrmError>
@@ -76,7 +77,7 @@ impl PreparedQuery {
         query
             .query(client)
             .await
-            .map_err(|_| OrmError::new("failed to execute SQL Server query"))
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))
     }
 }
 

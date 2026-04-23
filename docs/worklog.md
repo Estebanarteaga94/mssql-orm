@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: `MssqlRow`, `fetch_one`/`fetch_all` y conversión de errores
+
+- Se confirmó otra vez que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió en `docs/tasks.md` la tarea `Etapa 4: Implementar wrapper MssqlRow y conversión de errores a OrmError` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadieron en `crates/mssql-orm-tiberius` los módulos nuevos `row` y `error` para encapsular lectura de filas y traducción de errores de Tiberius sin exponer el driver fuera del adaptador.
+- Se implementó `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, con implementación del trait neutral `mssql_orm_core::Row`.
+- `MssqlRow` ahora convierte a `SqlValue` los tipos hoy soportados por el core: `bit`, `tinyint`, `smallint`, `int`, `bigint`, `float`, strings, binarios, `uniqueidentifier`, `decimal`, `date` y `datetime`.
+- Los tipos de SQL Server todavía no soportados por el core o sin mapping estable en esta etapa, como `money`, `time`, `datetimeoffset`, `xml`, `sql_variant` y `udt`, ahora fallan de forma explícita con `OrmError`.
+- Se añadió una capa interna `map_tiberius_error` para traducir errores del driver a `OrmError` con contexto de conexión, inicialización de cliente, ejecución y lectura de filas; los deadlocks se distinguen con un mensaje específico.
+- Se extendió `Executor` y `MssqlConnection<S>` con `fetch_one<T: FromRow>` y `fetch_all<T: FromRow>`, reutilizando `query_raw` y mapeando cada fila mediante `MssqlRow`.
+- Se actualizó el código existente de conexión y ejecución para usar la misma capa interna de conversión de errores, centralizando el comportamiento del adaptador.
+- Se añadieron pruebas unitarias para el mapeo contextual de errores, la clasificación de tipos no soportados y la reexportación pública de `MssqlRow`.
+- No se añadieron todavía pruebas contra SQL Server real; esa tarea sigue pendiente como siguiente paso explícito de la Etapa 4.
+- Se validó el workspace con `cargo check --workspace`, `cargo fmt --all --check`, `cargo test --workspace` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La Etapa 4 ya cuenta con lectura de filas y materialización hacia el contrato `FromRow`, además de encapsulación consistente de errores del driver dentro de `OrmError`.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Durante la implementación solo fue necesario ajustar dos detalles locales: mapear errores devueltos por `QueryStream::into_row`/`into_first_result`, y adaptar strings/binarios porque Tiberius los expone por referencia en lectura.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 4: Agregar pruebas de integración contra SQL Server real` para validar el recorrido completo del adaptador sobre una base real.
+
 ### Sesión: `Executor` sobre Tiberius con binding de parámetros
 
 - Se movió en `docs/tasks.md` la tarea `Etapa 4: Implementar Executor sobre Tiberius con binding de parámetros` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

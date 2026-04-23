@@ -1,4 +1,5 @@
 use crate::config::MssqlConnectionConfig;
+use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use futures_io::{AsyncRead, AsyncWrite};
 use mssql_orm_core::OrmError;
 use tiberius::Client;
@@ -21,13 +22,14 @@ impl MssqlConnection<TokioConnectionStream> {
     pub async fn connect_with_config(config: MssqlConnectionConfig) -> Result<Self, OrmError> {
         let tcp = TcpStream::connect(config.addr())
             .await
-            .map_err(|_| OrmError::new("failed to connect to SQL Server over TCP"))?;
-        tcp.set_nodelay(true)
-            .map_err(|_| OrmError::new("failed to configure SQL Server TCP stream"))?;
+            .map_err(|error| map_tiberius_error(&error.into(), TiberiusErrorContext::ConnectTcp))?;
+        tcp.set_nodelay(true).map_err(|error| {
+            map_tiberius_error(&error.into(), TiberiusErrorContext::ConfigureTcp)
+        })?;
 
         let client = Client::connect(config.tiberius_config().clone(), tcp.compat_write())
             .await
-            .map_err(|_| OrmError::new("failed to initialize Tiberius client"))?;
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::InitializeClient))?;
 
         Ok(Self { client, config })
     }

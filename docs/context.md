@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 4 implementando `MssqlRow` y la conversión de errores a `OrmError`, ahora que `mssql-orm-tiberius` ya dispone de conexión base, executor y binding real de parámetros.
+Continuar la Etapa 4 con pruebas de integración contra SQL Server real, ahora que `mssql-orm-tiberius` ya dispone de conexión, executor, `MssqlRow`, `fetch_one` y `fetch_all`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -54,6 +54,9 @@ Continuar la Etapa 4 implementando `MssqlRow` y la conversión de errores a `Orm
 - `mssql-orm-tiberius` ya expone `ExecuteResult`, el trait `Executor` y los métodos `execute`/`query_raw` sobre `MssqlConnection<S>`.
 - El adaptador ya prepara `CompiledQuery`, valida conteo de placeholders y realiza binding real de `SqlValue` hacia `tiberius::Query`.
 - El binding de `Decimal` ya se resuelve a `tiberius::numeric::Numeric`; el caso `SqlValue::Null` sigue siendo provisional y hoy se envía como `Option::<String>::None`.
+- `mssql-orm-tiberius` ya expone `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, implementa el contrato neutral `Row` del core y convierte tipos soportados de SQL Server a `SqlValue`.
+- El adaptador ya encapsula errores de Tiberius en `OrmError` mediante una capa interna de mapeo contextual, incluyendo lectura de filas y detección básica de deadlock.
+- `MssqlConnection<S>` ya implementa `fetch_one<T: FromRow>` y `fetch_all<T: FromRow>` apoyándose en `query_raw`, `MssqlRow` y el contrato `FromRow` del core.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La `prelude` pública ya reexporta los derives `Entity`, `Insertable` y `Changeset`, por lo que los tests de integración usan la misma superficie que usará un consumidor real.
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
@@ -72,7 +75,7 @@ Continuar la Etapa 4 implementando `MssqlRow` y la conversión de errores a `Orm
 
 ## Riesgos Inmediatos
 
-- Ya existe ejecución base, pero todavía no existe `MssqlRow` ni conversión tipada de resultados hacia los contratos `Row`/`FromRow`.
+- Ya existe lectura base de filas, pero todavía no hay pruebas de integración contra SQL Server real que validen el recorrido completo `compile -> bind -> execute -> row mapping`.
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La Etapa 4 debe mantener la separación de responsabilidades: conexión, ejecución y filas en `mssql-orm-tiberius`, compilación SQL solo en `mssql-orm-sqlserver`.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
@@ -80,6 +83,6 @@ Continuar la Etapa 4 implementando `MssqlRow` y la conversión de errores a `Orm
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 4: MssqlRow y conversión de errores a OrmError` sin exponer `tiberius::error::Error` en la API principal.
-2. Continuar con `fetch_one` y `fetch_all` apoyándose en `query_raw` y en el contrato `FromRow`.
-3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y los snapshots del compilador mientras entra la capa de lectura de filas.
+1. Implementar `Etapa 4: Agregar pruebas de integración contra SQL Server real`, cubriendo `execute`, `fetch_one` y `fetch_all`.
+2. Validar el comportamiento real del binding provisional de `SqlValue::Null` y de los tipos soportados en `MssqlRow`.
+3. Mantener estables `EntityColumn`, `Insertable`, `Changeset`, `CompiledQuery` y los snapshots del compilador mientras entra validación end-to-end del adaptador.
