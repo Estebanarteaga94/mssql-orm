@@ -2,6 +2,7 @@
 
 extern crate self as mssql_orm;
 
+mod active_record;
 mod context;
 mod dbset_query;
 mod page_request;
@@ -17,6 +18,7 @@ pub use mssql_orm_sqlserver as sqlserver;
 pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
+pub use active_record::ActiveRecord;
 pub use context::{DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
 pub use page_request::PageRequest;
@@ -26,7 +28,7 @@ pub use query_predicates::EntityColumnPredicateExt;
 
 pub mod prelude {
     pub use crate::{
-        DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
+        ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
         EntityColumnPredicateExt, PageRequest, PredicateCompositionExt,
     };
     pub use mssql_orm_core::{
@@ -42,10 +44,10 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity, EntityColumn,
-        EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, IdentityMetadata,
-        Insertable, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
-        SqlServerType, SqlTypeMapping, SqlValue,
+        ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
+        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata,
+        IdentityMetadata, Insertable, OrmError, PageRequest, PredicateCompositionExt,
+        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
 
@@ -100,6 +102,13 @@ mod tests {
         }
 
         require_trait::<DerivedDbContext, DerivedUser>();
+    }
+
+    #[test]
+    fn exposes_active_record_contract_in_prelude() {
+        fn require_trait<E: ActiveRecord>() {}
+
+        require_trait::<PublicEntity>();
     }
 
     #[allow(dead_code)]

@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: Trait `ActiveRecord` base sobre `DbSet`
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como referencia para la subtarea de `ActiveRecord`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 10: Implementar trait ActiveRecord base con Entity::query(&db) y Entity::find(&db, id) sobre DbSet` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/active_record.rs` con el trait público `ActiveRecord`, implementado blanket para toda `Entity`.
+- La surface mínima nueva expone `Entity::query(&db)` y `Entity::find(&db, id)`, reutilizando exclusivamente `DbContextEntitySet<E>` y `DbSet<E>`; no se introdujo conexión global ni otro runner.
+- Se actualizó `crates/mssql-orm/src/lib.rs` para reexportar `ActiveRecord` en la API pública y en la `prelude`.
+- Se amplió `crates/mssql-orm/tests/trybuild.rs` y se añadió `crates/mssql-orm/tests/ui/active_record_public_valid.rs` para fijar por compilación que un consumidor real puede escribir `User::query(&db)` y `User::find(&db, 1_i64)`.
+- También se añadieron pruebas unitarias internas en `crates/mssql-orm/src/active_record.rs` para asegurar que `query` delega al `DbSet` tipado y que `find` conserva el contrato de la capa existente.
+
+### Resultado
+
+- La Etapa 10 ya tiene la capa mínima de Active Record exigida por el plan maestro para `query/find`, montada estrictamente encima de `DbSet` y sin abrir todavía el frente más delicado de `save/delete`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La cobertura añadida en esta sesión es suficiente para fijar la surface base, pero todavía conviene agregar una batería dedicada de pruebas públicas/integración antes de avanzar a `save/delete`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Agregar pruebas unitarias, trybuild e integración dedicadas para la capa Active Record base`.
+
 ### Sesión: Acceso tipado `DbContext -> DbSet<T>` para Active Record
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 10: Exponer acceso tipado DbContext -> DbSet<T> para habilitar Active Record sobre la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
