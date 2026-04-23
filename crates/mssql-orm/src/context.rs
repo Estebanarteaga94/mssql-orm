@@ -147,6 +147,19 @@ impl<E: Entity> DbSet<E> {
         tracked
     }
 
+    /// Marks a tracked entity for deletion so a later `save_changes()` can
+    /// persist it through the regular delete pipeline.
+    pub fn remove_tracked(&self, tracked: &mut Tracked<E>) {
+        let was_added = tracked.state() == crate::EntityState::Added;
+        tracked.mark_deleted();
+
+        // Deleting an entity that was never inserted should simply cancel the
+        // pending tracked insert instead of issuing a database delete.
+        if was_added {
+            tracked.detach_registry();
+        }
+    }
+
     #[doc(hidden)]
     pub async fn save_tracked_added(&self) -> Result<usize, OrmError>
     where
@@ -164,6 +177,38 @@ impl<E: Entity> DbSet<E> {
             let persisted = self.insert_entity(&current).await?;
 
             tracked.sync_persisted(persisted);
+            saved += 1;
+        }
+
+        Ok(saved)
+    }
+
+    #[doc(hidden)]
+    pub async fn save_tracked_deleted(&self) -> Result<usize, OrmError>
+    where
+        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send,
+    {
+        let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let mut saved = 0;
+
+        for tracked in tracked_entities {
+            if tracked.state() != crate::EntityState::Deleted {
+                continue;
+            }
+
+            let current: E = tracked.current_clone();
+            let key = current.primary_key_value()?;
+            let deleted = self
+                .delete_tracked_by_sql_value(key, current.concurrency_token()?)
+                .await?;
+
+            if !deleted {
+                return Err(OrmError::new(
+                    "save_changes could not delete a tracked entity for the current primary key",
+                ));
+            }
+
+            self.tracking_registry.unregister(tracked.registration_id());
             saved += 1;
         }
 
@@ -267,6 +312,25 @@ impl<E: Entity> DbSet<E> {
         let result = connection.execute(compiled).await?;
 
         Ok(result.total() > 0)
+    }
+
+    pub(crate) async fn delete_tracked_by_sql_value(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+    ) -> Result<bool, OrmError>
+    where
+        E: FromRow + Send,
+    {
+        let deleted = self
+            .delete_by_sql_value(key.clone(), concurrency_token.clone())
+            .await?;
+
+        if !deleted && concurrency_token.is_some() && self.find_by_sql_value(key).await?.is_some() {
+            return Err(OrmError::concurrency_conflict());
+        }
+
+        Ok(deleted)
     }
 
     pub(crate) async fn find_by_sql_value(&self, key: SqlValue) -> Result<Option<E>, OrmError>
@@ -519,6 +583,7 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
 #[cfg(test)]
 mod tests {
     use super::{DbContext, DbContextEntitySet, DbSet};
+    use crate::Tracked;
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
         Row, SqlServerType, SqlValue,
@@ -914,6 +979,35 @@ mod tests {
         assert_eq!(tracked.state(), crate::EntityState::Added);
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(registry.registrations()[0].state, crate::EntityState::Added);
+    }
+
+    #[test]
+    fn dbset_remove_tracked_marks_loaded_entity_as_deleted() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(TestEntity);
+        tracked.attach_registry(registry.clone());
+
+        dbset.remove_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations()[0].state,
+            crate::EntityState::Deleted
+        );
+    }
+
+    #[test]
+    fn dbset_remove_tracked_cancels_pending_added_entity() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = dbset.add_tracked(TestEntity);
+
+        dbset.remove_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
     }
 
     #[test]

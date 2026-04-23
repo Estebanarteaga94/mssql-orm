@@ -69,6 +69,7 @@ struct TrackingRegistration {
 
 #[derive(Clone, Copy)]
 pub(crate) struct RegisteredTracked<E> {
+    registration_id: usize,
     inner_address: usize,
     _entity: PhantomData<fn() -> E>,
 }
@@ -127,6 +128,18 @@ impl<T> Tracked<T> {
     fn mark_modified_if_unchanged(&mut self) {
         if self.inner.state == EntityState::Unchanged {
             self.inner.state = EntityState::Modified;
+        }
+    }
+
+    pub(crate) fn mark_deleted(&mut self) {
+        self.inner.state = EntityState::Deleted;
+    }
+
+    pub(crate) fn detach_registry(&mut self) {
+        if let (Some(registration_id), Some(registry)) =
+            (self.registration_id.take(), self.tracking_registry.take())
+        {
+            registry.unregister(registration_id);
         }
     }
 }
@@ -190,6 +203,7 @@ impl TrackingRegistry {
             .iter()
             .filter(|entry| entry.entity_type_id == TypeId::of::<E>())
             .map(|entry| RegisteredTracked::<E> {
+                registration_id: entry.registration_id,
                 inner_address: entry.inner_address,
                 _entity: PhantomData,
             })
@@ -219,6 +233,10 @@ impl TrackingRegistry {
 }
 
 impl<E: Clone> RegisteredTracked<E> {
+    pub(crate) fn registration_id(&self) -> usize {
+        self.registration_id
+    }
+
     pub(crate) fn state(&self) -> EntityState {
         unsafe { (&*(self.inner_address as *const TrackedInner<E>)).state }
     }
@@ -365,6 +383,18 @@ mod tests {
     }
 
     #[test]
+    fn mark_deleted_transitions_any_registered_entity_to_deleted() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+
+        tracked.mark_deleted();
+
+        assert_eq!(tracked.state(), EntityState::Deleted);
+        assert_eq!(registry.registrations()[0].state, EntityState::Deleted);
+    }
+
+    #[test]
     fn mutable_access_keeps_added_state_for_new_entities() {
         let mut tracked = Tracked::from_added(String::from("Maria"));
 
@@ -407,6 +437,18 @@ mod tests {
                 state: EntityState::Added,
             }]
         );
+    }
+
+    #[test]
+    fn detach_registry_unregisters_without_dropping_wrapper() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+
+        tracked.detach_registry();
+
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(tracked.state(), EntityState::Unchanged);
     }
 
     #[test]

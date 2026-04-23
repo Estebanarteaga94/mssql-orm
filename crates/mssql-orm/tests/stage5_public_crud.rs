@@ -558,6 +558,156 @@ async fn public_dbcontext_save_changes_propagates_rowversion_conflicts() -> Resu
 }
 
 #[tokio::test]
+async fn public_dbcontext_save_changes_persists_deleted_tracked_entities() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes deleted integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+
+        let inserted = db
+            .users
+            .insert(NewPublicCrudUser {
+                name: "Tracked Deleted".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let mut tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+
+        db.users.remove_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, EntityState::Deleted);
+
+        let saved = db.save_changes().await?;
+        assert_eq!(saved, 1);
+        assert_eq!(tracked.state(), EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, None);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_remove_tracked_cancels_pending_added_entity() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public remove_tracked added-cancel integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = PublicCrudDb::connect(&connection_string).await?;
+        let registry = <PublicCrudDb as mssql_orm::DbContext>::tracking_registry(&db);
+
+        let mut tracked = db.users.add_tracked(PublicCrudUser {
+            id: 0,
+            name: "Never Persisted".to_string(),
+            active: true,
+        });
+
+        db.users.remove_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(db.save_changes().await?, 0);
+        assert_eq!(db.users.query().count().await?, 0);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
+async fn public_dbcontext_save_changes_deleted_propagates_rowversion_conflicts()
+-> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public save_changes deleted rowversion integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_versioned_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = VersionedPublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewVersionedPublicCrudUser {
+                name: "Tracked Deleted".to_string(),
+            })
+            .await?;
+
+        let mut tracked = db
+            .users
+            .find_tracked(inserted.id)
+            .await?
+            .expect("tracked entity should exist");
+
+        let externally_updated = db
+            .users
+            .update(
+                inserted.id,
+                UpdateVersionedPublicCrudUser {
+                    name: Some("External Update".to_string()),
+                    version: Some(inserted.version.clone()),
+                },
+            )
+            .await?
+            .expect("external update should succeed");
+
+        db.users.remove_tracked(&mut tracked);
+
+        let error = db.save_changes().await.unwrap_err();
+        assert_eq!(error, OrmError::ConcurrencyConflict);
+        assert_eq!(tracked.state(), EntityState::Deleted);
+
+        let persisted = db.users.find(inserted.id).await?;
+        assert_eq!(persisted, Some(externally_updated));
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_versioned_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
+#[tokio::test]
 async fn public_dbcontext_shares_tracking_registry_across_dbsets() -> Result<(), OrmError> {
     let Some(connection_string) = test_connection_string() else {
         eprintln!(

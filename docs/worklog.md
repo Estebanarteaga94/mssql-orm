@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: soporte experimental de `Deleted` con `remove_tracked(...)`
+
+- Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo esta sesión acotada a la subtarea de Etapa 12 para entidades `Deleted`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Soportar estado Deleted con remove(tracked) o equivalente explícito y persistencia vía delete` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/context.rs` ahora expone `DbSet::remove_tracked(&mut Tracked<E>)`, que marca wrappers cargados como `Deleted` y, si el wrapper estaba en `Added`, cancela la inserción pendiente desregistrándolo del `TrackingRegistry`.
+- El mismo módulo ahora implementa `DbSet::save_tracked_deleted()`, reutilizando la ruta existente de `delete` por PK simple y preservando `rowversion`/`OrmError::ConcurrencyConflict` mediante un helper interno específico para borrado trackeado.
+- Tras un borrado exitoso, la entidad se desregistra del `TrackingRegistry` para evitar reintentos en `save_changes()` posteriores, manteniendo el wrapper vivo en estado observable `Deleted`.
+- `crates/mssql-orm/src/tracking.rs` ahora conserva el `registration_id` en la vista interna `RegisteredTracked`, y añade helpers mínimos para `mark_deleted()` y `detach_registry()` sin cambiar la surface pública principal.
+- `crates/mssql-orm-macros/src/lib.rs` ahora hace que `#[derive(DbContext)]` genere `save_changes()` en tres fases: `Added`, `Modified` y `Deleted`, siempre reutilizando la infraestructura CRUD ya cerrada.
+- Se añadieron pruebas unitarias nuevas en `tracking.rs` y `context.rs` para fijar marcado a `Deleted`, cancelación de `Added` y desregistro explícito.
+- `crates/mssql-orm/tests/stage5_public_crud.rs` ahora cubre borrado trackeado exitoso, cancelación de un `Added` removido antes de persistirse y conflicto real de `rowversion` durante `save_changes()` de una entidad `Deleted`.
+
+### Resultado
+
+- La Etapa 12 ya permite marcar entidades trackeadas para borrado mediante `DbSet::remove_tracked(...)` y persistirlas con `db.save_changes().await?`, sin duplicar la semántica de `delete` ni degradar la concurrencia optimista ya cerrada.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El borrado trackeado sigue limitado a entidades con PK simple, igual que la infraestructura CRUD subyacente; ese límite se preserva explícitamente en esta etapa.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Agregar pruebas unitarias, integración y documentación de límites para la API experimental de change tracking`.
+
 ### Sesión: soporte experimental de `Added` con `add_tracked(...)`
 
 - Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo esta sesión acotada a la subtarea de Etapa 12 para entidades `Added`, sin adelantar todavía soporte de `Deleted`.
