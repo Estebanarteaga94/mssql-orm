@@ -3,6 +3,7 @@
 mod delete;
 mod expr;
 mod insert;
+mod join;
 mod order;
 mod pagination;
 mod predicate;
@@ -14,6 +15,7 @@ use mssql_orm_core::{CrateIdentity, SqlValue};
 pub use delete::DeleteQuery;
 pub use expr::{BinaryOp, ColumnRef, Expr, TableRef, UnaryOp};
 pub use insert::InsertQuery;
+pub use join::{Join, JoinType};
 pub use order::{OrderBy, SortDirection};
 pub use pagination::Pagination;
 pub use predicate::Predicate;
@@ -53,8 +55,8 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 mod tests {
     use super::{
         BinaryOp, CRATE_IDENTITY, ColumnRef, CompiledQuery, CountQuery, DeleteQuery, Expr,
-        InsertQuery, OrderBy, Pagination, Predicate, Query, SelectQuery, SortDirection, TableRef,
-        UpdateQuery,
+        InsertQuery, Join, JoinType, OrderBy, Pagination, Predicate, Query, SelectQuery,
+        SortDirection, TableRef, UpdateQuery,
     };
     use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -63,6 +65,9 @@ mod tests {
 
     #[allow(dead_code)]
     struct Customer;
+
+    #[allow(dead_code)]
+    struct Order;
 
     static CUSTOMER_COLUMNS: [ColumnMetadata; 4] = [
         ColumnMetadata {
@@ -147,12 +152,85 @@ mod tests {
         }
     }
 
+    static ORDER_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: Some(IdentityMetadata::new(1, 1)),
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "customer_id",
+            column_name: "customer_id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "total_cents",
+            column_name: "total_cents",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static ORDER_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "Order",
+        schema: "sales",
+        table: "orders",
+        columns: &ORDER_COLUMNS,
+        primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &["id"]),
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for Order {
+        fn metadata() -> &'static EntityMetadata {
+            &ORDER_METADATA
+        }
+    }
+
     #[allow(non_upper_case_globals)]
     impl Customer {
         const id: EntityColumn<Customer> = EntityColumn::new("id", "id");
         const email: EntityColumn<Customer> = EntityColumn::new("email", "email");
         const active: EntityColumn<Customer> = EntityColumn::new("active", "active");
         const created_at: EntityColumn<Customer> = EntityColumn::new("created_at", "created_at");
+    }
+
+    #[allow(non_upper_case_globals)]
+    impl Order {
+        const customer_id: EntityColumn<Order> = EntityColumn::new("customer_id", "customer_id");
+        const total_cents: EntityColumn<Order> = EntityColumn::new("total_cents", "total_cents");
     }
 
     struct NewCustomer {
@@ -256,6 +334,7 @@ mod tests {
             .paginate(Pagination::page(2, 20));
 
         assert_eq!(query.from, TableRef::new("sales", "customers"));
+        assert!(query.joins.is_empty());
         assert_eq!(query.projection.len(), 2);
         assert_eq!(
             query.order_by,
@@ -267,6 +346,30 @@ mod tests {
         );
         assert_eq!(query.pagination, Some(Pagination::new(20, 20)));
         assert!(matches!(query.predicate, Some(Predicate::And(_))));
+    }
+
+    #[test]
+    fn select_query_captures_explicit_joins_without_sql_rendering() {
+        let query = SelectQuery::from_entity::<Customer>()
+            .inner_join::<Order>(Predicate::eq(
+                Expr::from(Customer::id),
+                Expr::from(Order::customer_id),
+            ))
+            .join(Join::left(
+                TableRef::new("sales", "orders"),
+                Predicate::gt(
+                    Expr::from(Order::total_cents),
+                    Expr::value(SqlValue::I64(0)),
+                ),
+            ));
+
+        assert_eq!(query.joins.len(), 2);
+        assert_eq!(query.joins[0].join_type, JoinType::Inner);
+        assert_eq!(query.joins[0].table, TableRef::new("sales", "orders"));
+        assert!(matches!(query.joins[0].on, Predicate::Eq(_, _)));
+        assert_eq!(query.joins[1].join_type, JoinType::Left);
+        assert_eq!(query.joins[1].table, TableRef::new("sales", "orders"));
+        assert!(matches!(query.joins[1].on, Predicate::Gt(_, _)));
     }
 
     #[test]

@@ -33,6 +33,12 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_select(query: &SelectQuery) -> Result<CompiledQuery, OrmError> {
+        if !query.joins.is_empty() {
+            return Err(OrmError::new(
+                "SQL Server join compilation is not supported in this stage",
+            ));
+        }
+
         let mut parameters = ParameterBuilder::default();
         let projection = compile_projection(&query.projection, &mut parameters)?;
         let mut sql = format!("SELECT {projection} FROM {}", quote_table_ref(&query.from)?);
@@ -509,6 +515,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_joins_until_stage_nine_sql_compilation() {
+        let error = SqlServerCompiler::compile_select(
+            &SelectQuery::from_entity::<Customer>().inner_join::<Customer>(Predicate::eq(
+                Expr::from(Customer::id),
+                Expr::from(Customer::id),
+            )),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server join compilation is not supported in this stage"
+        );
+    }
+
+    #[test]
     fn compiles_insert_with_output_inserted_and_parameter_order() {
         let query = InsertQuery::for_entity::<Customer, _>(&NewCustomer {
             email: "ana@example.com".to_string(),
@@ -603,6 +625,7 @@ mod tests {
     fn compiles_functions_null_checks_and_unary_binary_exprs() {
         let query = SelectQuery {
             from: TableRef::new("sales", "customers"),
+            joins: vec![],
             projection: vec![Expr::function(
                 "LOWER",
                 vec![Expr::binary(

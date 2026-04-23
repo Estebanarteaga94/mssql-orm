@@ -2,7 +2,6 @@
 
 ## Pendientes
 - [ ] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key
-- [ ] Etapa 9: Incorporar joins explícitos al AST de `mssql-orm-query`
 - [ ] Etapa 9: Compilar joins explícitos a SQL Server parametrizado
 - [ ] Etapa 9: Exponer joins explícitos mínimos en la crate pública
 - [ ] Etapa 9: Agregar pruebas de integración y snapshots para joins y foreign keys
@@ -19,6 +18,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Incorporar joins explícitos al AST de `mssql-orm-query`
 - [x] Etapa 9: Implementar DDL SQL Server para `CreateIndex` y `DropIndex` en migraciones
 - [x] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`) en metadata y DDL
 - [x] Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys

@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: Joins explícitos en el AST de queries
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Incorporar joins explícitos al AST de mssql-orm-query` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm-query/src/join.rs` con los tipos `JoinType` y `Join`, modelando joins explícitos como parte del AST sin introducir generación SQL en la crate `query`.
+- `crates/mssql-orm-query/src/select.rs` ahora expone `SelectQuery::joins`, `join(...)`, `inner_join::<E>(...)` y `left_join::<E>(...)`, manteniendo la condición de join en términos de `Predicate`.
+- `crates/mssql-orm-query/src/lib.rs` ahora reexporta `Join` y `JoinType`, y su batería de pruebas incluye casos específicos que fijan el shape del AST para joins internos y left joins sobre entidades explícitas.
+- Para no dejar una semántica silenciosamente incorrecta en la siguiente capa, `crates/mssql-orm-sqlserver/src/compiler.rs` ahora rechaza explícitamente `SelectQuery` con joins no vacíos mediante el error `SQL Server join compilation is not supported in this stage`.
+- Se actualizó la batería de pruebas de `mssql-orm-sqlserver` para fijar ese rechazo explícito hasta la siguiente subtarea dedicada a compilación SQL de joins.
+
+### Resultado
+
+- La Etapa 9 ya tiene joins explícitos modelados en el AST de `mssql-orm-query`, con contratos estables y sin adelantar todavía su compilación SQL ni la API pública fluente.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-query`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La compilación SQL Server de joins sigue fuera del alcance de esta sesión y queda rechazada explícitamente para evitar pérdida silenciosa de semántica.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Compilar joins explícitos a SQL Server parametrizado`.
+
 ### Sesión: DDL SQL Server para índices de migración
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
