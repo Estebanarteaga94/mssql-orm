@@ -1,0 +1,191 @@
+use mssql_orm::prelude::*;
+use mssql_orm::query::CompiledQuery;
+use mssql_orm::tiberius::MssqlConnection;
+
+const TEST_CONNECTION_ENV: &str = "MSSQL_ORM_TEST_CONNECTION_STRING";
+const KEEP_TABLES_ENV: &str = "KEEP_TEST_TABLES";
+const TEST_TABLE_NAME: &str = "dbo.mssql_orm_active_record";
+
+#[derive(Entity, Debug, Clone, PartialEq)]
+#[orm(table = "mssql_orm_active_record", schema = "dbo")]
+struct ActiveRecordUser {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+    #[orm(length = 120)]
+    name: String,
+    active: bool,
+}
+
+impl FromRow for ActiveRecordUser {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            id: row.get_required_typed::<i64>("id")?,
+            name: row.get_required_typed::<String>("name")?,
+            active: row.get_required_typed::<bool>("active")?,
+        })
+    }
+}
+
+#[derive(Insertable, Debug, Clone)]
+#[orm(entity = ActiveRecordUser)]
+struct NewActiveRecordUser {
+    name: String,
+    active: bool,
+}
+
+#[derive(DbContext)]
+struct ActiveRecordDb {
+    pub users: DbSet<ActiveRecordUser>,
+}
+
+#[tokio::test]
+async fn public_active_record_query_roundtrips_against_real_sql_server() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping Active Record query integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = ActiveRecordDb::connect(&connection_string).await?;
+
+        let inserted_ana = db
+            .users
+            .insert(NewActiveRecordUser {
+                name: "Ana".to_string(),
+                active: true,
+            })
+            .await?;
+        let inserted_luis = db
+            .users
+            .insert(NewActiveRecordUser {
+                name: "Luis".to_string(),
+                active: false,
+            })
+            .await?;
+
+        let all = ActiveRecordUser::query(&db)
+            .order_by(ActiveRecordUser::id.asc())
+            .all()
+            .await?;
+        assert_eq!(all, vec![inserted_ana.clone(), inserted_luis.clone()]);
+
+        let active_only = ActiveRecordUser::query(&db)
+            .filter(ActiveRecordUser::active.eq(true))
+            .all()
+            .await?;
+        assert_eq!(active_only, vec![inserted_ana]);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+    result
+}
+
+#[tokio::test]
+async fn public_active_record_find_roundtrips_and_returns_none_when_missing() -> Result<(), OrmError>
+{
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping Active Record find integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = ActiveRecordDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewActiveRecordUser {
+                name: "Maria".to_string(),
+                active: true,
+            })
+            .await?;
+
+        let found = ActiveRecordUser::find(&db, inserted.id).await?;
+        assert_eq!(found, Some(inserted));
+
+        let missing = ActiveRecordUser::find(&db, i64::MAX).await?;
+        assert_eq!(missing, None);
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_test_table(&connection_string, keep_tables).await?;
+    result
+}
+
+fn test_connection_string() -> Option<String> {
+    std::env::var(TEST_CONNECTION_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn keep_test_tables() -> bool {
+    matches!(
+        std::env::var(KEEP_TABLES_ENV)
+            .ok()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .as_deref(),
+        Some("1" | "true" | "yes" | "on")
+    )
+}
+
+async fn reset_test_table(connection_string: &str) -> Result<(), OrmError> {
+    let mut connection = MssqlConnection::connect(connection_string).await?;
+
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "IF OBJECT_ID('{TEST_TABLE_NAME}', 'U') IS NOT NULL DROP TABLE {TEST_TABLE_NAME}"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "CREATE TABLE {TEST_TABLE_NAME} (\
+                    id BIGINT IDENTITY(1,1) PRIMARY KEY,\
+                    name NVARCHAR(120) NOT NULL,\
+                    active BIT NOT NULL\
+                )"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    Ok(())
+}
+
+async fn cleanup_test_table(connection_string: &str, keep_tables: bool) -> Result<(), OrmError> {
+    if keep_tables {
+        return Ok(());
+    }
+
+    let mut connection = MssqlConnection::connect(connection_string).await?;
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "IF OBJECT_ID('{TEST_TABLE_NAME}', 'U') IS NOT NULL DROP TABLE {TEST_TABLE_NAME}"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    Ok(())
+}

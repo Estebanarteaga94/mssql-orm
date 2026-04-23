@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 10: Agregar pruebas unitarias, `trybuild` e integración dedicadas para la capa Active Record base
 - [ ] Etapa 10: Diseñar e implementar `entity.delete(&db)` sobre Active Record sin duplicar la lógica de `DbSet`
 - [ ] Etapa 10: Diseñar e implementar `entity.save(&db)` sobre Active Record con estrategia explícita de PK y persistencia
 - [ ] Etapa 11: Implementar soporte de concurrencia optimista con `rowversion`
@@ -15,6 +14,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 10: Agregar pruebas unitarias, `trybuild` e integración dedicadas para la capa Active Record base
 - [x] Etapa 10: Implementar trait `ActiveRecord` base con `Entity::query(&db)` y `Entity::find(&db, id)` sobre `DbSet`
 - [x] Etapa 10: Exponer acceso tipado `DbContext -> DbSet<T>` para habilitar Active Record sobre la crate pública
 - [x] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key

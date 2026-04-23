@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: Cobertura dedicada para Active Record base
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como referencia para cerrar la subtarea de cobertura de Active Record.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 10: Agregar pruebas unitarias, trybuild e integración dedicadas para la capa Active Record base` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se retiró `active_record_public_valid.rs` de la batería `trybuild` genérica y se creó `crates/mssql-orm/tests/active_record_trybuild.rs` como suite dedicada de Active Record.
+- Se añadió `crates/mssql-orm/tests/ui/active_record_missing_entity_set.rs` y su `.stderr` para fijar el error de compilación cuando un contexto no implementa `DbContextEntitySet<User>` y aun así se intenta usar `User::query(&db)`.
+- Se añadió `crates/mssql-orm/tests/stage10_public_active_record.rs` con integración pública dedicada sobre SQL Server real, cubriendo roundtrip de `ActiveRecord::query(&db)` y `ActiveRecord::find(&db, id)`, además del caso `None` para filas inexistentes.
+- La cobertura unitaria de `crates/mssql-orm/src/active_record.rs` se mantuvo como batería interna mínima de la surface, y esta sesión completó la parte separada de `trybuild` e integración pública requerida por el backlog.
+
+### Resultado
+
+- La capa base de Active Record ya quedó protegida por cobertura dedicada de compilación e integración, separada de la batería general del resto de la crate pública.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test active_record_trybuild`
+- `cargo test -p mssql-orm --test stage10_public_active_record`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El siguiente frente de Active Record ya no es cobertura sino diseño de mutación de instancia; `entity.delete(&db)` debe montarse sobre `DbSet::delete` sin introducir otra ruta de ejecución ni resolver PKs por heurística opaca.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Diseñar e implementar entity.delete(&db) sobre Active Record sin duplicar la lógica de DbSet`.
+
 ### Sesión: Trait `ActiveRecord` base sobre `DbSet`
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como referencia para la subtarea de `ActiveRecord`.

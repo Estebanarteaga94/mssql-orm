@@ -105,7 +105,10 @@ mod tests {
 
         let query = TestEntity::query(&context);
 
-        assert_eq!(query.into_select_query(), SelectQuery::from_entity::<TestEntity>());
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>()
+        );
     }
 
     #[test]
