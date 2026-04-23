@@ -18,4 +18,5 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/insertable_missing_entity.rs");
     tests.compile_fail("tests/ui/changeset_field_not_option.rs");
     tests.compile_fail("tests/ui/dbcontext_invalid_field_type.rs");
+    tests.compile_fail("tests/ui/dbcontext_duplicate_entity_set.rs");
 }

@@ -53,6 +53,10 @@ pub trait DbContext: Sized {
     }
 }
 
+pub trait DbContextEntitySet<E: Entity>: DbContext {
+    fn db_set(&self) -> &DbSet<E>;
+}
+
 #[derive(Clone)]
 pub struct DbSet<E: Entity> {
     connection: Option<SharedConnection>,
@@ -216,7 +220,7 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
 
 #[cfg(test)]
 mod tests {
-    use super::DbSet;
+    use super::{DbContext, DbContextEntitySet, DbSet};
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
         SqlValue,
@@ -227,6 +231,9 @@ mod tests {
 
     struct TestEntity;
     struct CompositeKeyEntity;
+    struct DummyContext {
+        entities: DbSet<TestEntity>,
+    }
     struct NewTestEntity {
         name: String,
         active: bool,
@@ -360,6 +367,22 @@ mod tests {
         }
     }
 
+    impl DbContext for DummyContext {
+        fn from_shared_connection(_connection: super::SharedConnection) -> Self {
+            unreachable!("DummyContext is only used in disconnected unit tests")
+        }
+
+        fn shared_connection(&self) -> super::SharedConnection {
+            panic!("DummyContext is only used in disconnected unit tests")
+        }
+    }
+
+    impl DbContextEntitySet<TestEntity> for DummyContext {
+        fn db_set(&self) -> &DbSet<TestEntity> {
+            &self.entities
+        }
+    }
+
     impl mssql_orm_core::Insertable<TestEntity> for NewTestEntity {
         fn values(&self) -> Vec<ColumnValue> {
             vec![
@@ -395,6 +418,18 @@ mod tests {
     fn dbset_exposes_entity_metadata() {
         let dbset = DbSet::<TestEntity>::disconnected();
 
+        assert_eq!(dbset.entity_metadata().table, "test_entities");
+    }
+
+    #[test]
+    fn dbcontext_entity_set_trait_returns_typed_dbset() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+
+        let dbset = <DummyContext as DbContextEntitySet<TestEntity>>::db_set(&context);
+
+        assert_eq!(dbset.entity_metadata().rust_name, "TestEntity");
         assert_eq!(dbset.entity_metadata().table, "test_entities");
     }
 

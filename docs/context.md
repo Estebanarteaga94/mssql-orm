@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Avanzar desde la Etapa 9 ya cerrada hacia la primera tarea pendiente de la Etapa 10, manteniendo la API pública concentrada en `mssql-orm` y sin reabrir fundamentos ya estabilizados.
+Avanzar desde la base ya creada de Etapa 10 hacia la subtarea del trait `ActiveRecord` para `query/find`, manteniendo la API pública concentrada en `mssql-orm` y dejando `save/delete` para entregables posteriores más explícitos.
 
 ## Dirección Arquitectónica Vigente
 
@@ -71,6 +71,8 @@ Avanzar desde la Etapa 9 ya cerrada hacia la primera tarea pendiente de la Etapa
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
 - `DbContext` ahora también expone `shared_connection()` y `transaction(...)`, y `#[derive(DbContext)]` genera el método inherente `db.transaction(|tx| async move { ... })` construyendo un contexto transaccional sobre la misma conexión compartida.
+- La crate pública `mssql-orm` ahora también expone `DbContextEntitySet<E>`, y `#[derive(DbContext)]` implementa automáticamente ese trait para cada `DbSet<E>` del contexto, habilitando resolución tipada `DbContext -> DbSet<T>` para la futura capa Active Record.
+- Como esa resolución sería ambigua con dos `DbSet` del mismo tipo de entidad en un mismo contexto, el derive `DbContext` ahora rechaza en compile-time contextos con múltiples `DbSet` para la misma entidad.
 - La implementación pública actual abre `BEGIN TRANSACTION`, ejecuta el closure con un nuevo contexto del mismo tipo, hace `COMMIT` en `Ok` y `ROLLBACK` en `Err`, sin depender de `Drop` async.
 - La crate pública `mssql-orm` ahora también expone el trait `EntityColumnPredicateExt` en su `prelude`, habilitando `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_null` e `is_not_null` directamente sobre `EntityColumn`.
 - La misma extensión pública ahora también expone `contains`, `starts_with` y `ends_with`, reutilizando `Predicate::Like` con parámetros generados en la crate pública.
@@ -163,7 +165,8 @@ Avanzar desde la Etapa 9 ya cerrada hacia la primera tarea pendiente de la Etapa
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
-- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; el siguiente frente real del backlog pasa a ser la primera tarea pendiente de Etapa 10.
+- La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; Etapa 10 ya tiene también su base de resolución tipada `DbContext -> DbSet<T>`.
+- La Etapa 10 se descompuso en subtareas porque `query/find` son razonables sobre `DbSet`, mientras que `save/delete` requieren una estrategia más explícita para PK y persistencia de instancias.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -174,6 +177,6 @@ Avanzar desde la Etapa 9 ya cerrada hacia la primera tarea pendiente de la Etapa
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 10: Implementar capa opcional Active Record sobre DbSet`.
-2. Mantener la nueva sintaxis estructurada de `foreign_key` como contrato soportado y evitar romper la compatibilidad con la forma string existente mientras no haya una migración de API explícita.
+1. Implementar `Etapa 10: Implementar trait ActiveRecord base con Entity::query(&db) y Entity::find(&db, id) sobre DbSet`.
+2. Reutilizar `DbContextEntitySet<E>` como único mecanismo de resolución de `DbSet<T>` desde el contexto, sin reflexión ni wiring paralelo.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

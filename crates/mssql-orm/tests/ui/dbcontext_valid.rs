@@ -20,6 +20,8 @@ fn main() {
     let _connect = AppDbContext::connect;
     let _from_shared = AppDbContext::from_shared_connection;
     let _from_connection = AppDbContext::from_connection;
+    let _db_set: fn(&AppDbContext) -> &DbSet<User> =
+        <AppDbContext as mssql_orm::DbContextEntitySet<User>>::db_set;
     let _transaction = AppDbContext::transaction::<
         fn(AppDbContext) -> std::future::Ready<Result<(), OrmError>>,
         std::future::Ready<Result<(), OrmError>>,

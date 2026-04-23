@@ -259,6 +259,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
 }
 
 fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let context_ident = input.ident.clone();
     let ident = input.ident;
     let fields = extract_named_fields(&ident, input.data, "DbContext")?;
     let shared_connection_field = fields
@@ -270,6 +271,23 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 "DbContext requiere al menos un campo DbSet<Entidad>",
             )
         })?;
+
+    let mut seen_entities = std::collections::HashSet::new();
+    for field in &fields {
+        let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+            Error::new_spanned(
+                &field.ty,
+                "DbContext requiere campos con tipo DbSet<Entidad>",
+            )
+        })?;
+        let entity_key = quote! { #entity_type }.to_string();
+        if !seen_entities.insert(entity_key) {
+            return Err(Error::new_spanned(
+                &field.ty,
+                "DbContext no soporta múltiples DbSet para la misma entidad",
+            ));
+        }
+    }
 
     let initializers = fields
         .iter()
@@ -289,6 +307,30 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #field_ident: ::mssql_orm::DbSet::<#entity_type>::new(
                     ::std::sync::Arc::clone(&connection)
                 )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let dbset_access_impls = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
+            let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "DbContext requiere campos con tipo DbSet<Entidad>",
+                )
+            })?;
+
+            Ok(quote! {
+                impl ::mssql_orm::DbContextEntitySet<#entity_type> for #context_ident {
+                    fn db_set(&self) -> &::mssql_orm::DbSet<#entity_type> {
+                        &self.#field_ident
+                    }
+                }
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -336,6 +378,8 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::transaction(self, operation).await
             }
         }
+
+        #(#dbset_access_impls)*
     })
 }
 

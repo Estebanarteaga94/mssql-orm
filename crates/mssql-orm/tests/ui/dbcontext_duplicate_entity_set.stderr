@@ -1,0 +1,5 @@
+error: DbContext no soporta múltiples DbSet para la misma entidad
+  --> tests/ui/dbcontext_duplicate_entity_set.rs:14:25
+   |
+14 |     pub archived_users: DbSet<User>,
+   |                         ^^^^^^^^^^^

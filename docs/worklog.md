@@ -2,6 +2,61 @@
 
 ## 2026-04-23
 
+### Sesión: Acceso tipado `DbContext -> DbSet<T>` para Active Record
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 10: Exponer acceso tipado DbContext -> DbSet<T> para habilitar Active Record sobre la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió en `crates/mssql-orm/src/context.rs` el nuevo trait público `DbContextEntitySet<E>`, definido como contrato mínimo para resolver un `DbSet<E>` desde cualquier contexto sin introducir reflexión ni conexión global.
+- `crates/mssql-orm-macros/src/lib.rs` ahora hace que `#[derive(DbContext)]` implemente automáticamente `DbContextEntitySet<E>` por cada campo `DbSet<E>` del contexto.
+- Para evitar ambigüedad en la futura API Active Record, el derive ahora rechaza en compile-time contextos que declaren múltiples `DbSet` para la misma entidad.
+- Se actualizaron `crates/mssql-orm/src/lib.rs`, `crates/mssql-orm/tests/ui/dbcontext_valid.rs` y `crates/mssql-orm/tests/trybuild.rs`, y se añadió `crates/mssql-orm/tests/ui/dbcontext_duplicate_entity_set.rs` con su `.stderr` para fijar el contrato nuevo.
+- También se añadieron pruebas unitarias internas en la crate pública para verificar el trait nuevo en un contexto mínimo desconectado y su reexport desde la `prelude`.
+
+### Resultado
+
+- La Etapa 10 ya tiene la base técnica necesaria para que `ActiveRecord` pueda resolver `DbSet<T>` desde `DbContext` de forma tipada, reutilizando la infraestructura existente de `DbSet` en lugar de crear otra capa de wiring.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La restricción nueva de un solo `DbSet<E>` por contexto es deliberada para evitar ambigüedad en Active Record; si más adelante se necesita relajarla, habrá que introducir un mecanismo explícito de selección y no inferencia implícita por tipo.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Implementar trait ActiveRecord base con Entity::query(&db) y Entity::find(&db, id) sobre DbSet`.
+
+### Sesión: División de la Etapa 10 de Active Record
+
+- Se revisó la Etapa 10 contra la implementación actual de `DbSet`, `DbContext` y el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se concluyó que la tarea amplia `Implementar capa opcional Active Record sobre DbSet` era demasiado grande para una sola sesión sin riesgo de dejar contratos incompletos para `save` y `delete`.
+- Se reemplazó esa tarea en `docs/tasks.md` por subtareas verificables: acceso tipado `DbContext -> DbSet<T>`, trait `ActiveRecord` base para `query/find`, cobertura de pruebas, `entity.delete(&db)` y `entity.save(&db)`.
+- Se actualizó `docs/context.md` para dejar explícito que la siguiente sesión debe empezar por el acceso tipado `DbContext -> DbSet<T>` y que `save/delete` quedan diferidos hasta definir mejor PK y persistencia de instancias.
+
+### Resultado
+
+- El backlog de Etapa 10 quedó descompuesto en entregables pequeños y trazables, reduciendo el riesgo de dejar Active Record a medio implementar.
+
+### Validación
+
+- No aplicó validación con `cargo` porque en esta sesión solo se reestructuró el backlog y la documentación operativa; no hubo cambios de código.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `entity.save(&db)` sigue siendo la parte más delicada de la Etapa 10 porque hoy la crate pública no tiene todavía un contrato explícito para extraer PK y distinguir persistencia de instancia sin introducir duplicación o acoplamiento indebido.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 10: Exponer acceso tipado DbContext -> DbSet<T> para habilitar Active Record sobre la crate pública`.
+
 ### Sesión: Sintaxis estructurada para `foreign_key`
 
 - Se confirmó que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.

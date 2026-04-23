@@ -17,7 +17,7 @@ pub use mssql_orm_sqlserver as sqlserver;
 pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
-pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
+pub use context::{DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
 pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
@@ -26,8 +26,8 @@ pub use query_predicates::EntityColumnPredicateExt;
 
 pub mod prelude {
     pub use crate::{
-        DbContext, DbSet, DbSetQuery, EntityColumnOrderExt, EntityColumnPredicateExt, PageRequest,
-        PredicateCompositionExt,
+        DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
+        EntityColumnPredicateExt, PageRequest, PredicateCompositionExt,
     };
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -42,10 +42,10 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
-        EntityColumnPredicateExt, EntityMetadata, IdentityMetadata, Insertable, OrmError,
-        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
-        SqlValue,
+        Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity, EntityColumn,
+        EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, IdentityMetadata,
+        Insertable, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
+        SqlServerType, SqlTypeMapping, SqlValue,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
 
@@ -88,6 +88,18 @@ mod tests {
     #[test]
     fn exposes_entity_contract_in_prelude() {
         assert_eq!(PublicEntity::metadata().table, "public_entities");
+    }
+
+    #[test]
+    fn exposes_dbcontext_entity_set_contract_in_prelude() {
+        fn require_trait<C, E>()
+        where
+            C: DbContextEntitySet<E>,
+            E: Entity,
+        {
+        }
+
+        require_trait::<DerivedDbContext, DerivedUser>();
     }
 
     #[allow(dead_code)]
