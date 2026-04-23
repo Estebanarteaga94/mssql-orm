@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 validando migraciones iniciales e incrementales contra SQL Server real, ahora que snapshots, diff engine, generación SQL e interfaz CLI mínima ya quedaron implementados.
+Comenzar la Etapa 8 implementando transacciones con commit en `Ok` y rollback en `Err`, ahora que la Etapa 7 de migraciones code-first MVP quedó validada de extremo a extremo.
 
 ## Dirección Arquitectónica Vigente
 
@@ -100,6 +100,9 @@ Continuar la Etapa 7 validando migraciones iniciales e incrementales contra SQL 
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
 - `mssql-orm-cli` ya implementa `migration add <Name>`, `migration list` y `database update`, delegando la lógica de scaffolding/listado/script al crate de migraciones y reutilizando la creación SQL de `__mssql_orm_migrations` desde `mssql-orm-sqlserver`.
 - La CLI actual genera y lista migraciones locales y produce un script SQL acumulado para `database update`; la ejecución real contra SQL Server queda explícitamente como siguiente subtarea del backlog.
+- `database update` ahora divide `up.sql` en sentencias mínimas y ejecuta cada una mediante `EXEC(N'...')`, evitando el fallo detectado al validar migraciones reales con `CREATE SCHEMA` seguido de `CREATE TABLE`.
+- La validación real ya se ejecutó contra SQL Server local (`tempdb`) usando `sqlcmd`: una migración inicial creó `qa_real_stage7.customers`, una migración incremental añadió `phone`, y la reaplicación del mismo script se mantuvo idempotente con exactamente dos filas en `dbo.__mssql_orm_migrations`.
+- El artefacto temporal anterior `dbo.qa_1776961277_customers`, usado solo durante una validación intermedia, ya fue eliminado junto con sus filas de historial asociadas.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -143,6 +146,6 @@ Continuar la Etapa 7 validando migraciones iniciales e incrementales contra SQL 
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real`.
-2. Usar la connection string local ya registrada y validar al menos creación inicial de schema y un cambio incremental de columna.
-3. Si durante esa validación aparecen gaps de ejecución en `database update`, corregirlos sin ampliar todavía el alcance a features avanzadas del roadmap.
+1. Implementar `Etapa 8: transacciones con commit en Ok y rollback en Err`.
+2. Reutilizar la infraestructura de conexión y ejecución actual en `mssql-orm-tiberius`, sin mover responsabilidades al `core` ni a la crate pública.
+3. Después de eso, agregar pruebas explícitas de commit y rollback contra SQL Server real.

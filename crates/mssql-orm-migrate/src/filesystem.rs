@@ -90,13 +90,24 @@ pub fn build_database_update_script(
         let up_sql = fs::read_to_string(&migration.up_sql_path)
             .map_err(|_| OrmError::new("failed to read migration up.sql"))?;
         let checksum = checksum_hex(up_sql.as_bytes());
+        let statements = split_sql_statements(&up_sql);
+        let body = if statements.is_empty() {
+            String::new()
+        } else {
+            statements
+                .iter()
+                .map(|statement| format!("    EXEC(N'{}');", escape_sql_literal(statement)))
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        };
         script.push(format!(
-            "IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations] WHERE [id] = N'{id}')\nBEGIN\n{body}\n    INSERT INTO [dbo].[__mssql_orm_migrations] ([id], [name], [checksum], [orm_version]) VALUES (N'{id}', N'{name}', N'{checksum}', N'{version}');\nEND",
+            "IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations] WHERE [id] = N'{id}')\nBEGIN\n{body}    INSERT INTO [dbo].[__mssql_orm_migrations] ([id], [name], [checksum], [orm_version]) VALUES (N'{id}', N'{name}', N'{checksum}', N'{version}');\nEND",
             id = migration.id,
             name = migration.name,
             checksum = checksum,
             version = ORM_VERSION,
-            body = indent_sql_block(&up_sql),
+            body = body,
         ));
     }
 
@@ -154,17 +165,22 @@ fn checksum_hex(bytes: &[u8]) -> String {
     format!("{hash:016x}")
 }
 
-fn indent_sql_block(sql: &str) -> String {
-    sql.lines()
-        .map(|line| {
-            if line.trim().is_empty() {
-                "    ".to_string()
-            } else {
-                format!("    {line}")
-            }
+fn escape_sql_literal(sql: &str) -> String {
+    sql.replace('\'', "''")
+}
+
+fn split_sql_statements(sql: &str) -> Vec<String> {
+    sql.split(';')
+        .map(str::trim)
+        .filter(|statement| !statement.is_empty())
+        .filter(|statement| {
+            statement.lines().any(|line| {
+                let trimmed = line.trim();
+                !trimmed.is_empty() && !trimmed.starts_with("--")
+            })
         })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .map(|statement| format!("{statement};"))
+        .collect()
 }
 
 #[cfg(test)]
@@ -216,7 +232,7 @@ mod tests {
         let scaffold = create_migration_scaffold(&root, "Create Customers").unwrap();
         fs::write(
             scaffold.directory.join("up.sql"),
-            "CREATE TABLE [sales].[customers] ([id] bigint NOT NULL);",
+            "CREATE SCHEMA [sales];\nCREATE TABLE [sales].[customers] ([id] bigint NOT NULL);",
         )
         .unwrap();
 
@@ -228,7 +244,10 @@ mod tests {
 
         assert!(script.contains("CREATE TABLE [dbo].[__mssql_orm_migrations]"));
         assert!(script.contains("IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations]"));
-        assert!(script.contains("CREATE TABLE [sales].[customers]"));
+        assert!(script.contains("EXEC(N'CREATE SCHEMA [sales];');"));
+        assert!(
+            script.contains("EXEC(N'CREATE TABLE [sales].[customers] ([id] bigint NOT NULL);');")
+        );
         assert!(script.contains("INSERT INTO [dbo].[__mssql_orm_migrations]"));
     }
 }

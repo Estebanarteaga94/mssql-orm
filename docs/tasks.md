@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real
 - [ ] Etapa 8: Implementar transacciones con commit en `Ok` y rollback en `Err`
 - [ ] Etapa 8: Agregar pruebas de commit y rollback
 - [ ] Etapa 9: Implementar metadata de relaciones, foreign keys, joins explícitos e índices asociados
@@ -19,6 +18,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real
 - [x] Etapa 7: Implementar CLI mínima con `migration add`, `database update` y `migration list`
 - [x] Etapa 7: Implementar generación SQL y tabla `__mssql_orm_migrations`
 - [x] Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos

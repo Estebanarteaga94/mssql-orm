@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: Validación real de migraciones sobre SQL Server
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Validar migraciones iniciales e incrementales contra SQL Server real` a `En Progreso` antes de ejecutar la validación y luego a `Completadas` tras cerrarla.
+- Se ejecutó una validación real con `sqlcmd` contra `tempdb`, usando un proyecto temporal de migraciones creado con la CLI mínima del workspace.
+- La primera validación expuso un gap real en `database update`: el script envolvía todo `up.sql` en un único `EXEC(N'...')`, lo que falló al intentar ejecutar `CREATE SCHEMA` seguido de `CREATE TABLE` en la misma batch dinámica.
+- Se corrigió `crates/mssql-orm-migrate/src/filesystem.rs` para dividir `up.sql` en sentencias mínimas y emitir un `EXEC(N'...')` por sentencia, manteniendo la inserción idempotente en `dbo.__mssql_orm_migrations`.
+- Después del fix, se repitió la validación real completa: una migración inicial creó `qa_real_stage7.customers`, una migración incremental añadió la columna `phone`, y la reaplicación del mismo script no duplicó historial ni reejecutó cambios previos.
+- Durante la sesión se detectó y eliminó un artefacto temporal previo de validación (`dbo.qa_1776961277_customers`) junto con sus filas de historial, para dejar `tempdb` consistente con la validación final correcta.
+
+### Resultado
+
+- La Etapa 7 quedó validada de extremo a extremo: scaffolding local, script `database update`, creación de tabla de historial, migración inicial, migración incremental e idempotencia del script acumulado sobre SQL Server real.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add CreateCustomers`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add AddPhone`
+- `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update`
+- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i <script.sql>`
+- Consultas `sqlcmd` sobre `sys.tables`, `sys.columns` y `dbo.__mssql_orm_migrations` para verificar creación inicial, cambio incremental e idempotencia
+
+### Bloqueos
+
+- No hubo bloqueos persistentes; el único gap detectado (`CREATE SCHEMA` dentro de una única batch dinámica) se corrigió en la misma sesión.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 8: transacciones con commit en Ok y rollback en Err`.
+
 ### Sesión: CLI mínima de migraciones
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar CLI mínima con migration add, database update y migration list` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
