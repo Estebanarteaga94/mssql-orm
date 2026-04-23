@@ -120,7 +120,23 @@ async fn public_dbset_crud_api_roundtrips_against_real_sql_server() -> Result<()
         assert_eq!(found, Some(inserted.clone()));
 
         let tracked = db.users.find_tracked(inserted.id).await?;
-        assert_eq!(tracked, Some(Tracked::from_loaded(inserted.clone())));
+        let mut tracked = tracked.expect("tracked entity should exist");
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(tracked.original(), &inserted);
+        assert_eq!(tracked.current(), &inserted);
+
+        tracked.name = "Ana Maria".to_string();
+
+        assert_eq!(tracked.state(), EntityState::Modified);
+        assert_eq!(tracked.original(), &inserted);
+        assert_eq!(
+            tracked.current(),
+            &PublicCrudUser {
+                id: inserted.id,
+                name: "Ana Maria".to_string(),
+                active: true,
+            }
+        );
 
         let count = db.users.query().count().await?;
         assert_eq!(count, 1);

@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: transición `Unchanged -> Modified` en `Tracked<T>`
+
+- Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, manteniendo la subtarea limitada a la mutabilidad observada del wrapper `Tracked<T>`.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 12: Detectar transición Unchanged -> Modified al mutar Tracked<T> sin exigir todavía tracking automático global` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/tracking.rs` ahora expone `Tracked::current_mut()` y además implementa `Deref`/`DerefMut` hacia la entidad actual para permitir el uso previsto por el plan (`tracked.campo = ...`).
+- La transición de estado quedó deliberadamente mínima: cualquier acceso mutable a una entidad `Unchanged` la marca como `Modified`; estados `Added` y `Deleted` no se reescriben automáticamente en esta subtarea.
+- No se añadió todavía comparación estructural entre `original` y `current`; en esta fase el wrapper considera “potencialmente modificada” a la entidad desde el momento en que se pide acceso mutable.
+- Se añadieron pruebas unitarias del módulo para fijar tres contratos: mutación vía `DerefMut`, mutación vía `current_mut()` y preservación del estado `Added` para entidades nuevas.
+- Se amplió `crates/mssql-orm/tests/stage5_public_crud.rs` para validar con una entidad pública real que `find_tracked(...)` devuelve un wrapper inicialmente `Unchanged`, que conserva `original`, y que tras mutar `tracked.name` el estado observable pasa a `Modified`.
+
+### Resultado
+
+- La Etapa 12 ya permite mutar `Tracked<T>` de forma idiomática y deja marcada la entidad como `Modified`, preparando el terreno para la futura colección interna de trackeados y `save_changes()`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La transición actual se activa con acceso mutable, no con diff estructural real; ese refinamiento queda fuera del alcance de esta subtarea y deberá evaluarse solo si más adelante aporta valor para `save_changes()`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 12: Introducir colección interna mínima de entidades trackeadas dentro de DbContext experimental sin romper la API explícita existente`.
+
 ### Sesión: `DbSet::find_tracked(id)` sobre PK simple
 
 - Se confirmó que el plan maestro real del repositorio no está en la raíz sino en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad para esta subtarea.

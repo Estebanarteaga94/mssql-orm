@@ -4,8 +4,9 @@
 //! future tracking pipeline. In this stage it does not:
 //! - register tracked entities inside a `DbContext`
 //! - persist changes through `save_changes()`
-//! - detect dirty state automatically from mutable access
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs
+
+use core::ops::{Deref, DerefMut};
 
 /// Lifecycle state for an experimentally tracked entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,9 +65,36 @@ impl<T> Tracked<T> {
         self.state
     }
 
+    /// Returns mutable access to the current value and marks the entity as
+    /// modified when it was previously loaded as unchanged.
+    pub fn current_mut(&mut self) -> &mut T {
+        self.mark_modified_if_unchanged();
+        &mut self.current
+    }
+
     /// Consumes the tracked wrapper and returns the current entity value.
     pub fn into_current(self) -> T {
         self.current
+    }
+
+    fn mark_modified_if_unchanged(&mut self) {
+        if self.state == EntityState::Unchanged {
+            self.state = EntityState::Modified;
+        }
+    }
+}
+
+impl<T> Deref for Tracked<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.current()
+    }
+}
+
+impl<T> DerefMut for Tracked<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.current_mut()
     }
 }
 
@@ -97,5 +125,38 @@ mod tests {
         let tracked = Tracked::from_loaded(String::from("Maria"));
 
         assert_eq!(tracked.into_current(), "Maria");
+    }
+
+    #[test]
+    fn mutable_access_transitions_loaded_entity_to_modified() {
+        let mut tracked = Tracked::from_loaded(String::from("Ana"));
+
+        tracked.push_str(" Maria");
+
+        assert_eq!(tracked.state(), EntityState::Modified);
+        assert_eq!(tracked.original(), "Ana");
+        assert_eq!(tracked.current(), "Ana Maria");
+    }
+
+    #[test]
+    fn current_mut_transitions_loaded_entity_to_modified() {
+        let mut tracked = Tracked::from_loaded(String::from("Luis"));
+
+        tracked.current_mut().push_str(" Alberto");
+
+        assert_eq!(tracked.state(), EntityState::Modified);
+        assert_eq!(tracked.original(), "Luis");
+        assert_eq!(tracked.current(), "Luis Alberto");
+    }
+
+    #[test]
+    fn mutable_access_keeps_added_state_for_new_entities() {
+        let mut tracked = Tracked::from_added(String::from("Maria"));
+
+        tracked.push_str(" Fernanda");
+
+        assert_eq!(tracked.state(), EntityState::Added);
+        assert_eq!(tracked.original(), "Maria");
+        assert_eq!(tracked.current(), "Maria Fernanda");
     }
 }

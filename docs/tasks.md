@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 12: Detectar transición `Unchanged -> Modified` al mutar `Tracked<T>` sin exigir todavía tracking automático global
 - [ ] Etapa 12: Introducir colección interna mínima de entidades trackeadas dentro de `DbContext` experimental sin romper la API explícita existente
 - [ ] Etapa 12: Implementar `save_changes()` para entidades `Modified`, reutilizando `DbSet::update` y preservando `rowversion`/`ConcurrencyConflict`
 - [ ] Etapa 12: Soportar estado `Added` con `add(tracked)` o equivalente explícito y persistencia vía `insert`
@@ -15,6 +14,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 12: Detectar transición `Unchanged -> Modified` al mutar `Tracked<T>` sin exigir todavía tracking automático global
 - [x] Etapa 12: Exponer `DbSet::find_tracked(id)` para PK simple reutilizando `find` y snapshot inicial
 - [x] Etapa 12: Definir surface experimental mínima de change tracking (`Tracked<T>`, `EntityState`, límites y exclusiones explícitas)
 - [x] Operativo: Descomponer la Etapa 12 de change tracking en subtareas verificables y ordenadas
