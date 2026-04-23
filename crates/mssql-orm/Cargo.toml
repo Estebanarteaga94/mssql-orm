@@ -11,6 +11,8 @@ mssql-orm-query.workspace = true
 mssql-orm-sqlserver.workspace = true
 mssql-orm-tiberius.workspace = true
 mssql-orm-migrate.workspace = true
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 trybuild = "1"

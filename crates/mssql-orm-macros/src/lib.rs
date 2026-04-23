@@ -15,8 +15,11 @@ pub fn derive_entity(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(DbContext, attributes(orm))]
-pub fn derive_db_context(_input: TokenStream) -> TokenStream {
-    TokenStream::new()
+pub fn derive_db_context(input: TokenStream) -> TokenStream {
+    match derive_db_context_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
 }
 
 #[proc_macro_derive(Insertable, attributes(orm))]
@@ -205,6 +208,65 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         impl ::mssql_orm::core::Entity for #ident {
             fn metadata() -> &'static ::mssql_orm::core::EntityMetadata {
                 &#metadata_ident
+            }
+        }
+    })
+}
+
+fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let fields = extract_named_fields(&ident, input.data, "DbContext")?;
+
+    let initializers = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
+            let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "DbContext requiere campos con tipo DbSet<Entidad>",
+                )
+            })?;
+
+            Ok(quote! {
+                #field_ident: ::mssql_orm::DbSet::<#entity_type>::new(
+                    ::std::sync::Arc::clone(&connection)
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl ::mssql_orm::DbContext for #ident {
+            fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
+                Self {
+                    #(#initializers),*
+                }
+            }
+        }
+
+        impl #ident {
+            pub fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
+                <Self as ::mssql_orm::DbContext>::from_shared_connection(connection)
+            }
+
+            pub fn from_connection(
+                connection: ::mssql_orm::tiberius::MssqlConnection<
+                    ::mssql_orm::tiberius::TokioConnectionStream
+                >,
+            ) -> Self {
+                <Self as ::mssql_orm::DbContext>::from_shared_connection(
+                    ::std::sync::Arc::new(::mssql_orm::tokio::sync::Mutex::new(connection))
+                )
+            }
+
+            pub async fn connect(connection_string: &str) -> Result<Self, ::mssql_orm::core::OrmError> {
+                let connection = ::mssql_orm::tiberius::MssqlConnection::connect(connection_string)
+                    .await?;
+                Ok(Self::from_connection(connection))
             }
         }
     })
@@ -713,6 +775,27 @@ fn option_inner_type(ty: &Type) -> Option<&Type> {
 
     let segment = type_path.path.segments.last()?;
     if segment.ident != "Option" {
+        return None;
+    }
+
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+
+    let syn::GenericArgument::Type(inner) = arguments.args.first()? else {
+        return None;
+    };
+
+    Some(inner)
+}
+
+fn dbset_entity_type(ty: &Type) -> Option<&Type> {
+    let Type::Path(type_path) = ty else {
+        return None;
+    };
+
+    let segment = type_path.path.segments.last()?;
+    if segment.ident != "DbSet" {
         return None;
     }
 

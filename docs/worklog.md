@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: `DbContext`, `DbSet<T>` y `#[derive(DbContext)]`
+
+- Se movió en `docs/tasks.md` la tarea `Etapa 5: Implementar DbContext trait, DbSet<T> y #[derive(DbContext)]` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió en `crates/mssql-orm/src/context.rs` la nueva capa pública de contexto con `SharedConnection`, el trait `DbContext`, el tipo `DbSet<T>` y el helper `connect_shared`.
+- `DbSet<T>` ahora encapsula una conexión compartida sobre `Arc<tokio::sync::Mutex<MssqlConnection<_>>>`, expone metadata de entidad y deja preparado el punto de apoyo para la próxima tarea de CRUD.
+- Se añadió `tokio` como dependencia de la crate pública y se reexportó desde `mssql-orm` para que el derive pueda generar código estable sin exigir imports extra al proyecto consumidor.
+- Se actualizó `crates/mssql-orm/src/lib.rs` para reexportar `DbContext`, `DbSet`, `SharedConnection` y `connect_shared`, y para incluir el derive `DbContext` dentro de la `prelude`.
+- Se implementó en `crates/mssql-orm-macros` el derive real `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`.
+- El derive genera `impl DbContext`, el método `from_shared_connection`, el helper `from_connection` y el método async `connect(&str) -> Result<Self, OrmError>`.
+- El derive valida en compilación que cada campo del contexto tenga tipo `DbSet<Entidad>`; si no se cumple, produce un error explícito.
+- Se añadieron casos `trybuild` nuevos en `crates/mssql-orm/tests/ui/` para un contexto válido y para un caso inválido con un campo que no es `DbSet<Entidad>`.
+- También se añadieron pruebas unitarias en la crate pública para `DbSet<T>` sobre metadata y `Debug`, sin simular una conexión falsa no válida.
+- `Cargo.lock` se actualizó para registrar la incorporación de `tokio` en la crate pública y el ajuste de dependencias asociado.
+- Se validó el workspace con `cargo check --workspace`, `cargo fmt --all --check`, `cargo test --workspace` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+### Resultado
+
+- La Etapa 5 ya tiene la base pública de contexto y sets de entidad alineada con el plan maestro, dejando listo el soporte para introducir la API CRUD sobre `DbSet<T>`.
+
+### Bloqueos
+
+- No hubo bloqueos permanentes. Solo aparecieron ajustes locales de validación: una prueba `trybuild` válida que estaba ejecutando código en runtime y varios fixtures de test que inicialmente intentaban fabricar conexiones falsas no inicializables.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 5: Exponer API CRUD base find, insert, update, delete, query`, reutilizando el `SharedConnection` ya introducido en `DbSet<T>`.
+
 ### Sesión: Modo `KEEP_TEST_TABLES` para inspección manual
 
 - Se ajustó `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs` para aceptar la variable de entorno `KEEP_TEST_TABLES=1`.

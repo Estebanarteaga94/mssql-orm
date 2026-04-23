@@ -1,0 +1,5 @@
+error: DbContext requiere campos con tipo DbSet<Entidad>
+  --> tests/ui/dbcontext_invalid_field_type.rs:13:16
+   |
+13 |     pub users: User,
+   |                ^^^^

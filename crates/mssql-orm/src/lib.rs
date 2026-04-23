@@ -2,28 +2,35 @@
 
 extern crate self as mssql_orm;
 
+mod context;
+
 pub use mssql_orm_core as core;
 pub use mssql_orm_macros as macros;
 pub use mssql_orm_migrate as migrate;
 pub use mssql_orm_query as query;
 pub use mssql_orm_sqlserver as sqlserver;
 pub use mssql_orm_tiberius as tiberius;
+pub use tokio;
+
+pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
 
 pub mod prelude {
+    pub use crate::{DbContext, DbSet};
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
         Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType,
         SqlTypeMapping, SqlValue,
     };
-    pub use mssql_orm_macros::{Changeset, Entity, Insertable};
+    pub use mssql_orm_macros::{Changeset, DbContext, Entity, Insertable};
 }
 
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        Changeset, ColumnValue, Entity, EntityColumn, EntityMetadata, IdentityMetadata, Insertable,
-        OrmError, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
+        Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityMetadata,
+        IdentityMetadata, Insertable, OrmError, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
+        SqlValue,
     };
 
     struct PublicEntity;
@@ -112,6 +119,13 @@ mod tests {
         display_name: Option<Option<String>>,
         #[orm(column = "created_by")]
         author: Option<String>,
+    }
+
+    #[allow(dead_code)]
+    #[derive(DbContext, Debug, Clone)]
+    struct DerivedDbContext {
+        pub users: DbSet<DerivedUser>,
+        pub audit_entries: DbSet<AuditEntry>,
     }
 
     #[test]
