@@ -101,17 +101,26 @@ pub fn build_database_update_script(
                 .join("\n")
                 + "\n"
         };
-        script.push(format!(
-            "IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations] WHERE [id] = N'{id}')\nBEGIN\n{body}    INSERT INTO [dbo].[__mssql_orm_migrations] ([id], [name], [checksum], [orm_version]) VALUES (N'{id}', N'{name}', N'{checksum}', N'{version}');\nEND",
-            id = migration.id,
-            name = migration.name,
-            checksum = checksum,
-            version = ORM_VERSION,
-            body = body,
+        script.push(render_idempotent_migration_block(
+            &migration.id,
+            &migration.name,
+            &checksum,
+            &body,
         ));
     }
 
     Ok(script.join("\n\n"))
+}
+
+fn render_idempotent_migration_block(id: &str, name: &str, checksum: &str, body: &str) -> String {
+    format!(
+        "IF EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations] WHERE [id] = N'{id}' AND [checksum] <> N'{checksum}')\nBEGIN\n    THROW 50001, N'mssql-orm migration checksum mismatch for {id}', 1;\nEND\n\nIF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations] WHERE [id] = N'{id}')\nBEGIN\n    BEGIN TRY\n        BEGIN TRANSACTION;\n{body}        INSERT INTO [dbo].[__mssql_orm_migrations] ([id], [name], [checksum], [orm_version]) VALUES (N'{id}', N'{name}', N'{checksum}', N'{version}');\n        COMMIT TRANSACTION;\n    END TRY\n    BEGIN CATCH\n        IF XACT_STATE() <> 0\n            ROLLBACK TRANSACTION;\n        THROW;\n    END CATCH\nEND",
+        id = id,
+        name = name,
+        checksum = checksum,
+        version = ORM_VERSION,
+        body = body,
+    )
 }
 
 fn parse_migration_entry(path: PathBuf) -> Option<MigrationEntry> {
@@ -244,10 +253,36 @@ mod tests {
 
         assert!(script.contains("CREATE TABLE [dbo].[__mssql_orm_migrations]"));
         assert!(script.contains("IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations]"));
+        assert!(script.contains("IF EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations]"));
+        assert!(script.contains("THROW 50001, N'mssql-orm migration checksum mismatch"));
+        assert!(script.contains("BEGIN TRY"));
+        assert!(script.contains("BEGIN TRANSACTION;"));
         assert!(script.contains("EXEC(N'CREATE SCHEMA [sales];');"));
         assert!(
             script.contains("EXEC(N'CREATE TABLE [sales].[customers] ([id] bigint NOT NULL);');")
         );
+        assert!(script.contains("INSERT INTO [dbo].[__mssql_orm_migrations]"));
+        assert!(script.contains("COMMIT TRANSACTION;"));
+        assert!(script.contains("ROLLBACK TRANSACTION;"));
+    }
+
+    #[test]
+    fn builds_database_update_script_without_empty_exec_blocks() {
+        let root = temp_project_root();
+        let scaffold = create_migration_scaffold(&root, "Noop").unwrap();
+        fs::write(
+            scaffold.directory.join("up.sql"),
+            "-- comment only migration\n\n-- still intentionally empty\n",
+        )
+        .unwrap();
+
+        let script = build_database_update_script(
+            &root,
+            "CREATE TABLE [dbo].[__mssql_orm_migrations] (...);",
+        )
+        .unwrap();
+
+        assert!(!script.contains("EXEC(N'');"));
         assert!(script.contains("INSERT INTO [dbo].[__mssql_orm_migrations]"));
     }
 }

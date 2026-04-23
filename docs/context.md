@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos, `computed columns` y foreign keys avanzadas dentro del pipeline de migraciones; el siguiente foco natural es generar scripts idempotentes antes de tocar renombres explícitos.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya incorporó índices compuestos, `computed columns`, foreign keys avanzadas y scripts idempotentes dentro del pipeline de migraciones; el siguiente foco natural es resolver renombres explícitos sin degradar a `drop + add`.
 
 ## Dirección Arquitectónica Vigente
 
@@ -129,8 +129,9 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
 - `mssql-orm-cli` ya implementa `migration add <Name>`, `migration list` y `database update`, delegando la lógica de scaffolding/listado/script al crate de migraciones y reutilizando la creación SQL de `__mssql_orm_migrations` desde `mssql-orm-sqlserver`.
-- La CLI actual genera y lista migraciones locales y produce un script SQL acumulado para `database update`; la ejecución real contra SQL Server queda explícitamente como siguiente subtarea del backlog.
-- `database update` ahora divide `up.sql` en sentencias mínimas y ejecuta cada una mediante `EXEC(N'...')`, evitando el fallo detectado al validar migraciones reales con `CREATE SCHEMA` seguido de `CREATE TABLE`.
+- La CLI actual genera y lista migraciones locales y produce un script SQL acumulado para `database update`.
+- `database update` divide `up.sql` en sentencias mínimas y ejecuta cada una mediante `EXEC(N'...')`, evitando el fallo detectado al validar migraciones reales con `CREATE SCHEMA` seguido de `CREATE TABLE`.
+- Cada migración del script queda ahora encapsulada en un bloque idempotente con verificación de checksum, `BEGIN TRY/CATCH`, transacción explícita y `ROLLBACK` ante error; si el historial contiene el mismo `id` con checksum distinto, el script falla con `THROW` para no ocultar drift local.
 - Los ids de migración generados por `migration add` ahora usan resolución de nanosegundos para evitar colisiones y desorden léxico cuando se crean varias migraciones muy rápido en la misma sesión.
 - La validación real ya se ejecutó contra SQL Server local (`tempdb`) usando `sqlcmd`: una migración inicial creó `qa_real_stage7.customers`, una migración incremental añadió `phone`, y la reaplicación del mismo script se mantuvo idempotente con exactamente dos filas en `dbo.__mssql_orm_migrations`.
 - El artefacto temporal anterior `dbo.qa_1776961277_customers`, usado solo durante una validación intermedia, ya fue eliminado junto con sus filas de historial asociadas.
@@ -214,7 +215,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 13: Generar scripts de migración idempotentes para SQL Server`.
-2. Después avanzar con renombres explícitos sin degradar a `drop + add`.
+1. Implementar `Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a drop + add`.
+2. Después evaluar `migration script --from --to` si sigue siendo prioritario para flujos de revisión de producción.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

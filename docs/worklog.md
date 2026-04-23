@@ -2,6 +2,34 @@
 
 ## 2026-04-23
 
+### Sesión: scripts de migración idempotentes para SQL Server
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 13: Generar scripts de migración idempotentes para SQL Server` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-migrate/src/filesystem.rs` ahora genera para cada migración un bloque idempotente más robusto: verifica checksum previo en `dbo.__mssql_orm_migrations`, falla con `THROW 50001` si detecta drift entre historial y contenido local, y ejecuta la migración dentro de `BEGIN TRY / BEGIN TRANSACTION / COMMIT` con `ROLLBACK` en `CATCH`.
+- La misma capa mantiene la división de `up.sql` en sentencias mínimas mediante `EXEC(N'...')`, pero ahora evita emitir bloques `EXEC` vacíos cuando una migración solo contiene comentarios o whitespace.
+- `crates/mssql-orm-cli/src/main.rs` actualizó su cobertura para fijar el nuevo contrato observable del comando `database update`, incluyendo checksum mismatch y transacción explícita por migración.
+
+### Resultado
+
+- La subtarea quedó cerrada: `database update` ahora produce scripts reejecutables más seguros para SQL Server, con salto por historial, verificación de checksum para evitar reaplicar migraciones alteradas y rollback explícito ante fallos parciales dentro de una migración.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-cli`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Esta sesión no implementó todavía `migration script --from --to` ni guards idempotentes por operación DDL individual; la robustez se concentra en el bloque por migración y en el historial/checksum.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a drop + add`.
+
 ### Sesión: foreign keys avanzadas en snapshots, diff y DDL SQL Server
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.
