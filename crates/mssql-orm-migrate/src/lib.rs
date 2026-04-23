@@ -6,7 +6,7 @@ mod diff;
 mod operation;
 mod snapshot;
 
-pub use diff::diff_schema_and_table_operations;
+pub use diff::{diff_column_operations, diff_schema_and_table_operations};
 pub use operation::{
     AddColumn, AlterColumn, CreateSchema, CreateTable, DropColumn, DropSchema, DropTable,
     MigrationOperation,
@@ -30,7 +30,7 @@ mod tests {
     use super::{
         AddColumn, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateSchema, CreateTable,
         DropColumn, DropSchema, DropTable, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
-        MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+        MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot, diff_column_operations,
         diff_schema_and_table_operations,
     };
     use mssql_orm_core::{
@@ -506,6 +506,134 @@ mod tests {
         )]);
 
         let operations = diff_schema_and_table_operations(&snapshot, &snapshot);
+
+        assert!(operations.is_empty());
+    }
+
+    #[test]
+    fn diff_engine_detects_added_and_removed_columns_in_shared_table() {
+        let previous = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                vec![
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[0]),
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[1]),
+                ],
+                Some("pk_customers".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                vec![
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[0]),
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[2]),
+                ],
+                Some("pk_customers".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::AddColumn(AddColumn::new(
+                    "sales",
+                    "customers",
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[2]),
+                )),
+                MigrationOperation::DropColumn(DropColumn::new("sales", "customers", "email")),
+            ]
+        );
+    }
+
+    #[test]
+    fn diff_engine_detects_basic_column_alterations() {
+        let previous = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                vec![ColumnSnapshot::from(&CUSTOMER_COLUMNS[1])],
+                Some("pk_customers".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                vec![ColumnSnapshot::new(
+                    "email",
+                    SqlServerType::NVarChar,
+                    true,
+                    false,
+                    None,
+                    Some("'unknown'".to_string()),
+                    None,
+                    false,
+                    true,
+                    true,
+                    Some(255),
+                    None,
+                    None,
+                )],
+                Some("pk_customers".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
+
+        assert_eq!(operations.len(), 1);
+        match &operations[0] {
+            MigrationOperation::AlterColumn(operation) => {
+                assert_eq!(operation.schema_name, "sales");
+                assert_eq!(operation.table_name, "customers");
+                assert_eq!(
+                    operation.previous,
+                    ColumnSnapshot::from(&CUSTOMER_COLUMNS[1])
+                );
+                assert_eq!(operation.next.max_length, Some(255));
+                assert!(operation.next.nullable);
+                assert_eq!(operation.next.default_sql.as_deref(), Some("'unknown'"));
+            }
+            other => panic!("expected AlterColumn, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn diff_engine_ignores_columns_for_new_or_deleted_tables() {
+        let previous = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                vec![ColumnSnapshot::from(&CUSTOMER_COLUMNS[1])],
+                Some("pk_customers".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+        let current = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "orders",
+                vec![ColumnSnapshot::from(&ORDER_COLUMNS[1])],
+                Some("pk_orders".to_string()),
+                vec!["id".to_string()],
+                vec![],
+            )],
+        )]);
+
+        let operations = diff_column_operations(&previous, &current);
 
         assert!(operations.is_empty());
     }

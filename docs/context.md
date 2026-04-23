@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 7 implementando el diff engine para columnas nuevas, eliminadas y alteraciones básicas, ahora que el diff mínimo de schemas y tablas ya quedó definido y validado.
+Continuar la Etapa 7 consolidando pruebas unitarias del diff engine sobre snapshots mínimos, ahora que el diff básico para schemas, tablas y columnas ya quedó implementado y validado.
 
 ## Dirección Arquitectónica Vigente
 
@@ -87,6 +87,9 @@ Continuar la Etapa 7 implementando el diff engine para columnas nuevas, eliminad
 - `mssql-orm-migrate` ahora también expone `diff_schema_and_table_operations(previous, current)`, que compara `ModelSnapshot` y emite operaciones deterministas para `CreateSchema`, `CreateTable`, `DropTable` y `DropSchema`.
 - El orden del diff actual es intencionalmente seguro para este alcance: primero crea schemas, luego tablas nuevas; después elimina tablas sobrantes y al final schemas vacíos/eliminados.
 - El diff de schemas/tablas no intenta todavía detectar renombres ni cambios internos de columnas; esas responsabilidades quedan explícitamente para las siguientes subtareas de Etapa 7.
+- `mssql-orm-migrate` ahora también expone `diff_column_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
+- El diff de columnas ya detecta `AddColumn`, `DropColumn` y `AlterColumn` comparando `ColumnSnapshot` completo y usando orden determinista por nombre de columna.
+- El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -130,6 +133,6 @@ Continuar la Etapa 7 implementando el diff engine para columnas nuevas, eliminad
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas`.
-2. Reutilizar `ModelSnapshot`, `ColumnSnapshot` y `MigrationOperation::{AddColumn,DropColumn,AlterColumn}` manteniendo salida ordenada y determinista.
-3. Mantener fuera por ahora foreign keys, renombres, generación SQL y CLI hasta cerrar el diff básico de columnas.
+1. Implementar `Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos`.
+2. Consolidar en esa batería casos de orden, no-regresiones y composición entre diff de schemas/tablas y diff de columnas.
+3. Mantener fuera por ahora generación SQL, historial `__mssql_orm_migrations`, CLI y validación real contra SQL Server.

@@ -1,6 +1,6 @@
 use crate::{
-    CreateSchema, CreateTable, DropSchema, DropTable, MigrationOperation, ModelSnapshot,
-    SchemaSnapshot, TableSnapshot,
+    AddColumn, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn, DropSchema,
+    DropTable, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
 };
 use std::collections::BTreeMap;
 
@@ -72,6 +72,67 @@ pub fn diff_schema_and_table_operations(
     operations
 }
 
+/// Computes additive/removal/basic-alteration column operations for tables present
+/// in both snapshots. Table creation/deletion remains the responsibility of
+/// `diff_schema_and_table_operations`.
+pub fn diff_column_operations(
+    previous: &ModelSnapshot,
+    current: &ModelSnapshot,
+) -> Vec<MigrationOperation> {
+    let previous_schemas = schema_map(previous);
+    let current_schemas = schema_map(current);
+    let mut operations = Vec::new();
+
+    for (schema_name, current_schema) in &current_schemas {
+        let Some(previous_schema) = previous_schemas.get(schema_name) else {
+            continue;
+        };
+
+        let previous_tables = table_map(previous_schema);
+        let current_tables = table_map(current_schema);
+
+        for (table_name, current_table) in &current_tables {
+            let Some(previous_table) = previous_tables.get(table_name) else {
+                continue;
+            };
+
+            let previous_columns = column_map(previous_table);
+            let current_columns = column_map(current_table);
+
+            for (column_name, current_column) in &current_columns {
+                match previous_columns.get(column_name) {
+                    None => operations.push(MigrationOperation::AddColumn(AddColumn::new(
+                        schema_name.clone(),
+                        table_name.clone(),
+                        (*current_column).clone(),
+                    ))),
+                    Some(previous_column) if *previous_column != *current_column => {
+                        operations.push(MigrationOperation::AlterColumn(AlterColumn::new(
+                            schema_name.clone(),
+                            table_name.clone(),
+                            (*previous_column).clone(),
+                            (*current_column).clone(),
+                        )));
+                    }
+                    Some(_) => {}
+                }
+            }
+
+            for column_name in previous_columns.keys() {
+                if !current_columns.contains_key(column_name) {
+                    operations.push(MigrationOperation::DropColumn(DropColumn::new(
+                        schema_name.clone(),
+                        table_name.clone(),
+                        column_name.clone(),
+                    )));
+                }
+            }
+        }
+    }
+
+    operations
+}
+
 fn schema_map(snapshot: &ModelSnapshot) -> BTreeMap<String, &SchemaSnapshot> {
     snapshot
         .schemas
@@ -85,5 +146,13 @@ fn table_map(schema: &SchemaSnapshot) -> BTreeMap<String, &TableSnapshot> {
         .tables
         .iter()
         .map(|table| (table.name.clone(), table))
+        .collect()
+}
+
+fn column_map(table: &TableSnapshot) -> BTreeMap<String, &ColumnSnapshot> {
+    table
+        .columns
+        .iter()
+        .map(|column| (column.name.clone(), column))
         .collect()
 }

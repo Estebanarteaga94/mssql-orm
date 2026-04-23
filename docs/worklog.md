@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: Diff engine básico de columnas
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar diff engine para columnas nuevas, eliminadas y alteraciones básicas` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-migrate/src/diff.rs` con la función pública `diff_column_operations(previous, current)`.
+- La implementación solo compara columnas de tablas presentes en ambos snapshots, para evitar duplicar trabajo ya cubierto por `CreateTable` y `DropTable`.
+- El diff de columnas emite `AddColumn`, `DropColumn` y `AlterColumn` usando orden determinista por nombre de columna y comparación directa de `ColumnSnapshot`.
+- Se añadieron pruebas unitarias en `crates/mssql-orm-migrate/src/lib.rs` para cubrir alta/baja de columnas, alteraciones básicas y el caso donde no debe emitirse nada porque la tabla es nueva o fue eliminada.
+
+### Resultado
+
+- `mssql-orm-migrate` ya cuenta con el diff básico completo del MVP inicial sobre snapshots: schemas, tablas y columnas.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos para esta subtarea.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 7: Agregar pruebas unitarias del diff engine sobre snapshots mínimos`, consolidando escenarios y orden estable del diff completo.
+
 ### Sesión: Diff engine básico de schemas y tablas
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 7: Implementar diff engine para creación y eliminación de schemas y tablas` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
