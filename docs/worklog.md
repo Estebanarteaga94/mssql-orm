@@ -2,6 +2,40 @@
 
 ## 2026-04-23
 
+### Sesión: soporte de concurrencia optimista con `rowversion`
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad para la primera subtarea de la Etapa 11.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 11: Implementar soporte de concurrencia optimista con rowversion` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-core/src/lib.rs` ahora expone `EntityMetadata::rowversion_column()` y `Changeset::concurrency_token()` con default neutro, para que la concurrencia optimista pueda montarse sobre metadata y contracts ya existentes sin abrir un sistema paralelo.
+- `crates/mssql-orm-macros/src/lib.rs` ahora hace dos cosas relevantes para concurrencia: `#[derive(Entity)]` genera extracción automática del token `rowversion` desde la entidad, y `#[derive(Changeset)]` detecta campos `rowversion` para usarlos como token de concurrencia sin intentar incluirlos dentro del `SET`.
+- `crates/mssql-orm/src/context.rs` ahora agrega el predicado `AND [rowversion] = @Pn` en `DbSet::update(...)` cuando el `Changeset` aporta token, y en las rutas internas de `delete/save` usadas por Active Record cuando la entidad tiene columna `rowversion`.
+- `crates/mssql-orm/src/active_record.rs` ahora hace que `save(&db)` y `delete(&db)` reutilicen también el token `rowversion` de la entidad; `save(&db)` devuelve por ahora un `OrmError` genérico cuando detecta mismatch en una actualización protegida, dejando el mapeo a `OrmError::ConcurrencyConflict` para la subtarea siguiente del backlog.
+- Se ampliaron las pruebas unitarias de `DbSet` para fijar la forma exacta de los predicados con PK + rowversion, y se añadieron integraciones reales en `crates/mssql-orm/tests/stage5_public_crud.rs` y `crates/mssql-orm/tests/stage10_public_active_record.rs` para validar que un segundo update/delete con token viejo deja de afectar filas.
+
+### Resultado
+
+- La Etapa 11 ya quedó iniciada con soporte real de concurrencia optimista basado en `rowversion`, sin cambiar todavía el tipo de error público de conflicto.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test stage5_public_crud`
+- `cargo test -p mssql-orm --test stage10_public_active_record`
+- `cargo check --workspace`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El soporte de `rowversion` ya evita overwrite silencioso, pero la surface pública todavía expresa el conflicto como `None`, `false` o `OrmError` genérico según la ruta; el cierre semántico correcto queda pendiente para `OrmError::ConcurrencyConflict`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 11: Retornar OrmError::ConcurrencyConflict en conflictos de actualización o borrado`.
+
 ### Sesión: `entity.save(&db)` para Active Record
 
 - Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se tomó esa ruta como fuente de verdad para cerrar la última subtarea pendiente de la Etapa 10.

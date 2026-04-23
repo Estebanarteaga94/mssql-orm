@@ -119,6 +119,10 @@ pub trait Insertable<E: Entity> {
 /// Stable contract for extracting changed values for updates.
 pub trait Changeset<E: Entity> {
     fn changes(&self) -> Vec<ColumnValue>;
+
+    fn concurrency_token(&self) -> Result<Option<SqlValue>, OrmError> {
+        Ok(None)
+    }
 }
 
 /// Static column symbol generated for entities and consumed later by the query builder.
@@ -517,6 +521,10 @@ impl EntityMetadata {
             .collect()
     }
 
+    pub fn rowversion_column(&self) -> Option<&'static ColumnMetadata> {
+        self.columns.iter().find(|column| column.rowversion)
+    }
+
     pub fn foreign_key(&self, name: &str) -> Option<&'static ForeignKeyMetadata> {
         self.foreign_keys
             .iter()
@@ -792,6 +800,15 @@ mod tests {
         assert_eq!(columns[0].column_name, "id");
         assert_eq!(columns[1].column_name, "tenant_id");
         assert!(columns.iter().all(|column| column.primary_key));
+    }
+
+    #[test]
+    fn metadata_returns_rowversion_column_when_present() {
+        let metadata = User::metadata();
+        let column = metadata.rowversion_column().expect("rowversion column");
+
+        assert_eq!(column.column_name, "version");
+        assert!(column.rowversion);
     }
 
     #[test]

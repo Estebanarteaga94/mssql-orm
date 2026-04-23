@@ -69,6 +69,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut persist_mode_expr = None;
     let mut insert_values = Vec::new();
     let mut update_changes = Vec::new();
+    let mut entity_concurrency_token = None;
     let mut sync_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
@@ -224,6 +225,17 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             });
         }
 
+        if rowversion {
+            let field_ty = &field.ty;
+            entity_concurrency_token = Some(quote! {
+                Ok(Some(
+                    <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        ::core::clone::Clone::clone(&self.#field_ident)
+                    )
+                ))
+            });
+        }
+
         sync_fields.push(quote! {
             self.#field_ident = persisted.#field_ident;
         });
@@ -316,6 +328,11 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             ))
         }
     };
+    let entity_concurrency_token_impl = entity_concurrency_token.unwrap_or_else(|| {
+        quote! {
+            Ok(None)
+        }
+    });
 
     Ok(quote! {
         static #metadata_ident: ::mssql_orm::core::EntityMetadata = ::mssql_orm::core::EntityMetadata {
@@ -369,6 +386,10 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 let mut changes = ::std::vec::Vec::new();
                 #(#update_changes)*
                 changes
+            }
+
+            fn concurrency_token(&self) -> Result<::core::option::Option<::mssql_orm::core::SqlValue>, ::mssql_orm::core::OrmError> {
+                #entity_concurrency_token_impl
             }
 
             fn sync_persisted(&mut self, persisted: Self) {
@@ -571,13 +592,56 @@ fn derive_changeset_impl(input: DeriveInput) -> Result<TokenStream2> {
                 persistence_column_name_expr(entity, field_ident, field_config.column.as_ref());
 
             Ok(quote! {
+                let column_name = #column_name;
+                let column = <#entity as ::mssql_orm::core::Entity>::metadata()
+                    .column(column_name)
+                    .expect("generated Changeset field must reference existing entity metadata");
+
                 if let ::core::option::Option::Some(value) = &self.#field_ident {
-                    changes.push(::mssql_orm::core::ColumnValue::new(
-                        #column_name,
-                        <#inner_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
-                            ::core::clone::Clone::clone(value)
-                        ),
-                    ));
+                    if column.updatable {
+                        changes.push(::mssql_orm::core::ColumnValue::new(
+                            column_name,
+                            <#inner_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                                ::core::clone::Clone::clone(value)
+                            ),
+                        ));
+                    }
+                }
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let concurrency_tokens = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "Changeset requiere campos nombrados"))?;
+            let field_config = parse_persistence_field_config(field, "Changeset")?;
+            let inner_ty = option_inner_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "Changeset requiere Option<T> en cada campo para distinguir campos omitidos",
+                )
+            })?;
+            let column_name =
+                persistence_column_name_expr(entity, field_ident, field_config.column.as_ref());
+
+            Ok(quote! {
+                let column_name = #column_name;
+                let column = <#entity as ::mssql_orm::core::Entity>::metadata()
+                    .column(column_name)
+                    .expect("generated Changeset field must reference existing entity metadata");
+
+                if column.rowversion {
+                    if let ::core::option::Option::Some(value) = &self.#field_ident {
+                        return Ok(Some(
+                            <#inner_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                                ::core::clone::Clone::clone(value)
+                            )
+                        ));
+                    }
                 }
             })
         })
@@ -589,6 +653,11 @@ fn derive_changeset_impl(input: DeriveInput) -> Result<TokenStream2> {
                 let mut changes = ::std::vec::Vec::new();
                 #(#changes)*
                 changes
+            }
+
+            fn concurrency_token(&self) -> Result<::core::option::Option<::mssql_orm::core::SqlValue>, ::mssql_orm::core::OrmError> {
+                #(#concurrency_tokens)*
+                Ok(None)
             }
         }
     })

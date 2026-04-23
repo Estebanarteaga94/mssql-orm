@@ -140,8 +140,14 @@ impl<E: Entity> DbSet<E> {
         Ok(result.total() > 0)
     }
 
-    pub(crate) async fn delete_by_sql_value(&self, key: SqlValue) -> Result<bool, OrmError> {
-        let compiled = SqlServerCompiler::compile_delete(&self.delete_query_sql_value(key)?)?;
+    pub(crate) async fn delete_by_sql_value(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+    ) -> Result<bool, OrmError> {
+        let compiled = SqlServerCompiler::compile_delete(
+            &self.delete_query_sql_value(key, concurrency_token)?,
+        )?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await;
         let result = connection.execute(compiled).await?;
@@ -184,12 +190,16 @@ impl<E: Entity> DbSet<E> {
         &self,
         key: SqlValue,
         changes: Vec<mssql_orm_core::ColumnValue>,
+        concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
         E: FromRow + Send,
     {
-        let compiled =
-            SqlServerCompiler::compile_update(&self.update_query_sql_value(key, changes)?)?;
+        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
+            key,
+            changes,
+            concurrency_token,
+        )?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await;
         connection.fetch_one(compiled).await
@@ -199,11 +209,12 @@ impl<E: Entity> DbSet<E> {
         &self,
         key: SqlValue,
         entity: &E,
+        concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
         E: EntityPersist + FromRow + Send,
     {
-        self.update_entity_values_by_sql_value(key, entity.update_changes())
+        self.update_entity_values_by_sql_value(key, entity.update_changes(), concurrency_token)
             .await
     }
 
@@ -260,16 +271,30 @@ impl<E: Entity> DbSet<E> {
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
-        Ok(UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?))
+        let mut query =
+            UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?);
+
+        if let Some(token) = changeset.concurrency_token()? {
+            query = query.filter(self.rowversion_predicate_value(token)?);
+        }
+
+        Ok(query)
     }
 
     fn update_query_sql_value(
         &self,
         key: SqlValue,
         changes: Vec<mssql_orm_core::ColumnValue>,
+        concurrency_token: Option<SqlValue>,
     ) -> Result<UpdateQuery, OrmError> {
-        Ok(UpdateQuery::for_entity::<E, _>(&RawChangeset(changes))
-            .filter(self.primary_key_predicate_value(key)?))
+        let mut query = UpdateQuery::for_entity::<E, _>(&RawChangeset(changes))
+            .filter(self.primary_key_predicate_value(key)?);
+
+        if let Some(token) = concurrency_token {
+            query = query.filter(self.rowversion_predicate_value(token)?);
+        }
+
+        Ok(query)
     }
 
     fn delete_query<K>(&self, key: K) -> Result<DeleteQuery, OrmError>
@@ -279,8 +304,19 @@ impl<E: Entity> DbSet<E> {
         Ok(DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?))
     }
 
-    fn delete_query_sql_value(&self, key: SqlValue) -> Result<DeleteQuery, OrmError> {
-        Ok(DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate_value(key)?))
+    fn delete_query_sql_value(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+    ) -> Result<DeleteQuery, OrmError> {
+        let mut query =
+            DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate_value(key)?);
+
+        if let Some(token) = concurrency_token {
+            query = query.filter(self.rowversion_predicate_value(token)?);
+        }
+
+        Ok(query)
     }
 
     fn primary_key_predicate<K>(&self, key: K) -> Result<Predicate, OrmError>
@@ -309,6 +345,22 @@ impl<E: Entity> DbSet<E> {
                 column.column_name,
             )),
             Expr::Value(key),
+        ))
+    }
+
+    fn rowversion_predicate_value(&self, token: SqlValue) -> Result<Predicate, OrmError> {
+        let metadata = E::metadata();
+        let column = metadata.rowversion_column().ok_or_else(|| {
+            OrmError::new("DbSet concurrency checks require an entity rowversion column")
+        })?;
+
+        Ok(Predicate::eq(
+            Expr::Column(ColumnRef::new(
+                TableRef::for_entity::<E>(),
+                column.rust_field,
+                column.column_name,
+            )),
+            Expr::Value(token),
         ))
     }
 }
@@ -346,6 +398,7 @@ mod tests {
     };
 
     struct TestEntity;
+    struct VersionedEntity;
     struct CompositeKeyEntity;
     struct DummyContext {
         entities: DbSet<TestEntity>,
@@ -357,6 +410,10 @@ mod tests {
     struct UpdateTestEntity {
         name: Option<String>,
         active: Option<bool>,
+    }
+    struct UpdateVersionedEntity {
+        name: Option<String>,
+        version: Option<Vec<u8>>,
     }
 
     static TEST_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
@@ -471,6 +528,70 @@ mod tests {
         foreign_keys: &[],
     };
 
+    static VERSIONED_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "version",
+            column_name: "version",
+            sql_type: SqlServerType::RowVersion,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: true,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static VERSIONED_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "VersionedEntity",
+        schema: "dbo",
+        table: "versioned_entities",
+        columns: &VERSIONED_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
     impl Entity for TestEntity {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
@@ -480,6 +601,12 @@ mod tests {
     impl Entity for CompositeKeyEntity {
         fn metadata() -> &'static EntityMetadata {
             &COMPOSITE_KEY_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for VersionedEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &VERSIONED_ENTITY_METADATA
         }
     }
 
@@ -527,6 +654,22 @@ mod tests {
     impl mssql_orm_core::Changeset<CompositeKeyEntity> for UpdateTestEntity {
         fn changes(&self) -> Vec<ColumnValue> {
             <Self as mssql_orm_core::Changeset<TestEntity>>::changes(self)
+        }
+    }
+
+    impl mssql_orm_core::Changeset<VersionedEntity> for UpdateVersionedEntity {
+        fn changes(&self) -> Vec<ColumnValue> {
+            let mut values = Vec::new();
+
+            if let Some(name) = &self.name {
+                values.push(ColumnValue::new("name", SqlValue::String(name.clone())));
+            }
+
+            values
+        }
+
+        fn concurrency_token(&self) -> Result<Option<SqlValue>, mssql_orm_core::OrmError> {
+            Ok(self.version.clone().map(SqlValue::Bytes))
         }
     }
 
@@ -670,6 +813,39 @@ mod tests {
     }
 
     #[test]
+    fn dbset_update_appends_rowversion_predicate_when_changeset_has_token() {
+        let dbset = DbSet::<VersionedEntity>::disconnected();
+        let changeset = UpdateVersionedEntity {
+            name: Some("ana maria".to_string()),
+            version: Some(vec![1, 2, 3, 4]),
+        };
+
+        let query = dbset.update_query(7_i64, &changeset).unwrap();
+
+        assert_eq!(
+            query,
+            UpdateQuery::for_entity::<VersionedEntity, _>(&changeset).filter(Predicate::and(vec![
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("dbo", "versioned_entities"),
+                        "id",
+                        "id",
+                    )),
+                    Expr::Value(SqlValue::I64(7)),
+                ),
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("dbo", "versioned_entities"),
+                        "version",
+                        "version",
+                    )),
+                    Expr::Value(SqlValue::Bytes(vec![1, 2, 3, 4])),
+                ),
+            ]))
+        );
+    }
+
+    #[test]
     fn dbset_delete_builds_delete_query_for_entity_and_primary_key() {
         let dbset = DbSet::<TestEntity>::disconnected();
 
@@ -692,7 +868,9 @@ mod tests {
     fn dbset_delete_query_sql_value_builds_delete_query_for_entity_and_primary_key() {
         let dbset = DbSet::<TestEntity>::disconnected();
 
-        let query = dbset.delete_query_sql_value(SqlValue::I64(7)).unwrap();
+        let query = dbset
+            .delete_query_sql_value(SqlValue::I64(7), None)
+            .unwrap();
 
         assert_eq!(
             query,
@@ -704,6 +882,37 @@ mod tests {
                 )),
                 Expr::Value(SqlValue::I64(7)),
             ))
+        );
+    }
+
+    #[test]
+    fn dbset_delete_query_sql_value_appends_rowversion_predicate_when_present() {
+        let dbset = DbSet::<VersionedEntity>::disconnected();
+
+        let query = dbset
+            .delete_query_sql_value(SqlValue::I64(7), Some(SqlValue::Bytes(vec![9, 8, 7])))
+            .unwrap();
+
+        assert_eq!(
+            query,
+            DeleteQuery::from_entity::<VersionedEntity>().filter(Predicate::and(vec![
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("dbo", "versioned_entities"),
+                        "id",
+                        "id",
+                    )),
+                    Expr::Value(SqlValue::I64(7)),
+                ),
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("dbo", "versioned_entities"),
+                        "version",
+                        "version",
+                    )),
+                    Expr::Value(SqlValue::Bytes(vec![9, 8, 7])),
+                ),
+            ]))
         );
     }
 

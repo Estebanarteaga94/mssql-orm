@@ -6,6 +6,7 @@ const TEST_CONNECTION_ENV: &str = "MSSQL_ORM_TEST_CONNECTION_STRING";
 const KEEP_TABLES_ENV: &str = "KEEP_TEST_TABLES";
 const KEEP_ROWS_ENV: &str = "KEEP_TEST_ROWS";
 const TEST_TABLE_NAME: &str = "dbo.mssql_orm_public_crud";
+const VERSIONED_TEST_TABLE_NAME: &str = "dbo.mssql_orm_public_crud_versioned";
 
 #[derive(Entity, Debug, Clone, PartialEq)]
 #[orm(table = "mssql_orm_public_crud", schema = "dbo")]
@@ -45,6 +46,46 @@ struct UpdatePublicCrudUser {
 #[derive(DbContext)]
 struct PublicCrudDb {
     pub users: DbSet<PublicCrudUser>,
+}
+
+#[derive(Entity, Debug, Clone, PartialEq)]
+#[orm(table = "mssql_orm_public_crud_versioned", schema = "dbo")]
+struct VersionedPublicCrudUser {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+    #[orm(length = 120)]
+    name: String,
+    #[orm(rowversion)]
+    version: Vec<u8>,
+}
+
+impl FromRow for VersionedPublicCrudUser {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            id: row.get_required_typed::<i64>("id")?,
+            name: row.get_required_typed::<String>("name")?,
+            version: row.get_required_typed::<Vec<u8>>("version")?,
+        })
+    }
+}
+
+#[derive(Insertable, Debug, Clone)]
+#[orm(entity = VersionedPublicCrudUser)]
+struct NewVersionedPublicCrudUser {
+    name: String,
+}
+
+#[derive(Changeset, Debug, Clone)]
+#[orm(entity = VersionedPublicCrudUser)]
+struct UpdateVersionedPublicCrudUser {
+    name: Option<String>,
+    version: Option<Vec<u8>>,
+}
+
+#[derive(DbContext)]
+struct VersionedPublicCrudDb {
+    pub users: DbSet<VersionedPublicCrudUser>,
 }
 
 #[tokio::test]
@@ -242,6 +283,67 @@ async fn public_dbcontext_transaction_rolls_back_on_err() -> Result<(), OrmError
     result
 }
 
+#[tokio::test]
+async fn public_dbset_update_uses_rowversion_to_prevent_stale_writes() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!(
+            "skipping public rowversion CRUD integration test because {TEST_CONNECTION_ENV} is not set"
+        );
+        return Ok(());
+    };
+
+    let keep_tables = keep_test_tables();
+    reset_versioned_test_table(&connection_string).await?;
+
+    let result = async {
+        let db = VersionedPublicCrudDb::connect(&connection_string).await?;
+
+        let inserted = db
+            .users
+            .insert(NewVersionedPublicCrudUser {
+                name: "Ana".to_string(),
+            })
+            .await?;
+
+        let updated = db
+            .users
+            .update(
+                inserted.id,
+                UpdateVersionedPublicCrudUser {
+                    name: Some("Ana Maria".to_string()),
+                    version: Some(inserted.version.clone()),
+                },
+            )
+            .await?;
+        let updated = updated.expect("rowversion-protected update should succeed");
+
+        assert_eq!(updated.name, "Ana Maria");
+        assert_ne!(updated.version, inserted.version);
+
+        let stale = db
+            .users
+            .update(
+                inserted.id,
+                UpdateVersionedPublicCrudUser {
+                    name: Some("Should Not Persist".to_string()),
+                    version: Some(inserted.version.clone()),
+                },
+            )
+            .await?;
+        assert_eq!(stale, None);
+
+        let persisted = db.users.find(updated.id).await?;
+        assert_eq!(persisted, Some(updated.clone()));
+
+        Ok(())
+    }
+    .await;
+
+    cleanup_versioned_test_table(&connection_string, keep_tables).await?;
+
+    result
+}
+
 fn test_connection_string() -> Option<String> {
     std::env::var(TEST_CONNECTION_ENV)
         .ok()
@@ -311,6 +413,34 @@ async fn reset_test_table(connection_string: &str) -> Result<(), OrmError> {
     Ok(())
 }
 
+async fn reset_versioned_test_table(connection_string: &str) -> Result<(), OrmError> {
+    let mut connection = MssqlConnection::connect(connection_string).await?;
+
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "IF OBJECT_ID('{VERSIONED_TEST_TABLE_NAME}', 'U') IS NOT NULL DROP TABLE {VERSIONED_TEST_TABLE_NAME}"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "CREATE TABLE {VERSIONED_TEST_TABLE_NAME} (\
+                    id BIGINT IDENTITY(1,1) PRIMARY KEY,\
+                    name NVARCHAR(120) NOT NULL,\
+                    version ROWVERSION NOT NULL\
+                )"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    Ok(())
+}
+
 async fn cleanup_test_table(connection_string: &str, keep_tables: bool) -> Result<(), OrmError> {
     if keep_tables {
         return Ok(());
@@ -322,6 +452,28 @@ async fn cleanup_test_table(connection_string: &str, keep_tables: bool) -> Resul
         .execute(CompiledQuery::new(
             format!(
                 "IF OBJECT_ID('{TEST_TABLE_NAME}', 'U') IS NOT NULL DROP TABLE {TEST_TABLE_NAME}"
+            ),
+            vec![],
+        ))
+        .await?;
+
+    Ok(())
+}
+
+async fn cleanup_versioned_test_table(
+    connection_string: &str,
+    keep_tables: bool,
+) -> Result<(), OrmError> {
+    if keep_tables {
+        return Ok(());
+    }
+
+    let mut connection = MssqlConnection::connect(connection_string).await?;
+
+    connection
+        .execute(CompiledQuery::new(
+            format!(
+                "IF OBJECT_ID('{VERSIONED_TEST_TABLE_NAME}', 'U') IS NOT NULL DROP TABLE {VERSIONED_TEST_TABLE_NAME}"
             ),
             vec![],
         ))

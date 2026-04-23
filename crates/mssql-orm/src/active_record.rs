@@ -19,6 +19,7 @@ pub trait EntityPersist: Entity {
     fn persist_mode(&self) -> Result<EntityPersistMode, OrmError>;
     fn insert_values(&self) -> Vec<ColumnValue>;
     fn update_changes(&self) -> Vec<ColumnValue>;
+    fn concurrency_token(&self) -> Result<Option<SqlValue>, OrmError>;
     fn sync_persisted(&mut self, persisted: Self);
 }
 
@@ -42,11 +43,16 @@ pub trait ActiveRecord: Entity + Sized {
     fn delete<C>(&self, db: &C) -> impl Future<Output = Result<bool, OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
-        Self: EntityPrimaryKey,
+        Self: EntityPrimaryKey + EntityPersist,
     {
         let key = <Self as EntityPrimaryKey>::primary_key_value(self);
+        let concurrency_token = <Self as EntityPersist>::concurrency_token(self);
 
-        async move { db.db_set().delete_by_sql_value(key?).await }
+        async move {
+            db.db_set()
+                .delete_by_sql_value(key?, concurrency_token?)
+                .await
+        }
     }
 
     fn save<C>(&mut self, db: &C) -> impl Future<Output = Result<(), OrmError>> + Send
@@ -63,10 +69,20 @@ pub trait ActiveRecord: Entity + Sized {
                 }
                 EntityPersistMode::InsertOrUpdate(key) => {
                     if db.db_set().find_by_sql_value(key.clone()).await?.is_some() {
-                        if let Some(persisted) =
-                            db.db_set().update_entity_by_sql_value(key, self).await?
+                        if let Some(persisted) = db
+                            .db_set()
+                            .update_entity_by_sql_value(
+                                key,
+                                self,
+                                <Self as EntityPersist>::concurrency_token(self)?,
+                            )
+                            .await?
                         {
                             <Self as EntityPersist>::sync_persisted(self, persisted);
+                        } else {
+                            return Err(OrmError::new(
+                                "ActiveRecord save detected a rowversion mismatch while updating the current entity",
+                            ));
                         }
                     } else {
                         let persisted = db.db_set().insert_entity(self).await?;
@@ -78,7 +94,11 @@ pub trait ActiveRecord: Entity + Sized {
                 EntityPersistMode::Update(key) => {
                     let persisted = db
                         .db_set()
-                        .update_entity_by_sql_value(key, self)
+                        .update_entity_by_sql_value(
+                            key,
+                            self,
+                            <Self as EntityPersist>::concurrency_token(self)?,
+                        )
                         .await?
                         .ok_or_else(|| {
                             OrmError::new(
@@ -199,6 +219,10 @@ mod tests {
                 "name",
                 mssql_orm_core::SqlValue::String(self.name.clone()),
             )]
+        }
+
+        fn concurrency_token(&self) -> Result<Option<mssql_orm_core::SqlValue>, OrmError> {
+            Ok(None)
         }
 
         fn sync_persisted(&mut self, persisted: Self) {
