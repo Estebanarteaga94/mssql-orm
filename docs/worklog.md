@@ -2,6 +2,46 @@
 
 ## 2026-04-23
 
+### Sesión: validación real de Etapa 13 contra SQL Server
+
+- Se ejecutó una validación real de migraciones de Etapa 13 sobre SQL Server local (`tempdb`) usando `sqlcmd` y un proyecto temporal aislado fuera del repo.
+- El escenario aplicado cubrió creación de schema, tabla con `computed column`, índice compuesto sobre esa computed column, foreign key compuesta con acciones referenciales avanzadas (`SET DEFAULT` / `CASCADE`) y una segunda migración con `RenameColumn` vía `sp_rename`.
+- La primera corrida real expuso dos restricciones concretas de SQL Server que no estaban cubiertas todavía por la capa de script:
+  `ON DELETE SET DEFAULT` exige defaults válidos en las columnas locales de la FK, por lo que el fixture temporal se corrigió para usar un caso relacional válido.
+  La creación y uso de índices sobre computed columns exige ciertos `SET` de sesión (`QUOTED_IDENTIFIER`, `ANSI_NULLS`, etc.), y el script acumulado de `database update` no los emitía aún.
+- Se corrigió `crates/mssql-orm-migrate/src/filesystem.rs` para que `database update` emita al inicio del script los `SET` requeridos por SQL Server (`ANSI_NULLS`, `ANSI_PADDING`, `ANSI_WARNINGS`, `ARITHABORT`, `CONCAT_NULL_YIELDS_NULL`, `QUOTED_IDENTIFIER`, `NUMERIC_ROUNDABORT OFF`).
+- `crates/mssql-orm-cli/src/main.rs` actualizó su cobertura para fijar la presencia de esos `SET` en el SQL observable del comando `database update`.
+- Tras el fix, la validación real confirmó:
+  creación de `qa_stage13_real_1776986896364717782.customers` y `qa_stage13_real_1776986896364717782.order_allocations`,
+  existencia de `line_total` como computed column con definición esperada,
+  existencia de `ix_order_allocations_customer_line_total` con orden `customer_id ASC, line_total DESC`,
+  existence de `fk_order_allocations_customer_branch_customers` con `DELETE = SET_DEFAULT` y `UPDATE = CASCADE`,
+  rename efectivo de `email` a `email_address`,
+  cálculo observable de `line_total = 45.00` tras insertar datos reales,
+  reaplicación idempotente del mismo script con exactamente 2 filas en `dbo.__mssql_orm_migrations`,
+  y fallo controlado por checksum mismatch (`THROW 50001`) al alterar localmente una migración ya aplicada.
+
+### Resultado
+
+- La Etapa 13 quedó validada contra SQL Server real en sus entregables ya implementados, y el generador de `database update` quedó endurecido para escenarios reales con índices sobre computed columns.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-migrate --lib`
+- `cargo test -p mssql-orm-cli`
+- Ejecución real de `database update` contra `tempdb` con `sqlcmd`
+- Consultas reales a `sys.tables`, `sys.columns`, `sys.computed_columns`, `sys.indexes`, `sys.index_columns`, `sys.foreign_keys` y `dbo.__mssql_orm_migrations`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La validación real también dejó explícito que `SET DEFAULT` en foreign keys depende de defaults válidos en las columnas locales; hoy esa comprobación sigue siendo responsabilidad del SQL/fixture consumido y no una validación estructural previa del compilador.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 13: Soportar RenameTable explícito en snapshots, diff y DDL SQL Server`.
+
 ### Sesión: `RenameColumn` explícito con `#[orm(renamed_from = "...")]`
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.

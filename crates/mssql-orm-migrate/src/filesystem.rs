@@ -83,6 +83,13 @@ pub fn build_database_update_script(
     let migrations = list_migrations(root)?;
     let mut script = vec![
         "-- mssql-orm database update".to_string(),
+        "SET ANSI_NULLS ON;".to_string(),
+        "SET ANSI_PADDING ON;".to_string(),
+        "SET ANSI_WARNINGS ON;".to_string(),
+        "SET ARITHABORT ON;".to_string(),
+        "SET CONCAT_NULL_YIELDS_NULL ON;".to_string(),
+        "SET QUOTED_IDENTIFIER ON;".to_string(),
+        "SET NUMERIC_ROUNDABORT OFF;".to_string(),
         history_table_sql.to_string(),
     ];
 
@@ -252,6 +259,9 @@ mod tests {
         .unwrap();
 
         assert!(script.contains("CREATE TABLE [dbo].[__mssql_orm_migrations]"));
+        assert!(script.contains("SET ANSI_NULLS ON;"));
+        assert!(script.contains("SET QUOTED_IDENTIFIER ON;"));
+        assert!(script.contains("SET NUMERIC_ROUNDABORT OFF;"));
         assert!(script.contains("IF NOT EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations]"));
         assert!(script.contains("IF EXISTS (SELECT 1 FROM [dbo].[__mssql_orm_migrations]"));
         assert!(script.contains("THROW 50001, N'mssql-orm migration checksum mismatch"));

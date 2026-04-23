@@ -135,6 +135,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La CLI actual genera y lista migraciones locales y produce un script SQL acumulado para `database update`.
 - `database update` divide `up.sql` en sentencias mínimas y ejecuta cada una mediante `EXEC(N'...')`, evitando el fallo detectado al validar migraciones reales con `CREATE SCHEMA` seguido de `CREATE TABLE`.
 - Cada migración del script queda ahora encapsulada en un bloque idempotente con verificación de checksum, `BEGIN TRY/CATCH`, transacción explícita y `ROLLBACK` ante error; si el historial contiene el mismo `id` con checksum distinto, el script falla con `THROW` para no ocultar drift local.
+- El script `database update` ahora también emite los `SET` de sesión requeridos por SQL Server para trabajar de forma fiable con índices sobre computed columns (`ANSI_NULLS`, `ANSI_PADDING`, `ANSI_WARNINGS`, `ARITHABORT`, `CONCAT_NULL_YIELDS_NULL`, `QUOTED_IDENTIFIER`, `NUMERIC_ROUNDABORT OFF`).
 - Los ids de migración generados por `migration add` ahora usan resolución de nanosegundos para evitar colisiones y desorden léxico cuando se crean varias migraciones muy rápido en la misma sesión.
 - La validación real ya se ejecutó contra SQL Server local (`tempdb`) usando `sqlcmd`: una migración inicial creó `qa_real_stage7.customers`, una migración incremental añadió `phone`, y la reaplicación del mismo script se mantuvo idempotente con exactamente dos filas en `dbo.__mssql_orm_migrations`.
 - El artefacto temporal anterior `dbo.qa_1776961277_customers`, usado solo durante una validación intermedia, ya fue eliminado junto con sus filas de historial asociadas.
@@ -212,6 +213,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - Quitar una entidad que estaba en `Added` mediante `remove_tracked(...)` cancela la inserción pendiente localmente; no emite `DELETE` contra la base.
 - El tracking experimental sigue limitado a entidades con primary key simple en las rutas que reutilizan `find`, `update`, `delete` o `save_changes()`.
 - Las pruebas reales dependen de un connection string válido en `MSSQL_ORM_TEST_CONNECTION_STRING`; si apunta a una base inexistente, la validación falla antes de probar el adaptador.
+- La validación real de Etapa 13 confirmó en SQL Server local la creación de computed columns, índices compuestos, foreign keys avanzadas y `RenameColumn`, además de la idempotencia por historial/checksum del script acumulado.
+- En SQL Server, `SET DEFAULT` sobre foreign keys requiere defaults válidos en las columnas locales; hoy esa precondición no se valida todavía de forma estructural antes de compilar el DDL.
 - `crates/mssql-orm/tests/stage5_public_crud.rs` comparte nombres de tabla fijos entre tests; para evitar interferencia entre casos, su ejecución fiable sigue siendo serial (`-- --test-threads=1`) mientras no se aíslen los recursos por prueba.
 - Si futuras sesiones empiezan a programar sin revisar `docs/`, se pierde trazabilidad.
 - Como el repositorio raíz es nuevo, cualquier archivo ajeno al trabajo técnico debe revisarse antes de incluirlo en commits iniciales.

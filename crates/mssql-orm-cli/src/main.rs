@@ -192,6 +192,7 @@ mod tests {
         .unwrap();
 
         assert!(output.contains("CREATE TABLE [dbo].[__mssql_orm_migrations]"));
+        assert!(output.contains("SET QUOTED_IDENTIFIER ON;"));
         assert!(output.contains("CREATE TABLE [sales].[customers]"));
         assert!(output.contains("INSERT INTO [dbo].[__mssql_orm_migrations]"));
         assert!(output.contains("THROW 50001, N'mssql-orm migration checksum mismatch"));

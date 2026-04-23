@@ -9,6 +9,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Validar Etapa 13 contra SQL Server real y ajustar `database update` para índices sobre computed columns
 - [x] Operativo: Descomponer la subtarea de renombres explícitos de Etapa 13 en `RenameColumn` y `RenameTable`
 - [x] Etapa 13: Soportar `RenameColumn` explícito con `#[orm(renamed_from = "...")]` en snapshots, diff y DDL SQL Server
 - [x] Etapa 13: Generar scripts de migración idempotentes para SQL Server
