@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 9: Implementar DDL SQL Server para `CreateIndex` y `DropIndex` en migraciones
 - [ ] Etapa 9: Rediseñar `foreign_key` hacia sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]` con validación en compile-time, sin exigir que la columna de destino sea primary key
 - [ ] Etapa 9: Incorporar joins explícitos al AST de `mssql-orm-query`
 - [ ] Etapa 9: Compilar joins explícitos a SQL Server parametrizado
@@ -20,6 +19,7 @@
 - [ ] (vacío)
 
 ## Completadas
+- [x] Etapa 9: Implementar DDL SQL Server para `CreateIndex` y `DropIndex` en migraciones
 - [x] Etapa 9: Soportar `delete behavior` inicial (`no action`, `cascade`, `set null`) en metadata y DDL
 - [x] Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys
 - [x] Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados

@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: DDL SQL Server para índices de migración
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-sqlserver/src/migration.rs` para compilar `MigrationOperation::CreateIndex` a `CREATE INDEX` y `CREATE UNIQUE INDEX` sobre tablas calificadas por schema.
+- La misma capa ahora compila `MigrationOperation::DropIndex` a `DROP INDEX ... ON ...`, manteniendo toda la generación DDL de índices dentro de la crate SQL Server.
+- La compilación de índices reutiliza `IndexSnapshot` e `IndexColumnSnapshot`, preservando orden de columnas y dirección `ASC`/`DESC` a partir del snapshot ya producido por metadata/diff.
+- Se añadió validación explícita para rechazar índices sin columnas, evitando generar DDL inválido desde snapshots corruptos o incompletos.
+- Se actualizaron las pruebas unitarias de `mssql-orm-sqlserver` para cubrir índices normales, únicos, compuestos con orden mixto y rechazo de índices vacíos.
+
+### Resultado
+
+- La capa SQL Server ya cubre todo el DDL relacional básico pendiente de Etapa 9 para migraciones: foreign keys con acciones referenciales iniciales e índices simples/compuestos.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- El único ajuste necesario durante la validación fue importar `CreateIndex` en el módulo de tests de `mssql-orm-sqlserver`; quedó corregido en la misma sesión.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Incorporar joins explícitos al AST de mssql-orm-query`.
+
 ### Sesión: Delete behavior inicial para foreign keys
 
 - Se confirmó otra vez que el plan maestro usado como fuente de verdad está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, no en la raíz del repositorio.

@@ -1,8 +1,9 @@
 use crate::quoting::{quote_identifier, quote_qualified_identifier};
 use mssql_orm_core::{OrmError, ReferentialAction, SqlServerType};
 use mssql_orm_migrate::{
-    AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable, DropColumn,
-    DropForeignKey, DropSchema, DropTable, MigrationOperation,
+    AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema, CreateTable,
+    DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable, IndexColumnSnapshot,
+    MigrationOperation,
 };
 
 const MIGRATIONS_HISTORY_SCHEMA: &str = "dbo";
@@ -36,9 +37,8 @@ fn compile_operation(operation: &MigrationOperation) -> Result<String, OrmError>
         MigrationOperation::AddColumn(operation) => compile_add_column(operation),
         MigrationOperation::DropColumn(operation) => compile_drop_column(operation),
         MigrationOperation::AlterColumn(operation) => compile_alter_column(operation),
-        MigrationOperation::CreateIndex(_) | MigrationOperation::DropIndex(_) => {
-            compile_unsupported_index()
-        }
+        MigrationOperation::CreateIndex(operation) => compile_create_index(operation),
+        MigrationOperation::DropIndex(operation) => compile_drop_index(operation),
         MigrationOperation::AddForeignKey(operation) => compile_add_foreign_key(operation),
         MigrationOperation::DropForeignKey(operation) => compile_drop_foreign_key(operation),
     }
@@ -140,6 +140,41 @@ fn compile_alter_column(operation: &AlterColumn) -> Result<String, OrmError> {
     ))
 }
 
+fn compile_create_index(operation: &CreateIndex) -> Result<String, OrmError> {
+    if operation.index.columns.is_empty() {
+        return Err(OrmError::new(
+            "SQL Server index migration compilation requires at least one indexed column",
+        ));
+    }
+
+    let index_name = quote_identifier(&operation.index.name)?;
+    let table = quote_qualified_identifier(&operation.schema_name, &operation.table_name)?;
+    let columns = operation
+        .index
+        .columns
+        .iter()
+        .map(compile_index_column)
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+    let unique = if operation.index.unique {
+        "UNIQUE "
+    } else {
+        ""
+    };
+
+    Ok(format!(
+        "CREATE {unique}INDEX {index_name} ON {table} ({columns})"
+    ))
+}
+
+fn compile_drop_index(operation: &DropIndex) -> Result<String, OrmError> {
+    Ok(format!(
+        "DROP INDEX {} ON {}",
+        quote_identifier(&operation.index_name)?,
+        quote_qualified_identifier(&operation.schema_name, &operation.table_name)?,
+    ))
+}
+
 fn compile_add_foreign_key(operation: &AddForeignKey) -> Result<String, OrmError> {
     let table = quote_qualified_identifier(&operation.schema_name, &operation.table_name)?;
     let constraint = quote_identifier(&operation.foreign_key.name)?;
@@ -195,9 +230,11 @@ fn render_foreign_key_action_clause(
     Ok(format!(" ON {action_kind} {action_sql}"))
 }
 
-fn compile_unsupported_index() -> Result<String, OrmError> {
-    Err(OrmError::new(
-        "SQL Server index migration compilation is not supported in this stage",
+fn compile_index_column(column: &IndexColumnSnapshot) -> Result<String, OrmError> {
+    Ok(format!(
+        "{} {}",
+        quote_identifier(&column.column_name)?,
+        if column.descending { "DESC" } else { "ASC" }
     ))
 }
 
@@ -292,9 +329,9 @@ mod tests {
     use super::super::SqlServerCompiler;
     use mssql_orm_core::{IdentityMetadata, ReferentialAction, SqlServerType};
     use mssql_orm_migrate::{
-        AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateSchema, CreateTable,
-        DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable, ForeignKeySnapshot,
-        MigrationOperation, TableSnapshot,
+        AddColumn, AddForeignKey, AlterColumn, ColumnSnapshot, CreateIndex, CreateSchema,
+        CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
+        ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationOperation, TableSnapshot,
     };
 
     fn customer_table() -> TableSnapshot {
@@ -588,18 +625,65 @@ mod tests {
     }
 
     #[test]
-    fn rejects_index_migration_operations_until_stage_nine_ddl() {
-        let operation = MigrationOperation::DropIndex(DropIndex::new(
+    fn compiles_index_migration_operations_to_sql() {
+        let operations = vec![
+            MigrationOperation::CreateIndex(CreateIndex::new(
+                "sales",
+                "orders",
+                IndexSnapshot::new(
+                    "ix_orders_customer_id_total_cents",
+                    vec![
+                        IndexColumnSnapshot::asc("customer_id"),
+                        IndexColumnSnapshot::desc("total_cents"),
+                    ],
+                    false,
+                ),
+            )),
+            MigrationOperation::CreateIndex(CreateIndex::new(
+                "sales",
+                "orders",
+                IndexSnapshot::new(
+                    "ux_orders_external_id",
+                    vec![IndexColumnSnapshot::asc("external_id")],
+                    true,
+                ),
+            )),
+            MigrationOperation::DropIndex(DropIndex::new(
+                "sales",
+                "orders",
+                "ix_orders_customer_id_total_cents",
+            )),
+        ];
+
+        let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+        assert_eq!(
+            sql[0],
+            "CREATE INDEX [ix_orders_customer_id_total_cents] ON [sales].[orders] ([customer_id] ASC, [total_cents] DESC)"
+        );
+        assert_eq!(
+            sql[1],
+            "CREATE UNIQUE INDEX [ux_orders_external_id] ON [sales].[orders] ([external_id] ASC)"
+        );
+        assert_eq!(
+            sql[2],
+            "DROP INDEX [ix_orders_customer_id_total_cents] ON [sales].[orders]"
+        );
+    }
+
+    #[test]
+    fn rejects_create_index_without_columns() {
+        let operation = MigrationOperation::CreateIndex(CreateIndex::new(
             "sales",
             "orders",
-            "ix_orders_customer_id",
+            IndexSnapshot::new("ix_orders_empty", vec![], false),
         ));
 
         let error = SqlServerCompiler::compile_migration_operations(&[operation]).unwrap_err();
 
         assert_eq!(
             error.message(),
-            "SQL Server index migration compilation is not supported in this stage"
+            "SQL Server index migration compilation requires at least one indexed column"
         );
     }
 }

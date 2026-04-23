@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 cerrando el DDL pendiente de índices (`CreateIndex`/`DropIndex`) antes de avanzar a joins explícitos.
+Continuar la Etapa 9 incorporando joins explícitos al AST de `mssql-orm-query`, ahora que el DDL relacional básico de migraciones ya quedó cerrado.
 
 ## Dirección Arquitectónica Vigente
 
@@ -112,6 +112,7 @@ Continuar la Etapa 9 cerrando el DDL pendiente de índices (`CreateIndex`/`DropI
 - `mssql-orm-sqlserver` ya compila `AddForeignKey` y `DropForeignKey` a DDL SQL Server básico usando `ALTER TABLE ... ADD/DROP CONSTRAINT`.
 - `mssql-orm-sqlserver` ya compila foreign keys con `ON DELETE` y `ON UPDATE` para `NO ACTION`, `CASCADE` y `SET NULL`.
 - `ReferentialAction::SetDefault` sigue rechazado explícitamente en DDL, porque todavía no forma parte del alcance activo.
+- `mssql-orm-sqlserver` ya compila `CreateIndex` y `DropIndex` a DDL SQL Server usando `CREATE [UNIQUE] INDEX ... ON ...` y `DROP INDEX ... ON ...`, preservando orden `ASC`/`DESC` desde el snapshot.
 - Las operaciones de índices (`CreateIndex`, `DropIndex`) siguen rechazadas explícitamente en `mssql-orm-sqlserver`, porque su DDL todavía no forma parte del alcance activo.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
@@ -157,7 +158,7 @@ Continuar la Etapa 9 cerrando el DDL pendiente de índices (`CreateIndex`/`DropI
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- Aunque el `delete behavior` inicial ya quedó soportado, todavía falta sumar DDL de índices y luego exponer joins explícitos en query/query-public.
+- El DDL relacional básico de migraciones ya quedó cubierto para foreign keys e índices; el siguiente frente real de Etapa 9 pasa a ser joins explícitos en AST, compilación SQL y surface pública mínima.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -168,6 +169,6 @@ Continuar la Etapa 9 cerrando el DDL pendiente de índices (`CreateIndex`/`DropI
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Implementar DDL SQL Server para CreateIndex y DropIndex en migraciones`.
-2. Mantener ese trabajo acotado a la crate `mssql-orm-sqlserver`, reutilizando `IndexSnapshot` y `MigrationOperation` ya definidos.
-3. Retomar joins explícitos solo después de cerrar el hueco de migraciones relacionales que todavía queda abierto.
+1. Implementar `Etapa 9: Incorporar joins explícitos al AST de mssql-orm-query`.
+2. Mantener `mssql-orm-query` libre de SQL directo; el objetivo inmediato debe ser solo modelado del AST y contratos mínimos.
+3. Dejar compilación SQL Server y surface pública para las subtareas siguientes ya separadas en el backlog.
