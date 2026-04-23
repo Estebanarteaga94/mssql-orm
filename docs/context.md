@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots y diff de migraciones para foreign keys e índices asociados.
+Continuar la Etapa 9 implementando el DDL SQL Server de foreign keys sobre la base ya fijada en metadata, snapshots y diff relacional.
 
 ## Dirección Arquitectónica Vigente
 
@@ -83,14 +83,15 @@ Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `limit`, `take`, `paginate`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ahora también cuenta con una batería específica de pruebas públicas del query builder: una prueba de integración sobre la forma del AST y un caso `trybuild` que valida el encadenamiento desde código consumidor.
 - La crate pública `mssql-orm` ahora también cuenta con snapshots del SQL generado desde el query builder público y con una prueba explícita de seguridad para confirmar que valores no confiables quedan parametrizados y no se interpolan en el SQL.
-- `mssql-orm-migrate` ya dejó de ser solo un marker crate y ahora expone `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot` e `IndexColumnSnapshot` como base del sistema de migraciones.
+- `mssql-orm-migrate` ya dejó de ser solo un marker crate y ahora expone `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot`, `IndexColumnSnapshot` y `ForeignKeySnapshot` como base del sistema de migraciones.
 - El snapshot actual usa `String` y `Vec<_>` para ser persistible fuera de metadata estática, pero conserva el shape relevante de SQL Server (`SqlServerType`, `IdentityMetadata`, nullability, defaults, computed, rowversion, longitudes, precisión/escala, PK e índices).
-- `TableSnapshot` conserva nombre de PK y columnas de PK además de columnas e índices, permitiendo que la siguiente subtarea convierta metadata code-first a snapshot sin redefinir el contrato base.
-- `mssql-orm-migrate` ahora también implementa conversión directa desde metadata estática: `ColumnSnapshot: From<&ColumnMetadata>`, `IndexColumnSnapshot: From<&IndexColumnMetadata>`, `IndexSnapshot: From<&IndexMetadata>` y `TableSnapshot: From<&EntityMetadata>`.
+- `TableSnapshot` conserva nombre de PK y columnas de PK además de columnas, índices y foreign keys, permitiendo que el pipeline de migraciones preserve ya la forma relacional relevante del modelo.
+- `mssql-orm-migrate` ahora también implementa conversión directa desde metadata estática: `ColumnSnapshot: From<&ColumnMetadata>`, `IndexColumnSnapshot: From<&IndexColumnMetadata>`, `IndexSnapshot: From<&IndexMetadata>`, `ForeignKeySnapshot: From<&ForeignKeyMetadata>` y `TableSnapshot: From<&EntityMetadata>`.
 - `ModelSnapshot::from_entities(&[&EntityMetadata])` ya agrupa entidades por schema usando orden determinista y ordena tablas por nombre dentro de cada schema, dejando una base estable para snapshots persistidos y futuros diffs.
-- La conversión actual conserva el orden original de columnas, el nombre y columnas de primary key, y los índices declarados en metadata; foreign keys siguen fuera de alcance hasta etapas posteriores.
-- `mssql-orm-migrate` ahora también expone `MigrationOperation` en un módulo separado, con payloads mínimos para `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`.
+- La conversión actual conserva el orden original de columnas, el nombre y columnas de primary key, los índices declarados y las foreign keys declaradas en metadata.
+- `mssql-orm-migrate` ahora también expone `MigrationOperation` en un módulo separado, con payloads mínimos para `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn`, `AlterColumn`, `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`.
 - Las operaciones de tabla reutilizan `TableSnapshot` completo y las de columna reutilizan `ColumnSnapshot`, evitando duplicar contratos antes de implementar el diff engine.
+- Las operaciones relacionales nuevas reutilizan `IndexSnapshot` y `ForeignKeySnapshot`, de modo que el futuro DDL de Etapa 9 pueda compilarse sin volver a inferir shape desde metadata cruda.
 - `MigrationOperation` ya expone helpers de lectura para `schema_name()` y `table_name()`, lo que simplifica ordenamiento y aserciones del futuro diff básico sin introducir aún generación SQL.
 - `mssql-orm-migrate` ahora también expone `diff_schema_and_table_operations(previous, current)`, que compara `ModelSnapshot` y emite operaciones deterministas para `CreateSchema`, `CreateTable`, `DropTable` y `DropSchema`.
 - El orden del diff actual es intencionalmente seguro para este alcance: primero crea schemas, luego tablas nuevas; después elimina tablas sobrantes y al final schemas vacíos/eliminados.
@@ -98,12 +99,15 @@ Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots
 - `mssql-orm-migrate` ahora también expone `diff_column_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
 - El diff de columnas ya detecta `AddColumn`, `DropColumn` y `AlterColumn` comparando `ColumnSnapshot` completo y usando orden determinista por nombre de columna.
 - El diff de columnas ignora intencionalmente tablas nuevas o eliminadas, para no duplicar trabajo ya cubierto por `CreateTable`/`DropTable`; renombres de columna siguen fuera de alcance en este MVP.
+- `mssql-orm-migrate` ahora también expone `diff_relational_operations(previous, current)`, limitado a tablas compartidas entre ambos snapshots.
+- El diff relacional detecta `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`; cuando cambia la definición de una foreign key existente, hoy la modela como `DropForeignKey` seguido de `AddForeignKey`.
 - La cobertura del diff engine ya quedó centralizada en pruebas unitarias dedicadas dentro de `crates/mssql-orm-migrate/src/diff.rs`, en lugar de estar dispersa en `lib.rs`.
 - Esa batería ya fija casos mínimos de orden seguro, no-op sobre snapshots iguales, altas/bajas de tablas, altas/bajas de columnas, alteraciones básicas y una composición completa de diff sobre snapshots mínimos.
 - `lib.rs` quedó otra vez enfocado en reexports, boundaries y shape base de snapshots/operaciones, reduciendo ruido y duplicación en la capa pública de la crate.
 - `mssql-orm-sqlserver` ahora compila `MigrationOperation` a DDL SQL Server mediante un módulo dedicado de migraciones, reutilizando `MigrationOperation` y `ColumnSnapshot`/`TableSnapshot` definidos en `mssql-orm-migrate`.
 - La crate `mssql-orm-migrate` dejó de depender de `mssql-orm-sqlserver`; esa dependencia se invirtió para evitar un ciclo entre crates y respetar que la generación SQL pertenece a la capa SQL Server.
 - La generación SQL actual cubre `CreateSchema`, `DropSchema`, `CreateTable`, `DropTable`, `AddColumn`, `DropColumn` y `AlterColumn`, además de la creación idempotente de `dbo.__mssql_orm_migrations`.
+- Las nuevas operaciones relacionales (`CreateIndex`, `DropIndex`, `AddForeignKey`, `DropForeignKey`) ya están tipadas y validadas en el workspace, pero `mssql-orm-sqlserver` todavía las rechaza explícitamente hasta implementar su DDL dedicado.
 - `AlterColumn` se limita intencionalmente a cambios básicos de tipo y nullability; defaults, computed columns, identity, PK y otros cambios que requieren operaciones dedicadas todavía retornan error explícito en esta etapa.
 - `mssql-orm-migrate` ahora expone soporte mínimo de filesystem para migraciones: crear scaffolds, listar migraciones locales y construir un script SQL de `database update` a partir de `up.sql`.
 - `mssql-orm-cli` ya implementa `migration add <Name>`, `migration list` y `database update`, delegando la lógica de scaffolding/listado/script al crate de migraciones y reutilizando la creación SQL de `__mssql_orm_migrations` desde `mssql-orm-sqlserver`.
@@ -148,7 +152,7 @@ Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y quedó cubierta por pruebas, pero todavía no existe la sintaxis estructurada futura ni validación compile-time contra entidades/columnas de destino.
-- Aunque la cobertura de pruebas relacionales ya quedó fijada, esa metadata todavía no participa en snapshots, diff de migraciones, DDL SQL Server ni joins explícitos.
+- Aunque snapshots y diff ya cubren metadata relacional, todavía falta compilar esas operaciones a DDL SQL Server y luego exponer joins explícitos en query/query-public.
 - La base CRUD pública y el ejemplo ejecutable ya existen; el siguiente riesgo inmediato es introducir un query builder público que duplique o contradiga el AST y runner ya presentes.
 - `find` todavía no soporta primary key compuesta; hoy falla explícitamente en ese caso y ese límite debe mantenerse documentado hasta que exista soporte dedicado.
 - `update` tampoco soporta primary key compuesta en esta etapa y retorna `Option<E>` para representar ausencia de fila, reservando semánticas de conflicto más fuertes para la Etapa 11.
@@ -159,6 +163,6 @@ Continuar la Etapa 9 llevando la metadata relacional ya validada hacia snapshots
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados`.
-2. Reutilizar la metadata relacional ya fijada por las pruebas nuevas para evitar redefinir shapes de foreign keys al pasar a `ModelSnapshot` y al diff.
-3. Mantener DDL SQL Server y joins fuera de alcance hasta cerrar primero la persistencia/detección de cambios de foreign keys en migraciones.
+1. Implementar `Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys`.
+2. Reutilizar las nuevas operaciones `AddForeignKey` y `DropForeignKey` ya fijadas en `mssql-orm-migrate`, evitando volver a mezclar diff con generación SQL.
+3. Mantener joins y `delete behavior` configurable fuera de alcance hasta cerrar primero el DDL básico de foreign keys.

@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: Snapshots y diff de migraciones para relaciones
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 9: Extender snapshots y diff de migraciones para foreign keys e índices asociados` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm-migrate/src/snapshot.rs` con `ForeignKeySnapshot`, `TableSnapshot::foreign_keys`, lookup por nombre y conversión automática desde `ForeignKeyMetadata`.
+- `TableSnapshot::from(&EntityMetadata)` ahora conserva también foreign keys derivadas, además de columnas, primary key e índices.
+- Se amplió `crates/mssql-orm-migrate/src/operation.rs` con operaciones explícitas `CreateIndex`, `DropIndex`, `AddForeignKey` y `DropForeignKey`, manteniendo la responsabilidad de generación SQL fuera de esta subtarea.
+- Se extendió `crates/mssql-orm-migrate/src/diff.rs` con `diff_relational_operations(previous, current)`, cubriendo altas/bajas de índices, altas/bajas de foreign keys y recreación de foreign keys cuando cambia su definición.
+- Se reforzaron las pruebas unitarias de `mssql-orm-migrate` para snapshots con foreign keys, surface de nuevas operaciones y diffs relacionales sobre snapshots compartidos.
+- Se actualizó `crates/mssql-orm-sqlserver/src/migration.rs` para rechazar explícitamente operaciones de índices y foreign keys con error claro hasta implementar el DDL específico en la siguiente subtarea.
+
+### Resultado
+
+- El sistema de migraciones ya puede serializar metadata relacional en snapshots y detectar cambios de índices/FKs como operaciones explícitas, dejando lista la base para implementar el DDL SQL Server sin redefinir contratos.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test -p mssql-orm-sqlserver`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- `Cargo.lock` sigue con cambios previos ajenos a esta sesión y no fue modificado como parte del trabajo.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 9: Generar DDL SQL Server para crear y eliminar foreign keys`.
+
 ### Sesión: Cobertura de pruebas para metadata relacional
 
 - Se confirmó nuevamente que el plan maestro usado como fuente de verdad está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, no en la raíz del repositorio.

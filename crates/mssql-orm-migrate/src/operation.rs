@@ -1,4 +1,4 @@
-use crate::{ColumnSnapshot, TableSnapshot};
+use crate::{ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, TableSnapshot};
 
 /// Ordered migration operations emitted by the diff engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -10,6 +10,10 @@ pub enum MigrationOperation {
     AddColumn(AddColumn),
     DropColumn(DropColumn),
     AlterColumn(AlterColumn),
+    CreateIndex(CreateIndex),
+    DropIndex(DropIndex),
+    AddForeignKey(AddForeignKey),
+    DropForeignKey(DropForeignKey),
 }
 
 impl MigrationOperation {
@@ -22,6 +26,10 @@ impl MigrationOperation {
             Self::AddColumn(operation) => &operation.schema_name,
             Self::DropColumn(operation) => &operation.schema_name,
             Self::AlterColumn(operation) => &operation.schema_name,
+            Self::CreateIndex(operation) => &operation.schema_name,
+            Self::DropIndex(operation) => &operation.schema_name,
+            Self::AddForeignKey(operation) => &operation.schema_name,
+            Self::DropForeignKey(operation) => &operation.schema_name,
         }
     }
 
@@ -33,6 +41,10 @@ impl MigrationOperation {
             Self::AddColumn(operation) => Some(&operation.table_name),
             Self::DropColumn(operation) => Some(&operation.table_name),
             Self::AlterColumn(operation) => Some(&operation.table_name),
+            Self::CreateIndex(operation) => Some(&operation.table_name),
+            Self::DropIndex(operation) => Some(&operation.table_name),
+            Self::AddForeignKey(operation) => Some(&operation.table_name),
+            Self::DropForeignKey(operation) => Some(&operation.table_name),
         }
     }
 }
@@ -162,6 +174,94 @@ impl AlterColumn {
             table_name: table_name.into(),
             previous,
             next,
+        }
+    }
+}
+
+/// Create a missing index on an existing table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateIndex {
+    pub schema_name: String,
+    pub table_name: String,
+    pub index: IndexSnapshot,
+}
+
+impl CreateIndex {
+    pub fn new(
+        schema_name: impl Into<String>,
+        table_name: impl Into<String>,
+        index: IndexSnapshot,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            table_name: table_name.into(),
+            index,
+        }
+    }
+}
+
+/// Drop an index from an existing table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropIndex {
+    pub schema_name: String,
+    pub table_name: String,
+    pub index_name: String,
+}
+
+impl DropIndex {
+    pub fn new(
+        schema_name: impl Into<String>,
+        table_name: impl Into<String>,
+        index_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            table_name: table_name.into(),
+            index_name: index_name.into(),
+        }
+    }
+}
+
+/// Add a foreign key to an existing table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddForeignKey {
+    pub schema_name: String,
+    pub table_name: String,
+    pub foreign_key: ForeignKeySnapshot,
+}
+
+impl AddForeignKey {
+    pub fn new(
+        schema_name: impl Into<String>,
+        table_name: impl Into<String>,
+        foreign_key: ForeignKeySnapshot,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            table_name: table_name.into(),
+            foreign_key,
+        }
+    }
+}
+
+/// Drop a foreign key from an existing table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DropForeignKey {
+    pub schema_name: String,
+    pub table_name: String,
+    pub foreign_key_name: String,
+}
+
+impl DropForeignKey {
+    pub fn new(
+        schema_name: impl Into<String>,
+        table_name: impl Into<String>,
+        foreign_key_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            schema_name: schema_name.into(),
+            table_name: table_name.into(),
+            foreign_key_name: foreign_key_name.into(),
         }
     }
 }

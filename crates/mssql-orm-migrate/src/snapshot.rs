@@ -1,6 +1,6 @@
 use mssql_orm_core::{
-    ColumnMetadata, EntityMetadata, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
-    SqlServerType,
+    ColumnMetadata, EntityMetadata, ForeignKeyMetadata, IdentityMetadata, IndexColumnMetadata,
+    IndexMetadata, ReferentialAction, SqlServerType,
 };
 use std::collections::BTreeMap;
 
@@ -74,6 +74,7 @@ pub struct TableSnapshot {
     pub primary_key_name: Option<String>,
     pub primary_key_columns: Vec<String>,
     pub indexes: Vec<IndexSnapshot>,
+    pub foreign_keys: Vec<ForeignKeySnapshot>,
 }
 
 impl TableSnapshot {
@@ -83,6 +84,7 @@ impl TableSnapshot {
         primary_key_name: Option<String>,
         primary_key_columns: Vec<String>,
         indexes: Vec<IndexSnapshot>,
+        foreign_keys: Vec<ForeignKeySnapshot>,
     ) -> Self {
         Self {
             name: name.into(),
@@ -90,6 +92,7 @@ impl TableSnapshot {
             primary_key_name,
             primary_key_columns,
             indexes,
+            foreign_keys,
         }
     }
 
@@ -99,6 +102,12 @@ impl TableSnapshot {
 
     pub fn index(&self, name: &str) -> Option<&IndexSnapshot> {
         self.indexes.iter().find(|index| index.name == name)
+    }
+
+    pub fn foreign_key(&self, name: &str) -> Option<&ForeignKeySnapshot> {
+        self.foreign_keys
+            .iter()
+            .find(|foreign_key| foreign_key.name == name)
     }
 }
 
@@ -240,6 +249,63 @@ impl From<&IndexColumnMetadata> for IndexColumnSnapshot {
     }
 }
 
+/// Snapshot of a foreign key, including referenced target and referential actions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignKeySnapshot {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub referenced_schema: String,
+    pub referenced_table: String,
+    pub referenced_columns: Vec<String>,
+    pub on_delete: ReferentialAction,
+    pub on_update: ReferentialAction,
+}
+
+impl ForeignKeySnapshot {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        name: impl Into<String>,
+        columns: Vec<String>,
+        referenced_schema: impl Into<String>,
+        referenced_table: impl Into<String>,
+        referenced_columns: Vec<String>,
+        on_delete: ReferentialAction,
+        on_update: ReferentialAction,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            columns,
+            referenced_schema: referenced_schema.into(),
+            referenced_table: referenced_table.into(),
+            referenced_columns,
+            on_delete,
+            on_update,
+        }
+    }
+}
+
+impl From<&ForeignKeyMetadata> for ForeignKeySnapshot {
+    fn from(foreign_key: &ForeignKeyMetadata) -> Self {
+        Self {
+            name: foreign_key.name.to_string(),
+            columns: foreign_key
+                .columns
+                .iter()
+                .map(|column| (*column).to_string())
+                .collect(),
+            referenced_schema: foreign_key.referenced_schema.to_string(),
+            referenced_table: foreign_key.referenced_table.to_string(),
+            referenced_columns: foreign_key
+                .referenced_columns
+                .iter()
+                .map(|column| (*column).to_string())
+                .collect(),
+            on_delete: foreign_key.on_delete,
+            on_update: foreign_key.on_update,
+        }
+    }
+}
+
 impl From<&EntityMetadata> for TableSnapshot {
     fn from(entity: &EntityMetadata) -> Self {
         Self {
@@ -253,6 +319,11 @@ impl From<&EntityMetadata> for TableSnapshot {
                 .map(|column| (*column).to_string())
                 .collect(),
             indexes: entity.indexes.iter().map(IndexSnapshot::from).collect(),
+            foreign_keys: entity
+                .foreign_keys
+                .iter()
+                .map(ForeignKeySnapshot::from)
+                .collect(),
         }
     }
 }

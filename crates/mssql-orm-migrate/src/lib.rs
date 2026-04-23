@@ -7,18 +7,20 @@ mod filesystem;
 mod operation;
 mod snapshot;
 
-pub use diff::{diff_column_operations, diff_schema_and_table_operations};
+pub use diff::{
+    diff_column_operations, diff_relational_operations, diff_schema_and_table_operations,
+};
 pub use filesystem::{
     MigrationEntry, MigrationScaffold, build_database_update_script, create_migration_scaffold,
     list_migrations,
 };
 pub use operation::{
-    AddColumn, AlterColumn, CreateSchema, CreateTable, DropColumn, DropSchema, DropTable,
-    MigrationOperation,
+    AddColumn, AddForeignKey, AlterColumn, CreateIndex, CreateSchema, CreateTable, DropColumn,
+    DropForeignKey, DropIndex, DropSchema, DropTable, MigrationOperation,
 };
 pub use snapshot::{
-    ColumnSnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot, SchemaSnapshot,
-    TableSnapshot,
+    ColumnSnapshot, ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot,
+    SchemaSnapshot, TableSnapshot,
 };
 
 /// Placeholder migration engine marker.
@@ -33,13 +35,14 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 #[cfg(test)]
 mod tests {
     use super::{
-        AddColumn, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateSchema, CreateTable,
-        DropColumn, DropSchema, DropTable, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
+        AddColumn, AddForeignKey, AlterColumn, CRATE_IDENTITY, ColumnSnapshot, CreateIndex,
+        CreateSchema, CreateTable, DropColumn, DropForeignKey, DropIndex, DropSchema, DropTable,
+        ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, MigrationEngine,
         MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
     };
     use mssql_orm_core::{
-        ColumnMetadata, EntityMetadata, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
-        PrimaryKeyMetadata, SqlServerType,
+        ColumnMetadata, EntityMetadata, ForeignKeyMetadata, IdentityMetadata, IndexColumnMetadata,
+        IndexMetadata, PrimaryKeyMetadata, ReferentialAction, SqlServerType,
     };
 
     const CUSTOMER_COLUMNS: [ColumnMetadata; 3] = [
@@ -192,6 +195,15 @@ mod tests {
     ];
 
     const ORDER_PK_COLUMNS: [&str; 1] = ["id"];
+    const ORDER_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_orders_customer_id_customers",
+        &["customer_id"],
+        "sales",
+        "customers",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
     const ORDER_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "Order",
         schema: "sales",
@@ -199,7 +211,7 @@ mod tests {
         columns: &ORDER_COLUMNS,
         primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &ORDER_PK_COLUMNS),
         indexes: &[],
-        foreign_keys: &[],
+        foreign_keys: &ORDER_FOREIGN_KEYS,
     };
 
     #[test]
@@ -254,6 +266,7 @@ mod tests {
                     vec![IndexColumnSnapshot::asc("email")],
                     false,
                 )],
+                vec![],
             )],
         )]);
 
@@ -311,6 +324,23 @@ mod tests {
         assert_eq!(table.indexes.len(), 1);
         assert_eq!(table.indexes[0].name, "ix_customers_email");
         assert!(table.indexes[0].unique);
+        assert!(table.foreign_keys.is_empty());
+    }
+
+    #[test]
+    fn table_snapshot_preserves_foreign_keys_from_entity_metadata() {
+        let table = TableSnapshot::from(&ORDER_METADATA);
+        let foreign_key = table
+            .foreign_key("fk_orders_customer_id_customers")
+            .expect("foreign key must exist");
+
+        assert_eq!(table.foreign_keys.len(), 1);
+        assert_eq!(foreign_key.columns, vec!["customer_id"]);
+        assert_eq!(foreign_key.referenced_schema, "sales");
+        assert_eq!(foreign_key.referenced_table, "customers");
+        assert_eq!(foreign_key.referenced_columns, vec!["id"]);
+        assert_eq!(foreign_key.on_delete, ReferentialAction::NoAction);
+        assert_eq!(foreign_key.on_update, ReferentialAction::NoAction);
     }
 
     #[test]
@@ -382,6 +412,38 @@ mod tests {
                 None,
             ),
         ));
+        let create_index = MigrationOperation::CreateIndex(CreateIndex::new(
+            "sales",
+            "customers",
+            IndexSnapshot::new(
+                "ix_customers_email",
+                vec![IndexColumnSnapshot::asc("email")],
+                true,
+            ),
+        ));
+        let drop_index = MigrationOperation::DropIndex(DropIndex::new(
+            "sales",
+            "customers",
+            "ix_customers_email",
+        ));
+        let add_foreign_key = MigrationOperation::AddForeignKey(AddForeignKey::new(
+            "sales",
+            "orders",
+            ForeignKeySnapshot::new(
+                "fk_orders_customer_id_customers",
+                vec!["customer_id".to_string()],
+                "sales",
+                "customers",
+                vec!["id".to_string()],
+                ReferentialAction::NoAction,
+                ReferentialAction::NoAction,
+            ),
+        ));
+        let drop_foreign_key = MigrationOperation::DropForeignKey(DropForeignKey::new(
+            "sales",
+            "orders",
+            "fk_orders_customer_id_customers",
+        ));
 
         assert_eq!(create_schema.schema_name(), "sales");
         assert_eq!(drop_schema.schema_name(), "legacy");
@@ -391,6 +453,10 @@ mod tests {
         assert_eq!(add_column.table_name(), Some("customers"));
         assert_eq!(drop_column.table_name(), Some("customers"));
         assert_eq!(alter_column.table_name(), Some("customers"));
+        assert_eq!(create_index.table_name(), Some("customers"));
+        assert_eq!(drop_index.table_name(), Some("customers"));
+        assert_eq!(add_foreign_key.table_name(), Some("orders"));
+        assert_eq!(drop_foreign_key.table_name(), Some("orders"));
     }
 
     #[test]
