@@ -5,6 +5,7 @@ extern crate self as mssql_orm;
 mod context;
 mod dbset_query;
 mod page_request;
+mod predicate_composition;
 mod query_order;
 mod query_predicates;
 
@@ -19,12 +20,14 @@ pub use tokio;
 pub use context::{DbContext, DbSet, SharedConnection, connect_shared};
 pub use dbset_query::DbSetQuery;
 pub use page_request::PageRequest;
+pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
 
 pub mod prelude {
     pub use crate::{
         DbContext, DbSet, DbSetQuery, EntityColumnOrderExt, EntityColumnPredicateExt, PageRequest,
+        PredicateCompositionExt,
     };
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -40,7 +43,8 @@ mod tests {
     use super::prelude::{
         Changeset, ColumnValue, DbContext, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
         EntityColumnPredicateExt, EntityMetadata, IdentityMetadata, Insertable, OrmError,
-        PageRequest, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue,
+        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
+        SqlValue,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
 
@@ -241,6 +245,18 @@ mod tests {
         assert_eq!(
             DerivedUser::email.asc(),
             OrderBy::new(TableRef::new("auth", "users"), "email", SortDirection::Asc)
+        );
+        assert_eq!(
+            DerivedUser::email
+                .contains("@example.com")
+                .and(DerivedUser::display_name.is_not_null()),
+            Predicate::and(vec![
+                Predicate::like(
+                    Expr::from(DerivedUser::email),
+                    Expr::value(SqlValue::String("%@example.com%".to_string()))
+                ),
+                Predicate::is_not_null(Expr::from(DerivedUser::display_name))
+            ])
         );
     }
 

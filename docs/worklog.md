@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: Composición lógica pública de predicados
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Implementar composición lógica pública de predicados (and, or, not)` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm/src/predicate_composition.rs` como capa pública de composición lógica sobre `Predicate`.
+- La implementación expone el trait `PredicateCompositionExt` con `and`, `or` y `not`, evitando introducir un AST alterno o mover composición al `core`.
+- `and` y `or` hacen flatten de grupos lógicos existentes para evitar estructuras redundantes del tipo `And([And([...]), ...])` u `Or([Or([...]), ...])`.
+- Se reexportó `PredicateCompositionExt` desde `mssql-orm` y desde la `prelude`, y se añadió cobertura unitaria específica junto con una prueba de superficie pública en `crates/mssql-orm/src/lib.rs`.
+- No fue necesario modificar `mssql-orm-query` ni `mssql-orm-sqlserver`, porque el AST y la compilación ya soportaban lógica booleana; esta subtarea solo la hizo accesible desde la API pública.
+
+### Resultado
+
+- La superficie pública del query builder ya soporta composición lógica explícita de predicados, completando la base funcional principal de Etapa 6 sin romper límites entre crates.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Ejecutar la tarea `Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado`, consolidando en una sola batería la superficie pública ya expuesta.
+
 ### Sesión: Paginación pública con `PageRequest`
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer paginación pública en DbSetQuery con request explícito y contrato estable` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

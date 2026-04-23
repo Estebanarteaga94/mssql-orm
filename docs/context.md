@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 6 con la siguiente subtarea detallada: exponer composición lógica pública de predicados, ahora que la crate pública ya soporta predicados básicos, ordenamiento, métodos fluentes y paginación explícita sobre el query builder público.
+Continuar la Etapa 6 con la siguiente subtarea detallada: consolidar pruebas unitarias específicas de la API pública del query builder y de la forma del AST generado, ahora que la superficie pública base ya quedó expuesta.
 
 ## Dirección Arquitectónica Vigente
 
@@ -71,6 +71,7 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer composición l
 - `DbSet<T>` ahora también expone `update<K, C>() -> Result<Option<E>, OrmError>`, compilando un `UpdateQuery` desde `Changeset<E>` y materializando la fila actualizada cuando existe.
 - `DbSet<T>` ahora también expone `delete<K>() -> Result<bool, OrmError>`, compilando un `DeleteQuery` por primary key simple y devolviendo si hubo al menos una fila afectada.
 - La crate pública `mssql-orm` ahora también expone `PageRequest` como contrato estable de paginación explícita.
+- La crate pública `mssql-orm` ahora también expone `PredicateCompositionExt`, habilitando `and`, `or` y `not` sobre `Predicate` sin introducir un DSL lógico paralelo.
 - `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `limit`, `take`, `paginate`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
@@ -115,6 +116,6 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer composición l
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 6: composición lógica pública de predicados (and, or, not)`.
-2. Continuar con pruebas específicas del query builder público, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
+1. Ejecutar `Etapa 6: Agregar pruebas unitarias de la API pública del query builder y de la forma del AST generado`.
+2. Continuar con snapshots y seguridad de parámetros del query builder público, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
 3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
