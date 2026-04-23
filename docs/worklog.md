@@ -2,6 +2,28 @@
 
 ## 2026-04-23
 
+### Sesión: Métodos fluentes `filter` y `order_by` en `DbSetQuery`
+
+- Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer métodos fluentes en DbSetQuery para filter y order_by` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se extendió `crates/mssql-orm/src/dbset_query.rs` para exponer `DbSetQuery::filter(Predicate)` y `DbSetQuery::order_by(OrderBy)`.
+- Ambos métodos reutilizan directamente `SelectQuery::filter` y `SelectQuery::order_by`, manteniendo una única representación del AST y evitando introducir un builder paralelo en la crate pública.
+- Se añadieron pruebas unitarias para validar `filter`, `order_by` y el encadenamiento de ambos sobre el `SelectQuery` interno.
+- No fue necesario modificar el compilador SQL Server ni el AST base, porque la semántica ya existía y esta subtarea solo la hizo accesible desde la API pública del runner.
+
+### Resultado
+
+- `DbSetQuery` ya soporta la composición fluida básica del query builder público sobre filtros y ordenamiento, alineada con la API objetivo del plan maestro.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 6: Exponer limit y take en DbSetQuery`, reutilizando `Pagination` sin duplicar semántica.
+
 ### Sesión: Ordenamiento público por columna
 
 - Se movió en `docs/tasks.md` la subtarea `Etapa 6: Exponer ordenamiento público por columna (asc, desc)` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.

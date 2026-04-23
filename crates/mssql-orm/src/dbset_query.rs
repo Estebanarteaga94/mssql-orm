@@ -1,6 +1,6 @@
 use crate::context::SharedConnection;
 use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
-use mssql_orm_query::{CountQuery, SelectQuery};
+use mssql_orm_query::{CountQuery, OrderBy, Predicate, SelectQuery};
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[derive(Clone)]
@@ -21,6 +21,16 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub fn with_select_query(mut self, select_query: SelectQuery) -> Self {
         self.select_query = select_query;
+        self
+    }
+
+    pub fn filter(mut self, predicate: Predicate) -> Self {
+        self.select_query = self.select_query.filter(predicate);
+        self
+    }
+
+    pub fn order_by(mut self, order: OrderBy) -> Self {
+        self.select_query = self.select_query.order_by(order);
         self
     }
 
@@ -113,7 +123,7 @@ mod tests {
     use mssql_orm_core::{
         Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
     };
-    use mssql_orm_query::{Expr, Predicate, SelectQuery};
+    use mssql_orm_query::{Expr, OrderBy, Predicate, SelectQuery, SortDirection, TableRef};
 
     struct TestEntity;
 
@@ -159,6 +169,75 @@ mod tests {
 
         assert_eq!(query.select_query(), &custom);
         assert_eq!(query.into_select_query(), custom);
+    }
+
+    #[test]
+    fn dbset_query_filter_builds_on_internal_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset.query().filter(Predicate::eq(
+            Expr::value(SqlValue::Bool(true)),
+            Expr::value(SqlValue::Bool(true)),
+        ));
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>().filter(Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_order_by_builds_on_internal_select_query() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset.query().order_by(OrderBy::new(
+            TableRef::new("dbo", "test_entities"),
+            "created_at",
+            SortDirection::Desc,
+        ));
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>().order_by(OrderBy::new(
+                TableRef::new("dbo", "test_entities"),
+                "created_at",
+                SortDirection::Desc,
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_supports_chaining_filter_and_order_by() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset
+            .query()
+            .filter(Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::new("dbo", "test_entities"),
+                "created_at",
+                SortDirection::Asc,
+            ));
+
+        assert_eq!(
+            query.into_select_query(),
+            SelectQuery::from_entity::<TestEntity>()
+                .filter(Predicate::eq(
+                    Expr::value(SqlValue::Bool(true)),
+                    Expr::value(SqlValue::Bool(true)),
+                ))
+                .order_by(OrderBy::new(
+                    TableRef::new("dbo", "test_entities"),
+                    "created_at",
+                    SortDirection::Asc,
+                ))
+        );
     }
 
     #[test]

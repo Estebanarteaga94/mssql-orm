@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-Continuar la Etapa 6 con la siguiente subtarea detallada: exponer métodos fluentes `filter` y `order_by` sobre `DbSetQuery`, ahora que la crate pública ya soporta predicados y ordenamiento directamente sobre `EntityColumn`.
+Continuar la Etapa 6 con la siguiente subtarea detallada: exponer `limit` y `take` sobre `DbSetQuery`, ahora que la crate pública ya soporta predicados, ordenamiento y métodos fluentes básicos sobre el query builder público.
 
 ## Dirección Arquitectónica Vigente
 
@@ -70,7 +70,7 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer métodos fluen
 - `DbSet<T>` ahora también expone `insert<I>()`, compilando un `InsertQuery` desde `Insertable<E>` y materializando la entidad devuelta por `OUTPUT INSERTED.*`.
 - `DbSet<T>` ahora también expone `update<K, C>() -> Result<Option<E>, OrmError>`, compilando un `UpdateQuery` desde `Changeset<E>` y materializando la fila actualizada cuando existe.
 - `DbSet<T>` ahora también expone `delete<K>() -> Result<bool, OrmError>`, compilando un `DeleteQuery` por primary key simple y devolviendo si hubo al menos una fila afectada.
-- `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
+- `DbSetQuery<T>` ya encapsula un `SelectQuery` y soporta `filter`, `order_by`, `all`, `first` y `count`, reutilizando `SqlServerCompiler`, `fetch_one` y `fetch_all` sin mover ejecución ni generación SQL fuera de sus crates.
 - La crate pública `mssql-orm` ya cuenta con una prueba de integración real en `crates/mssql-orm/tests/stage5_public_crud.rs` que valida `insert`, `find`, `query`, `update` y `delete` contra SQL Server.
 - Esa prueba crea y limpia `dbo.mssql_orm_public_crud` dentro de la base activa del connection string y usa `MSSQL_ORM_TEST_CONNECTION_STRING` con skip limpio cuando no existe configuración.
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
@@ -114,6 +114,6 @@ Continuar la Etapa 6 con la siguiente subtarea detallada: exponer métodos fluen
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 6: Exponer métodos fluentes en DbSetQuery para filter y order_by`.
-2. Continuar con `limit`/`take` y paginación pública, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
+1. Implementar `Etapa 6: Exponer limit y take en DbSetQuery`.
+2. Continuar con paginación pública y composición lógica, reutilizando `DbSetQuery<T>` y el AST de `mssql-orm-query` como base.
 3. Mantener estables los contratos actuales de CRUD y del ejemplo `basic-crud` mientras entra la API fluida de consulta.
