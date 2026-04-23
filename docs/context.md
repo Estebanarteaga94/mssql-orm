@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. El siguiente foco natural es iniciar la Etapa 13 de migraciones avanzadas sin adelantar features de Etapa 14.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya fue descompuesta en subtareas verificables y el siguiente foco natural es arrancar por índices compuestos, sin adelantar features de Etapa 14.
 
 ## Dirección Arquitectónica Vigente
 
@@ -209,7 +209,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Iniciar `Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes`.
-2. Descomponer esa etapa en subtareas verificables si el backlog actual resulta demasiado amplio para una sola sesión.
+1. Implementar `Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server`.
+2. Después avanzar con `computed columns`, foreign keys avanzadas y scripts idempotentes antes de tocar renombres explícitos.
 3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: descomposición de la Etapa 13 de migraciones avanzadas
+
+- Se revisó nuevamente el backlog operativo en `docs/tasks.md` y se confirmó que la tarea amplia `Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes` era demasiado grande para una sola sesión sin mezclar varias capas del sistema de migraciones.
+- Se reemplazó esa tarea amplia por subtareas verificables y ordenadas: descomposición operativa, índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes y renombres explícitos.
+- El orden elegido prioriza cambios con menor ambigüedad primero y deja renombres al final, porque sin metadata explícita de rename el diff puede degradar fácilmente a `drop + add`, con mayor riesgo sobre el esquema.
+- No se modificó código del workspace en esta sesión; el alcance fue exclusivamente de backlog y trazabilidad para preparar la entrada a la Etapa 13.
+
+### Resultado
+
+- La Etapa 13 quedó preparada para ejecución incremental, con subtareas suficientemente pequeñas como para implementarse con validación clara y menor riesgo arquitectónico.
+
+### Validación
+
+- No aplicó validación con `cargo`: en esta sesión solo se actualizó backlog y documentación operativa; no hubo cambios de código.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- La principal sensibilidad sigue siendo el diseño de renombres: debe resolverse con metadata/señal explícita y no con inferencia riesgosa desde el diff.
+
+### Próximo paso recomendado
+
+- Tomar `Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server` como primera subtarea de implementación.
+
 ### Sesión: cierre de cobertura y límites del change tracking experimental
 
 - Se volvió a tomar como fuente de verdad el plan maestro real en `docs/plan_orm_sqlserver_tiberius_code_first.md`, acotando la sesión a cerrar la última subtarea de Etapa 12 sin adelantar trabajo de Etapa 13.

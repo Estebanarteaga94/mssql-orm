@@ -1,7 +1,12 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 13: Soportar migraciones avanzadas: renombres, computed columns, FKs completas, índices compuestos y scripts idempotentes
+- [ ] Operativo: Descomponer la Etapa 13 de migraciones avanzadas en subtareas verificables y ordenadas
+- [ ] Etapa 13: Soportar índices compuestos en snapshots, diff y DDL SQL Server
+- [ ] Etapa 13: Soportar `computed columns` en snapshots, diff y DDL SQL Server
+- [ ] Etapa 13: Completar foreign keys avanzadas en snapshots, diff y DDL SQL Server
+- [ ] Etapa 13: Generar scripts de migración idempotentes para SQL Server
+- [ ] Etapa 13: Soportar renombres explícitos de tablas y columnas sin degradar a `drop + add`
 - [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
