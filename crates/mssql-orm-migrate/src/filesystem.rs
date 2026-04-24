@@ -92,6 +92,21 @@ pub fn list_migrations(root: &Path) -> Result<Vec<MigrationEntry>, OrmError> {
     Ok(entries)
 }
 
+pub fn latest_migration(root: &Path) -> Result<Option<MigrationEntry>, OrmError> {
+    Ok(list_migrations(root)?.into_iter().last())
+}
+
+pub fn read_latest_model_snapshot(
+    root: &Path,
+) -> Result<Option<(MigrationEntry, ModelSnapshot)>, OrmError> {
+    let Some(migration) = latest_migration(root)? else {
+        return Ok(None);
+    };
+
+    let snapshot = read_model_snapshot(&migration.snapshot_path)?;
+    Ok(Some((migration, snapshot)))
+}
+
 pub fn build_database_update_script(
     root: &Path,
     history_table_sql: &str,
@@ -219,8 +234,8 @@ fn split_sql_statements(sql: &str) -> Vec<String> {
 mod tests {
     use super::{
         build_database_update_script, create_migration_scaffold,
-        create_migration_scaffold_with_snapshot, list_migrations, read_model_snapshot,
-        write_model_snapshot,
+        create_migration_scaffold_with_snapshot, latest_migration, list_migrations,
+        read_latest_model_snapshot, read_model_snapshot, write_model_snapshot,
     };
     use crate::{ModelSnapshot, SchemaSnapshot};
     use std::fs;
@@ -290,6 +305,46 @@ mod tests {
         assert_eq!(migrations.len(), 2);
         assert_eq!(migrations[0].id, "100_create_customers");
         assert_eq!(migrations[1].id, "200_create_orders");
+    }
+
+    #[test]
+    fn returns_latest_migration_in_lexical_order() {
+        let root = temp_project_root();
+        let migrations_dir = root.join("migrations");
+        fs::create_dir_all(migrations_dir.join("100_create_customers")).unwrap();
+        fs::create_dir_all(migrations_dir.join("200_create_orders")).unwrap();
+
+        let latest = latest_migration(&root).unwrap().unwrap();
+
+        assert_eq!(latest.id, "200_create_orders");
+    }
+
+    #[test]
+    fn reads_latest_model_snapshot_from_last_local_migration() {
+        let root = temp_project_root();
+        let older_dir = root.join("migrations/100_create_customers");
+        let newer_dir = root.join("migrations/200_create_orders");
+        fs::create_dir_all(&older_dir).unwrap();
+        fs::create_dir_all(&newer_dir).unwrap();
+        fs::write(older_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(older_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            older_dir.join("model_snapshot.json"),
+            "{\n  \"schemas\": []\n}\n",
+        )
+        .unwrap();
+        fs::write(newer_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(newer_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            newer_dir.join("model_snapshot.json"),
+            "{\n  \"schemas\": [\n    {\n      \"name\": \"sales\",\n      \"tables\": []\n    }\n  ]\n}\n",
+        )
+        .unwrap();
+
+        let (migration, snapshot) = read_latest_model_snapshot(&root).unwrap().unwrap();
+
+        assert_eq!(migration.id, "200_create_orders");
+        assert!(snapshot.schema("sales").is_some());
     }
 
     #[test]

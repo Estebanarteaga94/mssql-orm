@@ -2,6 +2,33 @@
 
 ## 2026-04-24
 
+### Sesión: cargar snapshot previo local en `migration add`
+
+- Se ejecutó la subtarea `Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo`.
+- `mssql-orm-migrate` ahora expone `latest_migration(...)` y `read_latest_model_snapshot(...)` para localizar la última migración local y cargar su `model_snapshot.json`.
+- `mssql-orm-cli migration add` ahora usa esos helpers cuando ya dispone de un snapshot actual real, ya sea por `--model-snapshot` o por `--snapshot-bin`.
+- La salida de `migration add` ahora deja trazado el par base del próximo paso de diff: `Previous snapshot: ...` y `Current snapshot: ...`.
+- Se añadieron pruebas unitarias en `mssql-orm-migrate` para orden léxico de la última migración y lectura del snapshot previo, y una prueba nueva en la CLI para verificar que `migration add` carga el snapshot de la última migración local.
+
+### Resultado
+
+- La CLI ya no solo sabe producir el snapshot actual desde el consumidor: también sabe recuperar el snapshot previo local que servirá como lado izquierdo del próximo diff.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test -p mssql-orm-cli`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión no integró todavía `diff_schema_and_table_operations`, `diff_column_operations` ni `diff_relational_operations` dentro de `migration add`; ese ensamblaje queda como siguiente subtarea separada.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Integrar el pipeline completo snapshot -> diff -> MigrationOperation -> DDL SQL Server dentro de migration add`.
+
 ### Sesión: exportación de snapshot desde `MigrationModelSource` vía binario consumidor
 
 - Se ejecutó la subtarea `Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde mssql-orm-cli para generar el ModelSnapshot actual directamente desde MigrationModelSource`.

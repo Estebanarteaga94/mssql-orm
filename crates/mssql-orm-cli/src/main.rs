@@ -1,6 +1,7 @@
 use mssql_orm_migrate::{
     ModelSnapshot, build_database_update_script, create_migration_scaffold,
-    create_migration_scaffold_with_snapshot, list_migrations, read_model_snapshot,
+    create_migration_scaffold_with_snapshot, list_migrations, read_latest_model_snapshot,
+    read_model_snapshot,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 use std::env;
@@ -20,17 +21,46 @@ fn main() {
 fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
     match parse_command(&args)? {
         CliCommand::MigrationAdd { name, options } => {
-            let scaffold = match load_current_model_snapshot(root, &options)? {
-                Some(snapshot) => create_migration_scaffold_with_snapshot(root, &name, &snapshot),
+            let current_snapshot = load_current_model_snapshot(root, &options)?;
+            let previous_snapshot = match current_snapshot {
+                Some(_) => load_previous_model_snapshot(root)?,
+                None => None,
+            };
+            let scaffold = match current_snapshot.as_ref() {
+                Some(snapshot) => create_migration_scaffold_with_snapshot(root, &name, snapshot),
                 None => create_migration_scaffold(root, &name),
             }
             .map_err(|error| error.to_string())?;
 
-            Ok(format!(
+            let mut output = format!(
                 "Created migration {}\nPath: {}",
                 scaffold.id,
                 scaffold.directory.display()
-            ))
+            );
+
+            if let Some((migration, previous_snapshot)) = previous_snapshot {
+                output.push_str(&format!(
+                    "\nPrevious snapshot: {} (schemas: {})",
+                    migration.id,
+                    previous_snapshot.schemas.len()
+                ));
+            } else if current_snapshot.is_some() {
+                output.push_str("\nPrevious snapshot: none");
+            }
+
+            if let Some(current_snapshot) = current_snapshot {
+                output.push_str(&format!(
+                    "\nCurrent snapshot: schemas={} tables={}",
+                    current_snapshot.schemas.len(),
+                    current_snapshot
+                        .schemas
+                        .iter()
+                        .map(|schema| schema.tables.len())
+                        .sum::<usize>()
+                ));
+            }
+
+            Ok(output)
         }
         CliCommand::MigrationList => {
             let migrations = list_migrations(root).map_err(|error| error.to_string())?;
@@ -87,6 +117,13 @@ fn load_current_model_snapshot(
     }
 
     Ok(None)
+}
+
+fn load_previous_model_snapshot(
+    root: &Path,
+) -> Result<Option<(mssql_orm_migrate::MigrationEntry, ModelSnapshot)>, String> {
+    read_latest_model_snapshot(root)
+        .map_err(|error| format!("failed to load previous model snapshot: {error}"))
 }
 
 fn run_snapshot_exporter(
@@ -344,6 +381,9 @@ mod tests {
         )
         .unwrap();
 
+        assert!(output.contains("Previous snapshot: none"));
+        assert!(output.contains("Current snapshot: schemas=1 tables=0"));
+
         let migration_path = output
             .lines()
             .find_map(|line| line.strip_prefix("Path: "))
@@ -398,6 +438,8 @@ mod tests {
         );
 
         let output = output.unwrap();
+        assert!(output.contains("Previous snapshot: none"));
+        assert!(output.contains("Current snapshot: schemas=1 tables=1"));
         let migration_path = output
             .lines()
             .find_map(|line| line.strip_prefix("Path: "))
@@ -413,6 +455,43 @@ mod tests {
                 .table("customers")
                 .is_some()
         );
+    }
+
+    #[test]
+    fn run_migration_add_loads_previous_snapshot_from_latest_local_migration() {
+        let root = temp_project_root();
+        let previous_dir = root.join("migrations/100_create_customers");
+        let current_snapshot_path = root.join("current_model_snapshot.json");
+
+        fs::create_dir_all(&previous_dir).unwrap();
+        fs::write(previous_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(previous_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            previous_dir.join("model_snapshot.json"),
+            "{\n  \"schemas\": [\n    {\n      \"name\": \"dbo\",\n      \"tables\": []\n    }\n  ]\n}\n",
+        )
+        .unwrap();
+        fs::write(
+            &current_snapshot_path,
+            "{\n  \"schemas\": [\n    {\n      \"name\": \"sales\",\n      \"tables\": []\n    }\n  ]\n}\n",
+        )
+        .unwrap();
+
+        let output = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "CreateOrders".to_string(),
+                "--model-snapshot".to_string(),
+                "current_model_snapshot.json".to_string(),
+            ],
+            &root,
+        )
+        .unwrap();
+
+        assert!(output.contains("Previous snapshot: 100_create_customers (schemas: 1)"));
+        assert!(output.contains("Current snapshot: schemas=1 tables=0"));
     }
 
     #[test]

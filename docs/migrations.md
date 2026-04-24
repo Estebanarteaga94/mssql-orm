@@ -95,6 +95,7 @@ Detalles operativos relevantes:
 - con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
 - con `--snapshot-bin`, la CLI ejecuta `cargo run --bin <bin>` sobre el manifest indicado, captura `stdout` y valida que sea un `ModelSnapshot` JSON valido
 - el exportador del consumidor sigue siendo explicito: la CLI no resuelve sola el nombre del `DbContext`, sino que delega esa seleccion al binario que uses para exportar el snapshot
+- cuando existe una migracion local previa y `migration add` recibe un snapshot actual real, la CLI carga el `model_snapshot.json` de la ultima migracion y reporta ambos lados (`Previous snapshot` y `Current snapshot`) como base del siguiente paso de diff
 
 ## 3. Como nombrar bien una migracion
 
