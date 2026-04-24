@@ -1,6 +1,7 @@
 use mssql_orm_migrate::{
-    ModelSnapshot, build_database_update_script, create_migration_scaffold,
-    create_migration_scaffold_with_snapshot, list_migrations, read_latest_model_snapshot,
+    MigrationOperation, ModelSnapshot, build_database_update_script, create_migration_scaffold,
+    create_migration_scaffold_with_snapshot, diff_column_operations, diff_relational_operations,
+    diff_schema_and_table_operations, list_migrations, read_latest_model_snapshot,
     read_model_snapshot,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
@@ -26,6 +27,11 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                 Some(_) => load_previous_model_snapshot(root)?,
                 None => None,
             };
+            let migration_plan = build_migration_plan(
+                previous_snapshot.as_ref().map(|(_, snapshot)| snapshot),
+                current_snapshot.as_ref(),
+            )
+            .map_err(|error| format!("failed to build migration plan: {error}"))?;
             let scaffold = match current_snapshot.as_ref() {
                 Some(snapshot) => create_migration_scaffold_with_snapshot(root, &name, snapshot),
                 None => create_migration_scaffold(root, &name),
@@ -57,6 +63,14 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                         .iter()
                         .map(|schema| schema.tables.len())
                         .sum::<usize>()
+                ));
+            }
+
+            if let Some(plan) = migration_plan {
+                output.push_str(&format!("\nPlanned operations: {}", plan.operations.len()));
+                output.push_str(&format!(
+                    "\nCompiled SQL statements: {}",
+                    plan.sql_statements.len()
                 ));
             }
 
@@ -124,6 +138,34 @@ fn load_previous_model_snapshot(
 ) -> Result<Option<(mssql_orm_migrate::MigrationEntry, ModelSnapshot)>, String> {
     read_latest_model_snapshot(root)
         .map_err(|error| format!("failed to load previous model snapshot: {error}"))
+}
+
+fn build_migration_plan(
+    previous: Option<&ModelSnapshot>,
+    current: Option<&ModelSnapshot>,
+) -> Result<Option<MigrationPlan>, String> {
+    let Some(current) = current else {
+        return Ok(None);
+    };
+
+    let previous = previous.cloned().unwrap_or_default();
+    let mut operations = diff_schema_and_table_operations(&previous, current);
+    operations.extend(diff_column_operations(&previous, current));
+    operations.extend(diff_relational_operations(&previous, current));
+
+    let sql_statements = SqlServerCompiler::compile_migration_operations(&operations)
+        .map_err(|error| error.to_string())?;
+
+    Ok(Some(MigrationPlan {
+        operations,
+        sql_statements,
+    }))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MigrationPlan {
+    operations: Vec<MigrationOperation>,
+    sql_statements: Vec<String>,
 }
 
 fn run_snapshot_exporter(
@@ -248,8 +290,8 @@ fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, S
 
 #[cfg(test)]
 mod tests {
-    use super::{CliCommand, MigrationAddOptions, parse_command, run};
-    use mssql_orm_migrate::read_model_snapshot;
+    use super::{CliCommand, MigrationAddOptions, build_migration_plan, parse_command, run};
+    use mssql_orm_migrate::{ModelSnapshot, read_model_snapshot};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -383,6 +425,8 @@ mod tests {
 
         assert!(output.contains("Previous snapshot: none"));
         assert!(output.contains("Current snapshot: schemas=1 tables=0"));
+        assert!(output.contains("Planned operations: 1"));
+        assert!(output.contains("Compiled SQL statements: 1"));
 
         let migration_path = output
             .lines()
@@ -440,6 +484,8 @@ mod tests {
         let output = output.unwrap();
         assert!(output.contains("Previous snapshot: none"));
         assert!(output.contains("Current snapshot: schemas=1 tables=1"));
+        assert!(output.contains("Planned operations: 2"));
+        assert!(output.contains("Compiled SQL statements: 2"));
         let migration_path = output
             .lines()
             .find_map(|line| line.strip_prefix("Path: "))
@@ -492,6 +538,27 @@ mod tests {
 
         assert!(output.contains("Previous snapshot: 100_create_customers (schemas: 1)"));
         assert!(output.contains("Current snapshot: schemas=1 tables=0"));
+        assert!(output.contains("Planned operations: 2"));
+        assert!(output.contains("Compiled SQL statements: 2"));
+    }
+
+    #[test]
+    fn build_migration_plan_returns_none_without_current_snapshot() {
+        assert_eq!(build_migration_plan(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn build_migration_plan_compiles_schema_and_table_operations() {
+        let current = ModelSnapshot::from_json(
+            "{\n  \"schemas\": [\n    {\n      \"name\": \"sales\",\n      \"tables\": [\n        {\n          \"name\": \"customers\",\n          \"renamed_from\": null,\n          \"columns\": [\n            {\n              \"name\": \"id\",\n              \"renamed_from\": null,\n              \"sql_type\": \"bigint\",\n              \"nullable\": false,\n              \"primary_key\": true,\n              \"identity\": null,\n              \"default_sql\": null,\n              \"computed_sql\": null,\n              \"rowversion\": false,\n              \"insertable\": true,\n              \"updatable\": true,\n              \"max_length\": null,\n              \"precision\": null,\n              \"scale\": null\n            }\n          ],\n          \"primary_key_name\": null,\n          \"primary_key_columns\": [\"id\"],\n          \"indexes\": [],\n          \"foreign_keys\": []\n        }\n      ]\n    }\n  ]\n}\n",
+        )
+        .unwrap();
+
+        let plan = build_migration_plan(None, Some(&current)).unwrap().unwrap();
+
+        assert_eq!(plan.operations.len(), 2);
+        assert!(plan.sql_statements[0].contains("CREATE SCHEMA"));
+        assert!(plan.sql_statements[1].contains("CREATE TABLE"));
     }
 
     #[test]

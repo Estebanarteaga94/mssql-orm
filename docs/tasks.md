@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7+: Integrar el pipeline completo `snapshot -> diff -> MigrationOperation -> DDL SQL Server` dentro de `migration add`
 - [ ] Etapa 7+: Generar `up.sql` automáticamente desde operaciones compiladas y versionar `model_snapshot.json` con el estado actual del modelo
 - [ ] Etapa 7+: Detectar cambios destructivos en `migration add` y bloquear por defecto salvo confirmación/flag explícita alineada con el plan
 - [ ] Etapa 7+: Generar artefacto editable de migración real (manteniendo `up.sql`, `down.sql` y snapshot; decidir si `migration.rs` entra en alcance MVP o queda diferido con límite explícito)
@@ -16,6 +15,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 7+: Integrar el pipeline completo `snapshot -> diff -> MigrationOperation -> DDL SQL Server` dentro de `migration add`
 - [x] Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo
 - [x] Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde `mssql-orm-cli` para generar el `ModelSnapshot` actual directamente desde `MigrationModelSource`
 - [x] Etapa 7+: Permitir que `migration add` consuma un `ModelSnapshot` actual explícito con `--model-snapshot <Path>` y lo versione en `model_snapshot.json`

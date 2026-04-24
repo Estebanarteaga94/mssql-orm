@@ -2,6 +2,33 @@
 
 ## 2026-04-24
 
+### Sesión: integrar diff y compilación SQL en `migration add`
+
+- Se ejecutó la subtarea `Etapa 7+: Integrar el pipeline completo snapshot -> diff -> MigrationOperation -> DDL SQL Server dentro de migration add`.
+- `mssql-orm-cli` ahora construye un `MigrationPlan` interno cuando dispone de snapshot actual.
+- Ese plan encadena `diff_schema_and_table_operations(...)`, `diff_column_operations(...)`, `diff_relational_operations(...)` y `SqlServerCompiler::compile_migration_operations(...)`.
+- `migration add` sigue scaffoldando la migración, pero ahora además reporta `Planned operations` y `Compiled SQL statements` como salida observable del pipeline completo.
+- Se añadieron pruebas nuevas en la CLI para el helper `build_migration_plan(...)` y para fijar los conteos del plan en flujos con snapshot actual, snapshot previo local y exportador desde binario consumidor.
+
+### Resultado
+
+- La CLI ya tiene enlazadas todas las piezas estructurales del pipeline de migraciones automáticas hasta el SQL compilado.
+- El siguiente paso ya no es de integración de crates sino de materialización: escribir ese SQL en `up.sql`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-cli`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión no escribió todavía el SQL compilado en `up.sql`; eso queda como la siguiente subtarea explícita del backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Generar up.sql automáticamente desde operaciones compiladas y versionar model_snapshot.json con el estado actual del modelo`.
+
 ### Sesión: cargar snapshot previo local en `migration add`
 
 - Se ejecutó la subtarea `Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo`.
