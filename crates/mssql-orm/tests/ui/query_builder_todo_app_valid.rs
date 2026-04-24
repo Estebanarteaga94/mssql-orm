@@ -60,7 +60,9 @@ impl FromRow for TodoItem {
         Ok(Self {
             id: row.get_required_typed::<i64>("id")?,
             list_id: row.get_required_typed::<i64>("list_id")?,
-            completed_by_user_id: row.try_get_typed::<i64>("completed_by_user_id")?,
+            completed_by_user_id: row
+                .try_get_typed::<Option<i64>>("completed_by_user_id")?
+                .flatten(),
             title: row.get_required_typed::<String>("title")?,
             position: row.get_required_typed::<i32>("position")?,
             is_completed: row.get_required_typed::<bool>("is_completed")?,

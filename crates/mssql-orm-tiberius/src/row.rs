@@ -55,6 +55,7 @@ fn read_sql_value(row: &Row, index: usize, column_type: ColumnType) -> Result<Sq
         ColumnType::Int2 => read_typed(row, index, |value: i16| SqlValue::I32(i32::from(value))),
         ColumnType::Int4 => read_typed(row, index, |value: i32| SqlValue::I32(value)),
         ColumnType::Int8 => read_typed(row, index, |value: i64| SqlValue::I64(value)),
+        ColumnType::Intn => read_intn(row, index),
         ColumnType::Float4 => read_typed(row, index, |value: f32| SqlValue::F64(f64::from(value))),
         ColumnType::Float8 | ColumnType::Floatn => {
             read_typed(row, index, |value: f64| SqlValue::F64(value))
@@ -80,7 +81,6 @@ fn read_sql_value(row: &Row, index: usize, column_type: ColumnType) -> Result<Sq
         ColumnType::Null
         | ColumnType::Money
         | ColumnType::Money4
-        | ColumnType::Intn
         | ColumnType::Timen
         | ColumnType::DatetimeOffsetn
         | ColumnType::Xml
@@ -102,7 +102,6 @@ fn unsupported_column_type_error(column_type: ColumnType) -> Option<OrmError> {
     match column_type {
         ColumnType::Money
         | ColumnType::Money4
-        | ColumnType::Intn
         | ColumnType::Timen
         | ColumnType::DatetimeOffsetn
         | ColumnType::Xml
@@ -149,6 +148,38 @@ fn read_bytes(row: &Row, index: usize) -> Result<SqlValue, OrmError> {
         .unwrap_or(SqlValue::Null))
 }
 
+fn read_intn(row: &Row, index: usize) -> Result<SqlValue, OrmError> {
+    if let Some(value) = row
+        .try_get::<i64, _>(index)
+        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ReadRowValue))?
+    {
+        return Ok(SqlValue::I64(value));
+    }
+
+    if let Some(value) = row
+        .try_get::<i32, _>(index)
+        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ReadRowValue))?
+    {
+        return Ok(SqlValue::I32(value));
+    }
+
+    if let Some(value) = row
+        .try_get::<i16, _>(index)
+        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ReadRowValue))?
+    {
+        return Ok(SqlValue::I32(i32::from(value)));
+    }
+
+    if let Some(value) = row
+        .try_get::<u8, _>(index)
+        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ReadRowValue))?
+    {
+        return Ok(SqlValue::I32(i32::from(value)));
+    }
+
+    Ok(SqlValue::Null)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{static_sql_value, unsupported_column_type_error};
@@ -160,7 +191,6 @@ mod tests {
         for column_type in [
             ColumnType::Money,
             ColumnType::Money4,
-            ColumnType::Intn,
             ColumnType::Timen,
             ColumnType::DatetimeOffsetn,
             ColumnType::Xml,

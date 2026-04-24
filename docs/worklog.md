@@ -2,6 +2,42 @@
 
 ## 2026-04-23
 
+### Sesión: validación real de `todo_app` contra SQL Server
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Validar el ejemplo web async todo_app contra SQL Server real con smoke test/documentación operativa reproducible`.
+- Se añadió `examples/todo-app/scripts/smoke_setup.sql` como fixture reproducible para `tempdb`, creando `todo.users`, `todo.todo_lists` y `todo.todo_items` con datos mínimos para el smoke del ejemplo.
+- Ese fixture deja documentado un matiz operativo de SQL Server: la combinación `users -> todo_lists ON DELETE CASCADE`, `todo_lists -> todo_items ON DELETE CASCADE` y `todo_items.completed_by_user_id -> users ON DELETE SET NULL` cae en `multiple cascade paths`, así que el script de smoke usa `NO ACTION` para esa FK porque la validación aquí es de lectura y no de borrado.
+- La validación real se ejecutó con `sqlcmd` sobre SQL Server local (`localhost`, `tempdb`, login `SA`) y luego con el binario del ejemplo usando `DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;'`.
+- El smoke HTTP verificó con `curl` las rutas reales del ejemplo:
+  `GET /health`,
+  `GET /todo-lists/10`,
+  `GET /users/7/todo-lists?page=1&page_size=20`,
+  `GET /todo-lists/10/items/preview?limit=2`,
+  `GET /todo-lists/10/open-items/count`.
+- Durante la validación apareció un fallo real del ejemplo, no de la documentación: `TodoItem::from_row` estaba leyendo columnas nullable con `try_get_typed::<i64>` y `try_get_typed::<String>`, lo que fallaba contra filas con `NULL`. Se corrigió en `examples/todo-app/src/domain.rs` usando `try_get_typed::<Option<_>>()?.flatten()`, y se sincronizó el fixture público de compile-time en `crates/mssql-orm/tests/ui/query_builder_todo_app_valid.rs`.
+- Además se dejó una prueba ignorada pero ejecutable del propio ejemplo (`smoke_preview_query_runs_against_sql_server_fixture`) que usa `DATABASE_URL`, `connect_pool(...)` y `open_items_preview_query(...)` para repetir el smoke de lectura sin pasar por HTTP.
+- En paralelo quedó incorporado en `crates/mssql-orm-tiberius/src/row.rs` el soporte de `ColumnType::Intn`, ampliando la lectura real del adaptador Tiberius para enteros SQL Server de anchura variable.
+
+### Resultado
+
+- La Etapa 14 quedó cerrada end-to-end: `todo_app` ya no solo compila y se prueba en local, sino que además quedó validado contra SQL Server real con fixture reproducible, smoke HTTP observable y prueba ignorada reutilizable desde el propio ejemplo.
+
+### Validación
+
+- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql`
+- `DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- Smoke HTTP manual con `cargo run --manifest-path examples/todo-app/Cargo.toml` y `curl` sobre `/health`, `/todo-lists/10`, `/users/7/todo-lists?page=1&page_size=20`, `/todo-lists/10/items/preview?limit=2` y `/todo-lists/10/open-items/count`
+
+### Bloqueos
+
+- No quedaron bloqueos funcionales abiertos.
+- La fixture de smoke no replica exactamente el `ON DELETE SET NULL` del dominio porque SQL Server rechaza esa combinación concreta de cascadas en un esquema tan compacto; esa diferencia quedó documentada de forma explícita y acotada al fixture operativo.
+
+### Próximo paso recomendado
+
+- Empezar `Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog`.
+
 ### Sesión: wiring con `MssqlPool` en el ejemplo `todo_app`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Integrar MssqlPool y DbContext::from_pool(...) en el ejemplo web async todo_app con coverage feature-gated del wiring del consumidor`.

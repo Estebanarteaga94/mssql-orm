@@ -658,4 +658,25 @@ mod tests {
         let _state_from_pool = super::state_from_pool;
         let _connect_pool = super::connect_pool;
     }
+
+    #[cfg(feature = "pool-bb8")]
+    #[tokio::test]
+    #[ignore = "requires a live SQL Server fixture configured through DATABASE_URL"]
+    async fn smoke_preview_query_runs_against_sql_server_fixture() {
+        let settings = TodoAppSettings::from_env().expect("DATABASE_URL for smoke test");
+        let pool = super::connect_pool(&settings)
+            .await
+            .expect("connect smoke test pool");
+        let db = crate::TodoAppDbContext::from_pool(pool);
+        let items = crate::open_items_preview_query(&db, 10, 2)
+            .all()
+            .await
+            .expect("load preview items from SQL Server");
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(
+            items.iter().map(|item| item.title.as_str()).collect::<Vec<_>>(),
+            vec!["Ship release", "Review PR"]
+        );
+    }
 }
