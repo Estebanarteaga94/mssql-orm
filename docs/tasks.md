@@ -1,7 +1,11 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real
+- [ ] Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real
+- [ ] Etapa 14: Implementar endpoint mínimo de health check sobre framework web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
+- [ ] Etapa 14: Integrar listado/inserción mínima usando `DbSet` en el ejemplo web async y cubrir la lógica HTTP con pruebas unitarias o de servicio local
+- [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async con coverage feature-gated del wiring del consumidor
+- [ ] Etapa 14: Validar el ejemplo web async contra SQL Server real con smoke test/documentación operativa reproducible
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso

@@ -2,6 +2,31 @@
 
 ## 2026-04-23
 
+### Sesión: revertir ejemplo web async monolítico y descomponerlo
+
+- A petición explícita del usuario se revirtió la última tarea `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`, porque el resultado no dejó el nivel de granularidad ni de testeo deseado.
+- La reversión se hizo con `git revert 379b5e7` para preservar trazabilidad y evitar reescritura destructiva del historial; el repositorio volvió así al estado funcional posterior a `ca8c94f`.
+- Tras el revert, `docs/tasks.md` dejó de tratar el ejemplo web async como una sola pieza monolítica y ahora lo divide en cinco subtareas verificables: shape/configuración, endpoint de health check, endpoints CRUD mínimos, wiring con pool y validación real contra SQL Server.
+- La descomposición nueva prioriza cobertura incremental: primero pruebas unitarias puras, luego pruebas de handlers/servicio local, después wiring feature-gated y por último validación real contra SQL Server.
+
+### Resultado
+
+- El ejemplo web async fue retirado del árbol y la línea de trabajo quedó reabierta como backlog granular y más testeable, lista para retomarse por entregables pequeños.
+
+### Validación
+
+- `git revert 379b5e7`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos durante la reversión.
+- La integración web async sigue pendiente; lo que cambió es su estrategia de ejecución, ahora orientada a subtareas pequeñas con más cobertura.
+
+### Próximo paso recomendado
+
+- Ejecutar la primera subtarea nueva: `Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real`.
+
 ### Sesión: wiring público de `DbContext` sobre pool
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Exponer wiring público DbContext desde pool sin romper connect, from_connection ni SharedConnection`.

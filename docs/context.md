@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya tiene backlog descompuesto, contrato explícito de configuración operativa, soporte real de timeouts e instrumentación base con `tracing`; el siguiente foco natural pasa a reutilizar esa base para slow query logs y luego health checks, retries y pooling.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool), pero el ejemplo web async quedó reabierto y descompuesto en subtareas más pequeñas para priorizar mayor cobertura antes de volver a introducir un ejemplo completo.
 
 ## Dirección Arquitectónica Vigente
 
@@ -205,6 +205,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El pooling ya existe detrás del feature `pool-bb8` mediante `MssqlPool::builder()` y `MssqlPool::acquire() -> MssqlPooledConnection<'_>`; ahora ese ownership también puede encapsularse en `SharedConnection` para alimentar `DbContext`, pero la adquisición explícita desde `MssqlPool` sigue disponible para consumidores que no quieran pasar por la crate pública.
 - `SharedConnection` ya no es un alias a `Arc<Mutex<MssqlConnection>>`; ahora es un wrapper público que puede representar conexión directa o pool, conservando el nombre/rol existente y permitiendo que `DbContext::from_shared_connection(...)` siga siendo el punto de entrada común para ambos casos.
 - `#[derive(DbContext)]` ya expone `from_pool(pool)` bajo `pool-bb8`, mientras mantiene `from_connection(...)` y `connect*` para la ruta directa; la diferencia de ownership queda encapsulada en `SharedConnection`.
+- La futura integración web async conviene construirla en varias subtareas testeables; el intento monolítico previo se revirtió para evitar dejar un ejemplo grande con cobertura insuficiente.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -242,6 +243,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`.
-2. Después preparar la release con documentación pública, quickstart, ejemplos completos y changelog.
+1. Ejecutar `Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real`.
+2. Después avanzar en endpoint de health check, endpoints CRUD mínimos, wiring con pool y validación real contra SQL Server como subtareas separadas.
+3. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
