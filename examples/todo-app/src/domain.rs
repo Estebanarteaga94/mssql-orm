@@ -84,52 +84,6 @@ pub struct TodoItem {
     pub version: Vec<u8>,
 }
 
-impl FromRow for User {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            email: row.get_required_typed::<String>("email")?,
-            display_name: row.get_required_typed::<String>("display_name")?,
-            created_at: row.get_required_typed::<String>("created_at")?,
-            version: row.get_required_typed::<Vec<u8>>("version")?,
-        })
-    }
-}
-
-impl FromRow for TodoList {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            owner_user_id: row.get_required_typed::<i64>("owner_user_id")?,
-            title: row.get_required_typed::<String>("title")?,
-            is_archived: row.get_required_typed::<bool>("is_archived")?,
-            created_at: row.get_required_typed::<String>("created_at")?,
-            version: row.get_required_typed::<Vec<u8>>("version")?,
-        })
-    }
-}
-
-impl FromRow for TodoItem {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            list_id: row.get_required_typed::<i64>("list_id")?,
-            created_by_user_id: row.get_required_typed::<i64>("created_by_user_id")?,
-            completed_by_user_id: row
-                .try_get_typed::<Option<i64>>("completed_by_user_id")?
-                .flatten(),
-            title: row.get_required_typed::<String>("title")?,
-            position: row.get_required_typed::<i32>("position")?,
-            is_completed: row.get_required_typed::<bool>("is_completed")?,
-            completed_at: row
-                .try_get_typed::<Option<String>>("completed_at")?
-                .flatten(),
-            created_at: row.get_required_typed::<String>("created_at")?,
-            version: row.get_required_typed::<Vec<u8>>("version")?,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{TodoItem, TodoList, User};

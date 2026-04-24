@@ -19,16 +19,6 @@ struct PublicCrudUser {
     active: bool,
 }
 
-impl FromRow for PublicCrudUser {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-            active: row.get_required_typed::<bool>("active")?,
-        })
-    }
-}
-
 #[derive(Insertable, Debug, Clone)]
 #[orm(entity = PublicCrudUser)]
 struct NewPublicCrudUser {
@@ -58,16 +48,6 @@ struct VersionedPublicCrudUser {
     name: String,
     #[orm(rowversion)]
     version: Vec<u8>,
-}
-
-impl FromRow for VersionedPublicCrudUser {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-            version: row.get_required_typed::<Vec<u8>>("version")?,
-        })
-    }
 }
 
 #[derive(Insertable, Debug, Clone)]

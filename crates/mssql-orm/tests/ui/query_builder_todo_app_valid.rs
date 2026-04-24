@@ -11,15 +11,6 @@ struct User {
     email: String,
 }
 
-impl FromRow for User {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            email: row.get_required_typed::<String>("email")?,
-        })
-    }
-}
-
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "todo_lists", schema = "todo")]
 struct TodoList {
@@ -29,17 +20,6 @@ struct TodoList {
     owner_user_id: i64,
     title: String,
     is_archived: bool,
-}
-
-impl FromRow for TodoList {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            owner_user_id: row.get_required_typed::<i64>("owner_user_id")?,
-            title: row.get_required_typed::<String>("title")?,
-            is_archived: row.get_required_typed::<bool>("is_archived")?,
-        })
-    }
 }
 
 #[derive(Entity, Debug, Clone)]
@@ -53,21 +33,6 @@ struct TodoItem {
     title: String,
     position: i32,
     is_completed: bool,
-}
-
-impl FromRow for TodoItem {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            list_id: row.get_required_typed::<i64>("list_id")?,
-            completed_by_user_id: row
-                .try_get_typed::<Option<i64>>("completed_by_user_id")?
-                .flatten(),
-            title: row.get_required_typed::<String>("title")?,
-            position: row.get_required_typed::<i32>("position")?,
-            is_completed: row.get_required_typed::<bool>("is_completed")?,
-        })
-    }
 }
 
 #[derive(DbContext, Debug, Clone)]

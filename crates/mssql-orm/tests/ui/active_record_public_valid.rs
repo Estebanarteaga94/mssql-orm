@@ -11,15 +11,6 @@ struct User {
     email: String,
 }
 
-impl FromRow for User {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            email: row.get_required_typed::<String>("email")?,
-        })
-    }
-}
-
 #[derive(DbContext, Debug, Clone)]
 struct AppDbContext {
     pub users: DbSet<User>,

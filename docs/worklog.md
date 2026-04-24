@@ -2,6 +2,60 @@
 
 ## 2026-04-23
 
+### Sesión: re-alinear `FromRow` con el plan maestro
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la tarea operativa pendiente: `Re-alinear el row mapping con el plan maestro generando FromRow automático desde derive y retirando boilerplate manual de ejemplos/tests`.
+- `crates/mssql-orm-macros/src/lib.rs` ahora hace que `#[derive(Entity)]` emita también `impl ::mssql_orm::core::FromRow`, reutilizando `get_required_typed::<T>()` para campos no opcionales y `try_get_typed::<Option<T>>()?.flatten()` para campos `Option<T>`.
+- Se retiraron implementaciones manuales de `FromRow` ya redundantes en `examples/todo-app`, en tests de integración de la crate pública (`stage5_public_crud`, `stage10_public_active_record`) y en fixtures válidos de `trybuild`.
+- Se añadió cobertura directa en `crates/mssql-orm/tests/stage2_mapping.rs` para comprobar que una entidad derivada materializa correctamente columnas requeridas y nullable sin impl manual adicional.
+- Durante la validación solo fue necesario actualizar un snapshot `trybuild` (`active_record_missing_entity_set.stderr`) por cambio de numeración de líneas y limpiar un import de prueba que dejó de usarse.
+
+### Resultado
+
+- El repositorio ya quedó alineado con el plan maestro en este punto: `#[derive(Entity)]` genera `FromRow` automáticamente y el boilerplate manual desapareció de consumidores reales representativos.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- La tarea requirió ajustar fixtures `trybuild` existentes porque el derive nuevo redujo código y movió líneas de error observables.
+
+### Próximo paso recomendado
+
+- Empezar `Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog`.
+
+### Sesión: registrar desalineación de `FromRow` contra el plan maestro
+
+- Se revisó el plan maestro y luego el código real de `mssql-orm-macros` para verificar si `FromRow` ya se estaba generando desde derives de entidad.
+- La revisión confirmó una desalineación concreta: el plan dice que los derives de entidad deben generar `FromRow`, pero el código actual de `#[derive(Entity)]` no emite ese impl; hoy solo genera metadata, columnas estáticas y helpers de persistencia/PK.
+- También quedó confirmado que `#[derive(DbContext)]` todavía exige `FromRow` en los bounds de las entidades y que por eso siguen existiendo implementaciones manuales en `examples/todo-app` y en fixtures válidos de `trybuild`.
+- Se registró una tarea operativa nueva en `docs/tasks.md` para re-alinear esa parte del repo con el plan maestro sin mezclarla todavía con la Etapa 15 de release.
+
+### Resultado
+
+- El backlog y el contexto ahora dejan explícita una deuda estructural real del proyecto: falta generación automática de `FromRow`.
+
+### Validación
+
+- Revisión de `docs/plan_orm_sqlserver_tiberius_code_first.md`
+- Revisión de `crates/mssql-orm-macros/src/lib.rs`
+- Revisión de usos manuales de `FromRow` en `examples/` y `crates/mssql-orm/tests/ui/`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión solo dejó trazabilidad documental; no introdujo cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar la tarea operativa de re-alineación e introducir generación automática de `FromRow` sin romper `Entity`, `DbContext`, Active Record ni los fixtures públicos existentes.
+
 ### Sesión: validación real de `todo_app` contra SQL Server
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Validar el ejemplo web async todo_app contra SQL Server real con smoke test/documentación operativa reproducible`.

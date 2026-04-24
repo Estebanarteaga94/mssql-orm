@@ -75,6 +75,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut update_changes = Vec::new();
     let mut entity_concurrency_token = None;
     let mut sync_fields = Vec::new();
+    let mut from_row_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
     let mut field_columns = BTreeMap::<String, LitStr>::new();
@@ -248,6 +249,21 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             self.#field_ident = persisted.#field_ident;
         });
 
+        let field_ty = &field.ty;
+        let from_row_value = if type_info.nullable {
+            quote! {
+                row.try_get_typed::<#field_ty>(#column_name)?.flatten()
+            }
+        } else {
+            quote! {
+                row.get_required_typed::<#field_ty>(#column_name)?
+            }
+        };
+
+        from_row_fields.push(quote! {
+            #field_ident: #from_row_value
+        });
+
         for index in config.indexes {
             let index_name = index.name.unwrap_or_else(|| {
                 generated_index_name(
@@ -411,6 +427,14 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         impl ::mssql_orm::core::Entity for #ident {
             fn metadata() -> &'static ::mssql_orm::core::EntityMetadata {
                 &#metadata_ident
+            }
+        }
+
+        impl ::mssql_orm::core::FromRow for #ident {
+            fn from_row<R: ::mssql_orm::core::Row>(row: &R) -> Result<Self, ::mssql_orm::core::OrmError> {
+                Ok(Self {
+                    #(#from_row_fields),*
+                })
             }
         }
 

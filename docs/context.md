@@ -29,7 +29,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
 - `mssql-orm-core` ahora también expone helpers explícitos de metadata relacional sobre `ForeignKeyMetadata` y `EntityMetadata`, incluyendo búsqueda por nombre, por columna local y por tabla referenciada.
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
-- `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática e implementación del trait `Entity`.
+- `mssql-orm-macros` ya implementa un `#[derive(Entity)]` funcional sobre structs con campos nombrados, generando `EntityMetadata` estática, implementación del trait `Entity` y materialización `FromRow`.
 - El derive soporta al menos los atributos base ya priorizados en la Etapa 1: `table`, `schema`, `primary_key`, `identity`, `length`, `nullable`, `default_sql`, `index` y `unique`.
 - `mssql-orm-macros` ahora soporta `#[orm(foreign_key = "tabla.columna")]`, `#[orm(foreign_key = "schema.tabla.columna")]` y la sintaxis estructurada `#[orm(foreign_key(entity = Customer, column = id))]`.
 - `mssql-orm-macros` ahora también soporta índices compuestos a nivel de entidad mediante `#[orm(index(name = "ix_...", columns(campo_a, campo_b)))]`, resolviendo esos campos hacia múltiples `IndexColumnMetadata` dentro de la metadata derivada.
@@ -50,10 +50,10 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - Esos handlers ya muestran uso real de `DbSet::find`, `DbSetQuery::all()` y `DbSetQuery::count()` desde el consumidor web del ejemplo.
 - `examples/todo-app/src/lib.rs` ya expone `pool_builder_from_settings(...)`, `connect_pool(...)` y `state_from_pool(...)` como helpers explícitos del ejemplo para construir el contexto desde `MssqlPool`.
 - `examples/todo-app/src/main.rs` ya usa `connect_pool(&settings).await?` y `TodoAppDbContext::from_pool(...)` cuando `pool-bb8` está activo; el fallback a `PendingTodoAppDbContext` quedó solo para builds sin ese feature.
-- El dominio del ejemplo ya implementa `FromRow` para `User`, `TodoList` y `TodoItem`, requisito práctico para derivar `TodoAppDbContext` y base del siguiente paso de endpoints CRUD.
+- El dominio del ejemplo `todo_app` ya no necesita `impl FromRow` manuales: `#[derive(Entity)]` ahora materializa automáticamente `User`, `TodoList` y `TodoItem` desde filas, lo que también simplifica fixtures válidos de `trybuild` e integración pública.
 - `examples/todo-app/scripts/smoke_setup.sql` ya deja un fixture operativo reproducible para validar el ejemplo contra SQL Server real en `tempdb`.
 - La crate del ejemplo ya incluye una prueba ignorada `smoke_preview_query_runs_against_sql_server_fixture`, ejecutable con `DATABASE_URL`, para repetir parte del smoke real desde el propio consumidor.
-- La validación real del ejemplo dejó fijado además que las columnas nullable del dominio deben mapearse con `try_get_typed::<Option<T>>()?.flatten()` en `FromRow`, no con `try_get_typed::<T>()`.
+- La generación automática de `FromRow` ya resuelve columnas nullable con la forma correcta `try_get_typed::<Option<T>>()?.flatten()` y mantiene `get_required_typed::<T>()` para campos no opcionales.
 - `mssql-orm-tiberius` ahora soporta también `ColumnType::Intn` en `MssqlRow`, ampliando la lectura real de enteros SQL Server de anchura variable.
 - La crate pública `mssql-orm` ahora también incluye un fixture `trybuild` específico del dominio `todo_app` que valida el uso público de `DbSetQuery` con `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`.
 - La validación del dominio dejó fijada una convención observable del macro: cuando se usa `#[orm(foreign_key(entity = Tipo, column = id))]`, el nombre generado del foreign key usa el nombre de tabla derivado del tipo Rust referenciado para el sufijo del constraint, aunque la tabla efectiva pueda estar sobrescrita con `#[orm(table = ...)]`.

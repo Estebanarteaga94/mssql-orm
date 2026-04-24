@@ -18,16 +18,6 @@ struct ActiveRecordUser {
     active: bool,
 }
 
-impl FromRow for ActiveRecordUser {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-            active: row.get_required_typed::<bool>("active")?,
-        })
-    }
-}
-
 #[derive(Insertable, Debug, Clone)]
 #[orm(entity = ActiveRecordUser)]
 struct NewActiveRecordUser {
@@ -50,16 +40,6 @@ struct VersionedActiveRecordUser {
     name: String,
     #[orm(rowversion)]
     version: Vec<u8>,
-}
-
-impl FromRow for VersionedActiveRecordUser {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-            version: row.get_required_typed::<Vec<u8>>("version")?,
-        })
-    }
 }
 
 #[derive(DbContext)]

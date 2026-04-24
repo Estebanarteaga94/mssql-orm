@@ -6,6 +6,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Re-alinear el row mapping con el plan maestro generando `FromRow` automático desde derive y retirando boilerplate manual de ejemplos/tests
 - [x] Etapa 14: Validar el ejemplo web async `todo_app` contra SQL Server real con smoke test/documentación operativa reproducible
 - [x] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async `todo_app` con coverage feature-gated del wiring del consumidor
 - [x] Etapa 14: Implementar endpoints mínimos del `todo_app` usando `DbSet` y cubrir la lógica HTTP con pruebas unitarias o de servicio local

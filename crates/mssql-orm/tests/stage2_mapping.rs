@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use mssql_orm::prelude::*;
 
 #[allow(dead_code)]
-#[derive(Entity, Debug, Clone)]
+#[derive(Entity, Debug, Clone, PartialEq)]
 #[orm(table = "customers", schema = "sales")]
 struct Customer {
     #[orm(primary_key)]
@@ -76,6 +76,30 @@ fn from_row_maps_required_and_nullable_columns() {
     assert_eq!(
         record,
         CustomerRecord {
+            id: 7,
+            email: "ana@example.com".to_string(),
+            phone: None,
+            active: true,
+        }
+    );
+}
+
+#[test]
+fn entity_derive_generates_from_row_for_required_and_nullable_columns() {
+    let row = TestRow {
+        values: BTreeMap::from([
+            ("id", SqlValue::I64(7)),
+            ("email", SqlValue::String("ana@example.com".to_string())),
+            ("phone", SqlValue::Null),
+            ("active", SqlValue::Bool(true)),
+        ]),
+    };
+
+    let customer = Customer::from_row(&row).expect("derived entity row mapping should succeed");
+
+    assert_eq!(
+        customer,
+        Customer {
             id: 7,
             email: "ana@example.com".to_string(),
             phone: None,

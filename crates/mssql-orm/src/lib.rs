@@ -69,7 +69,7 @@ mod tests {
     use super::prelude::{
         ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
         EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityState,
-        FromRow, IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
+        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
         MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
         PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
         SqlValue, Tracked,
@@ -216,27 +216,6 @@ mod tests {
     struct AuditEntry {
         id: i64,
         payload: String,
-    }
-
-    impl FromRow for DerivedUser {
-        fn from_row<R: mssql_orm_core::Row>(_row: &R) -> Result<Self, OrmError> {
-            Ok(Self {
-                id: 1,
-                email: "ana@example.com".to_string(),
-                display_name: Some("Ana".to_string()),
-                created_by: "system".to_string(),
-                version: vec![1, 2, 3, 4],
-            })
-        }
-    }
-
-    impl FromRow for AuditEntry {
-        fn from_row<R: mssql_orm_core::Row>(_row: &R) -> Result<Self, OrmError> {
-            Ok(Self {
-                id: 1,
-                payload: "payload".to_string(),
-            })
-        }
     }
 
     #[derive(Insertable, Debug, Clone)]
