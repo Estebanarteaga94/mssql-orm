@@ -2,6 +2,39 @@
 
 ## 2026-04-24
 
+### Sesión: consolidar artefacto editable MVP de migración
+
+- Se ejecutó la subtarea `Etapa 7+: Consolidar el artefacto editable MVP de migration add con up.sql, down.sql, model_snapshot.json y migration.rs explícitamente diferido`, derivada de la tarea grande sobre artefacto editable real.
+- El plan maestro se confirmó en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz del repositorio.
+- El artefacto editable MVP queda definido como `up.sql`, `down.sql` y `model_snapshot.json`.
+- `migration.rs` queda diferido explícitamente para evitar introducir una segunda API de migraciones antes de diseñarla contra el pipeline actual de snapshots, diff y DDL SQL Server.
+- `MigrationScaffold` ahora expone helpers de rutas para `up.sql`, `down.sql` y `model_snapshot.json`.
+- La plantilla inicial de `down.sql` ahora declara que es rollback manual y que el MVP actual no lo ejecuta automáticamente.
+- `mssql-orm-cli migration add` ahora imprime las rutas de los artefactos generados y marca `migration.rs` como diferido para el MVP.
+- Se añadió una tarea futura para evaluar generación reversible de `down.sql` cuando las operaciones conserven payload suficiente para invertir cambios de forma segura.
+- Se actualizaron `docs/migrations.md` y `docs/context.md` para reflejar el contrato operativo vigente.
+
+### Resultado
+
+- `migration add` deja un artefacto editable más explícito y trazable sin adelantar una API Rust de migraciones que aún no está diseñada.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test -p mssql-orm-cli`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm-migrate -p mssql-orm-cli --all-targets`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy -p mssql-orm-migrate -p mssql-orm-cli --all-targets` terminó con código 0, pero volvió a reportar warnings preexistentes `collapsible_if` en `crates/mssql-orm-migrate/src/diff.rs`; no se corrigieron por estar fuera del alcance.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Validar end-to-end la generación automática con un consumidor real (examples/todo-app) creando base desde cero y migración incremental reproducible`.
+
 ### Sesión: bloquear cambios destructivos en `migration add`
 
 - Se ejecutó la subtarea `Etapa 7+: Detectar cambios destructivos en migration add y bloquear por defecto salvo confirmación/flag explícita alineada con el plan`.

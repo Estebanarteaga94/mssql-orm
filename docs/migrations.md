@@ -86,11 +86,14 @@ migrations/
     model_snapshot.json
 ```
 
+Este es el artefacto editable MVP de migracion. El plan maestro menciona tambien un `migration.rs`, pero queda diferido explicitamente hasta disenar una API Rust de migraciones que no duplique ni contradiga el pipeline actual de snapshots, diff y DDL SQL Server.
+
 Detalles operativos relevantes:
 
 - el `id` incluye timestamp con resolucion de nanosegundos para reducir colisiones y preservar orden lexico
 - el nombre visible se deriva del slug del directorio
-- `up.sql` se genera automaticamente cuando `migration add` dispone de snapshot actual real; `down.sql` sigue naciendo como plantilla vacia con comentario
+- la salida de `migration add` lista las rutas de `up.sql`, `down.sql` y `model_snapshot.json`, y marca `migration.rs` como diferido para el MVP
+- `up.sql` se genera automaticamente cuando `migration add` dispone de snapshot actual real; `down.sql` nace como plantilla manual de rollback
 - sin `--model-snapshot`, `model_snapshot.json` se scaffolda con un snapshot vacio valido
 - con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
 - con `--snapshot-bin`, la CLI ejecuta `cargo run --bin <bin>` sobre el manifest indicado, captura `stdout` y valida que sea un `ModelSnapshot` JSON valido
@@ -235,6 +238,8 @@ Conviene asumir estos limites hoy:
 - la CLI actual no aplica el script directamente a SQL Server; solo lo imprime
 - la CLI actual no expone `database downgrade`
 - `down.sql` no se consume automaticamente
+- `down.sql` no se genera como inversion completa del diff; queda como rollback manual revisable hasta que las operaciones conserven payload suficiente para invertir cambios de forma segura
+- `migration.rs` queda fuera del MVP actual y no se genera
 - `model_snapshot.json` se scaffolda, pero no se mantiene solo
 - la separacion por sentencias del `up.sql` es deliberadamente simple; conviene escribir migraciones SQL Server limpias y bien delimitadas
 

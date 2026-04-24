@@ -55,6 +55,12 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                 scaffold.id,
                 scaffold.directory.display()
             );
+            output.push_str(&format!(
+                "\nArtifacts:\n  up.sql: {}\n  down.sql: {}\n  model_snapshot.json: {}\n  migration.rs: deferred for MVP",
+                scaffold.up_sql_path().display(),
+                scaffold.down_sql_path().display(),
+                scaffold.snapshot_path().display()
+            ));
 
             if let Some((migration, previous_snapshot)) = previous_snapshot {
                 output.push_str(&format!(
@@ -566,6 +572,11 @@ mod tests {
         .unwrap();
 
         assert!(output.contains("Created migration"));
+        assert!(output.contains("Artifacts:"));
+        assert!(output.contains("up.sql:"));
+        assert!(output.contains("down.sql:"));
+        assert!(output.contains("model_snapshot.json:"));
+        assert!(output.contains("migration.rs: deferred for MVP"));
         assert!(root.join("migrations").exists());
     }
 

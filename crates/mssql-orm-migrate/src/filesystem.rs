@@ -14,6 +14,20 @@ pub struct MigrationScaffold {
     pub directory: PathBuf,
 }
 
+impl MigrationScaffold {
+    pub fn up_sql_path(&self) -> PathBuf {
+        self.directory.join("up.sql")
+    }
+
+    pub fn down_sql_path(&self) -> PathBuf {
+        self.directory.join("down.sql")
+    }
+
+    pub fn snapshot_path(&self) -> PathBuf {
+        self.directory.join("model_snapshot.json")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationEntry {
     pub id: String,
@@ -45,16 +59,10 @@ pub fn create_migration_scaffold_with_snapshot(
 
     fs::create_dir_all(&directory)
         .map_err(|_| OrmError::new("failed to create migration directory"))?;
-    fs::write(
-        directory.join("up.sql"),
-        format!("-- Migration: {id}\n-- Write SQL Server DDL here.\n"),
-    )
-    .map_err(|_| OrmError::new("failed to write migration up.sql"))?;
-    fs::write(
-        directory.join("down.sql"),
-        format!("-- Migration: {id}\n-- Write rollback SQL here.\n"),
-    )
-    .map_err(|_| OrmError::new("failed to write migration down.sql"))?;
+    fs::write(directory.join("up.sql"), initial_up_sql_template(&id))
+        .map_err(|_| OrmError::new("failed to write migration up.sql"))?;
+    fs::write(directory.join("down.sql"), initial_down_sql_template(&id))
+        .map_err(|_| OrmError::new("failed to write migration down.sql"))?;
     write_model_snapshot(&directory.join("model_snapshot.json"), snapshot)?;
 
     Ok(MigrationScaffold {
@@ -62,6 +70,16 @@ pub fn create_migration_scaffold_with_snapshot(
         name: name.to_string(),
         directory,
     })
+}
+
+fn initial_up_sql_template(id: &str) -> String {
+    format!("-- Migration: {id}\n-- SQL Server DDL for this migration.\n")
+}
+
+fn initial_down_sql_template(id: &str) -> String {
+    format!(
+        "-- Migration: {id}\n-- Manual rollback SQL for this editable migration.\n-- The current MVP does not execute down.sql automatically.\n"
+    )
 }
 
 pub fn write_model_snapshot(path: &Path, snapshot: &ModelSnapshot) -> Result<(), OrmError> {
@@ -272,12 +290,27 @@ mod tests {
         let scaffold = create_migration_scaffold(&root, "Create Customers").unwrap();
 
         assert!(scaffold.id.contains("create_customers"));
-        assert!(scaffold.directory.join("up.sql").exists());
-        assert!(scaffold.directory.join("down.sql").exists());
-        assert!(scaffold.directory.join("model_snapshot.json").exists());
+        assert!(scaffold.up_sql_path().exists());
+        assert!(scaffold.down_sql_path().exists());
+        assert!(scaffold.snapshot_path().exists());
+        assert!(!scaffold.directory.join("migration.rs").exists());
 
-        let snapshot =
-            read_model_snapshot(&scaffold.directory.join("model_snapshot.json")).unwrap();
+        assert_eq!(
+            fs::read_to_string(scaffold.up_sql_path()).unwrap(),
+            format!(
+                "-- Migration: {}\n-- SQL Server DDL for this migration.\n",
+                scaffold.id
+            )
+        );
+        assert_eq!(
+            fs::read_to_string(scaffold.down_sql_path()).unwrap(),
+            format!(
+                "-- Migration: {}\n-- Manual rollback SQL for this editable migration.\n-- The current MVP does not execute down.sql automatically.\n",
+                scaffold.id
+            )
+        );
+
+        let snapshot = read_model_snapshot(&scaffold.snapshot_path()).unwrap();
         assert_eq!(snapshot, ModelSnapshot::default());
     }
 
@@ -301,7 +334,7 @@ mod tests {
             create_migration_scaffold_with_snapshot(&root, "Create Sales", &snapshot).unwrap();
 
         assert_eq!(
-            read_model_snapshot(&scaffold.directory.join("model_snapshot.json")).unwrap(),
+            read_model_snapshot(&scaffold.snapshot_path()).unwrap(),
             snapshot
         );
     }
