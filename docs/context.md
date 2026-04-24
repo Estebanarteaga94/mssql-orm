@@ -104,7 +104,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El adaptador ya prepara `CompiledQuery`, valida conteo de placeholders y realiza binding real de `SqlValue` hacia `tiberius::Query`.
 - El binding de `Decimal` ya se resuelve a `tiberius::numeric::Numeric`; el caso `SqlValue::Null` sigue siendo provisional y hoy se envía como `Option::<String>::None`.
 - `mssql-orm-tiberius` ya expone `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, implementa el contrato neutral `Row` del core y convierte tipos soportados de SQL Server a `SqlValue`.
-- El adaptador ya encapsula errores de Tiberius en `OrmError` mediante una capa interna de mapeo contextual, incluyendo lectura de filas y detección básica de deadlock.
+- El adaptador ya encapsula errores de Tiberius en `OrmError` mediante una capa interna de mapeo contextual, incluyendo lectura de filas, detección básica de deadlock y detalle del error original cuando falla la ejecución de una query.
 - `MssqlConnection<S>` ya implementa `fetch_one<T: FromRow>` y `fetch_all<T: FromRow>` apoyándose en `query_raw`, `MssqlRow` y el contrato `FromRow` del core.
 - `mssql-orm-tiberius` ya cuenta con pruebas de integración reales en `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs`, activables mediante `MSSQL_ORM_TEST_CONNECTION_STRING`.
 - Las pruebas reales usan tablas efímeras únicas en `tempdb.dbo` en lugar de `#temp tables`, porque la ejecución RPC usada por Tiberius no preserva tablas temporales locales entre llamadas separadas.
@@ -201,7 +201,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `#[derive(Entity)]` ahora genera además contratos ocultos de persistencia para Active Record: valores insertables, cambios actualizables, sincronización desde la fila materializada y estrategia de persistencia basada en la PK simple.
 - La estrategia actual de `save` es explícita y mínima: PK simple `identity` con valor `0` inserta y refresca la entidad; PK simple sin `identity` usa `find` por PK para decidir entre inserción y actualización; cualquier PK compuesta sigue rechazándose en esta etapa.
 - `mssql-orm-core` ahora también expone `EntityMetadata::rowversion_column()` y `Changeset::concurrency_token()` para permitir que la concurrencia optimista se apoye en metadata y contracts ya presentes.
-- `mssql-orm-core` ahora modela `OrmError` como enum estable con `Message(&'static str)` y `ConcurrencyConflict`, manteniendo `OrmError::new(...)` como constructor de compatibilidad para errores simples del estado actual.
+- `mssql-orm-core` ahora modela `OrmError` como enum estable con `Message(String)` y `ConcurrencyConflict`, manteniendo `OrmError::new(...)` como constructor de compatibilidad para errores simples y para mensajes dinámicos provenientes del driver.
 - `#[derive(Changeset)]` ahora detecta campos mapeados a columnas `rowversion`: no los incluye en el `SET`, pero sí los usa como token de concurrencia para construir el `WHERE ... AND [version] = @Pn`.
 - `DbSet::update(...)` ya soporta predicados de concurrencia optimista cuando el `Changeset` aporta token; si el token es viejo, la operación retorna `None` y no pisa datos silenciosamente.
 - `DbSet::update(...)`, las rutas internas de borrado/update por `SqlValue` y Active Record ya elevan los mismatches reales de `rowversion` a `OrmError::ConcurrencyConflict` cuando la PK todavía existe.

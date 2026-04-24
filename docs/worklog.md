@@ -2,6 +2,41 @@
 
 ## 2026-04-24
 
+### Sesión: limpiar `todo-app` y ejecutar migraciones desde cero
+
+- A petición del usuario, se limpió la base local solo para el fixture `todo-app`: se eliminaron las tablas `todo.todo_items`, `todo.todo_lists`, `todo.users`, el schema `todo` y las filas de historial de las tres migraciones del ejemplo en `dbo.__mssql_orm_migrations`.
+- La limpieza fue preparatoria; la aplicación de migraciones se ejecutó después mediante `mssql-orm-cli database update --execute` desde `examples/todo-app`.
+- El primer intento previo había fallado porque ya existía `todo.todo_items` sin que el historial local de migraciones estuviera alineado, por lo que el script intentaba crear la tabla inicial otra vez.
+- Para hacer observable ese tipo de fallo, se ajustó `mssql-orm-core::OrmError` para almacenar `Message(String)` y se mejoró el mapeo de errores de `mssql-orm-tiberius` para incluir el detalle original del driver cuando falla una query.
+- Tras limpiar el fixture, `database update --execute` creó desde cero el schema `todo`, las tablas `todo_items`, `todo_lists`, `users`, la columna incremental `todo_lists.description` y las tres filas de historial.
+- Se reejecutó el mismo comando `database update --execute` y terminó correctamente, validando el comportamiento idempotente.
+- Se verificó con `sqlcmd` que existen las tres tablas del schema `todo`, que `todo.todo_lists.description` existe como `nvarchar(500)` nullable y que `dbo.__mssql_orm_migrations` contiene los tres ids esperados.
+
+### Resultado
+
+- Las migraciones de `examples/todo-app` quedaron aplicadas desde cero por la CLI contra SQL Server local (`tempdb`).
+- El fixture real quedó en estado inspeccionable con schema `todo`, tablas creadas, columna incremental aplicada e historial consistente.
+
+### Validación
+
+- `cargo build -p mssql-orm-cli`
+- `DATABASE_URL=<redacted> ../../target/debug/mssql-orm-cli database update --execute` desde `examples/todo-app`
+- Reejecución del mismo `database update --execute` para validar idempotencia
+- Verificación `sqlcmd` de tablas `todo.*`, columna `todo_lists.description` e historial `dbo.__mssql_orm_migrations`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm-tiberius`
+- `cargo test -p mssql-orm-cli`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos después de limpiar el fixture desalineado.
+- No se registró la cadena de conexión real en documentación para evitar persistir credenciales.
+
+### Próximo paso recomendado
+
+- Resolver la historia de baselining para objetos existentes sin historial, o documentar explícitamente que `database update --execute` espera una base limpia o un historial ya alineado para la migración inicial.
+
 ### Sesión: aplicar migraciones de `todo-app` mediante CLI
 
 - Se tomó la tarea `Etapa 7+: Aplicar contra SQL Server real el script generado desde examples/todo-app para validar creación desde cero e historial idempotente con DATABASE_URL`.

@@ -28,7 +28,9 @@ pub(crate) fn map_tiberius_error(
         TiberiusErrorContext::InitializeClient => {
             OrmError::new("failed to initialize Tiberius client")
         }
-        TiberiusErrorContext::ExecuteQuery => OrmError::new("failed to execute SQL Server query"),
+        TiberiusErrorContext::ExecuteQuery => {
+            OrmError::new(format!("failed to execute SQL Server query: {error}"))
+        }
         TiberiusErrorContext::ReadRowValue => OrmError::new("failed to read SQL Server row value"),
     }
 }
@@ -69,7 +71,7 @@ mod tests {
 
         assert_eq!(
             map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery).message(),
-            "failed to execute SQL Server query"
+            "failed to execute SQL Server query: Conversion error: boom"
         );
     }
 

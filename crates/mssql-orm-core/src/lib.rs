@@ -9,20 +9,20 @@ use uuid::Uuid;
 /// Common error type placeholder for the workspace foundations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrmError {
-    Message(&'static str),
+    Message(String),
     ConcurrencyConflict,
 }
 
 impl OrmError {
-    pub const fn new(message: &'static str) -> Self {
-        Self::Message(message)
+    pub fn new(message: impl Into<String>) -> Self {
+        Self::Message(message.into())
     }
 
     pub const fn concurrency_conflict() -> Self {
         Self::ConcurrencyConflict
     }
 
-    pub const fn message(&self) -> &'static str {
+    pub fn message(&self) -> &str {
         match self {
             Self::Message(message) => message,
             Self::ConcurrencyConflict => "concurrency conflict",
