@@ -63,7 +63,6 @@ pub struct TodoItem {
 
     #[orm(nullable)]
     #[orm(foreign_key(entity = User, column = id))]
-    #[orm(on_delete = "set null")]
     pub completed_by_user_id: Option<i64>,
 
     #[orm(length = 200)]
@@ -163,7 +162,7 @@ mod tests {
         assert_eq!(completed_by_fk.columns, &["completed_by_user_id"]);
         assert_eq!(completed_by_fk.referenced_schema, "todo");
         assert_eq!(completed_by_fk.referenced_table, "users");
-        assert_eq!(completed_by_fk.on_delete, ReferentialAction::SetNull);
+        assert_eq!(completed_by_fk.on_delete, ReferentialAction::NoAction);
         assert_eq!(
             metadata
                 .column("completed_by_user_id")

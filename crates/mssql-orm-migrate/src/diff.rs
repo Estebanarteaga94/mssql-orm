@@ -247,8 +247,14 @@ pub fn diff_relational_operations(
 
     for (schema_name, current_schema) in &current_schemas {
         let Some(previous_schema) = previous_schemas.get(schema_name) else {
+            for table in &current_schema.tables {
+                push_create_relational_operations(&mut operations, schema_name, table);
+            }
             continue;
         };
+
+        let previous_tables = table_map(previous_schema);
+        let current_tables = table_map(current_schema);
 
         for (table_name, previous_table, current_table) in
             matched_table_pairs(previous_schema, current_schema)
@@ -325,9 +331,47 @@ pub fn diff_relational_operations(
                 }
             }
         }
+
+        for (table_name, current_table) in current_tables {
+            if previous_tables.contains_key(&table_name) {
+                continue;
+            }
+
+            if current_table
+                .renamed_from
+                .as_deref()
+                .is_some_and(|renamed_from| previous_tables.contains_key(renamed_from))
+            {
+                continue;
+            }
+
+            push_create_relational_operations(&mut operations, schema_name, current_table);
+        }
     }
 
     operations
+}
+
+fn push_create_relational_operations(
+    operations: &mut Vec<MigrationOperation>,
+    schema_name: &str,
+    table: &TableSnapshot,
+) {
+    for index in &table.indexes {
+        operations.push(MigrationOperation::CreateIndex(CreateIndex::new(
+            schema_name.to_string(),
+            table.name.clone(),
+            index.clone(),
+        )));
+    }
+
+    for foreign_key in &table.foreign_keys {
+        operations.push(MigrationOperation::AddForeignKey(AddForeignKey::new(
+            schema_name.to_string(),
+            table.name.clone(),
+            foreign_key.clone(),
+        )));
+    }
 }
 
 fn schema_map(snapshot: &ModelSnapshot) -> BTreeMap<String, &SchemaSnapshot> {
@@ -1038,6 +1082,80 @@ mod tests {
     }
 
     #[test]
+    fn relational_diff_emits_indexes_and_foreign_keys_for_new_tables() {
+        let previous = ModelSnapshot::new(vec![schema("sales", vec![])]);
+        let current = ModelSnapshot::new(vec![
+            schema(
+                "analytics",
+                vec![table(
+                    "daily_sales",
+                    vec![column("customer_id", SqlServerType::BigInt, false, None)],
+                    vec![IndexSnapshot::new(
+                        "ix_daily_sales_customer_id",
+                        vec![IndexColumnSnapshot::asc("customer_id")],
+                        false,
+                    )],
+                    vec![],
+                )],
+            ),
+            schema(
+                "sales",
+                vec![table(
+                    "orders",
+                    vec![column("customer_id", SqlServerType::BigInt, false, None)],
+                    vec![IndexSnapshot::new(
+                        "ix_orders_customer_id",
+                        vec![IndexColumnSnapshot::asc("customer_id")],
+                        false,
+                    )],
+                    vec![foreign_key(
+                        "fk_orders_customer_id_customers",
+                        "sales",
+                        "customers",
+                        "customer_id",
+                    )],
+                )],
+            ),
+        ]);
+
+        let operations = diff_relational_operations(&previous, &current);
+
+        assert_eq!(
+            operations,
+            vec![
+                MigrationOperation::CreateIndex(CreateIndex::new(
+                    "analytics",
+                    "daily_sales",
+                    IndexSnapshot::new(
+                        "ix_daily_sales_customer_id",
+                        vec![IndexColumnSnapshot::asc("customer_id")],
+                        false,
+                    ),
+                )),
+                MigrationOperation::CreateIndex(CreateIndex::new(
+                    "sales",
+                    "orders",
+                    IndexSnapshot::new(
+                        "ix_orders_customer_id",
+                        vec![IndexColumnSnapshot::asc("customer_id")],
+                        false,
+                    ),
+                )),
+                MigrationOperation::AddForeignKey(AddForeignKey::new(
+                    "sales",
+                    "orders",
+                    foreign_key(
+                        "fk_orders_customer_id_customers",
+                        "sales",
+                        "customers",
+                        "customer_id",
+                    ),
+                )),
+            ]
+        );
+    }
+
+    #[test]
     fn relational_diff_recreates_foreign_key_when_definition_changes() {
         let previous = ModelSnapshot::new(vec![schema(
             "sales",
@@ -1358,6 +1476,25 @@ mod tests {
                         "ix_customers_email",
                         vec![IndexColumnSnapshot::asc("email")],
                         true,
+                    ),
+                )),
+                MigrationOperation::CreateIndex(CreateIndex::new(
+                    "sales",
+                    "orders",
+                    IndexSnapshot::new(
+                        "ix_orders_customer_id",
+                        vec![IndexColumnSnapshot::asc("customer_id")],
+                        false,
+                    ),
+                )),
+                MigrationOperation::AddForeignKey(AddForeignKey::new(
+                    "sales",
+                    "orders",
+                    foreign_key(
+                        "fk_orders_customer_id_customers",
+                        "sales",
+                        "customers",
+                        "customer_id",
                     ),
                 )),
             ]

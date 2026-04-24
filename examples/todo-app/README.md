@@ -62,6 +62,22 @@ DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<passw
 cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture
 ```
 
+## Migraciones automáticas del ejemplo
+
+El ejemplo incluye un binario exportador de snapshot para validar el flujo code-first real:
+
+```bash
+cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot
+```
+
+También hay un script reproducible que genera una migración inicial desde el modelo actual, una segunda migración incremental no-op y el script acumulado de `database update`:
+
+```bash
+examples/todo-app/scripts/migration_e2e.sh
+```
+
+El script imprime el directorio temporal usado y el `database_update.sql` generado. Si configuras `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER`, `MSSQL_ORM_SQLCMD_PASSWORD` y opcionalmente `MSSQL_ORM_SQLCMD_DATABASE`, también intenta aplicar el script con `sqlcmd`.
+
 Nota operativa:
 
-- El dominio del ejemplo mantiene `completed_by_user_id` con `ON DELETE SET NULL`, pero el fixture `smoke_setup.sql` usa `NO ACTION` para esa FK porque SQL Server rechaza esa combinación concreta dentro de este esquema mínimo por `multiple cascade paths`.
+- El dominio del ejemplo usa `NO ACTION` para `completed_by_user_id` porque SQL Server rechaza `SET NULL` en esa relación dentro de este esquema mínimo por `multiple cascade paths`.

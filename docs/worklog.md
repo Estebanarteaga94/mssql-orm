@@ -2,6 +2,45 @@
 
 ## 2026-04-24
 
+### Sesión: validar generación automática reproducible con `todo-app`
+
+- Se tomó la tarea `Etapa 7+: Validar end-to-end la generación automática con un consumidor real (examples/todo-app) creando base desde cero y migración incremental reproducible`.
+- Como el entorno no tiene `DATABASE_URL` ni `MSSQL_ORM_TEST_CONNECTION_STRING`, y tampoco variables `MSSQL_ORM_SQLCMD_*`, la tarea se dividió: esta sesión completa la generación reproducible con el consumidor real y deja pendiente la aplicación contra SQL Server real.
+- Se añadió `examples/todo-app/src/bin/model_snapshot.rs` para exportar el `ModelSnapshot` actual de `TodoAppDbContext` usando la API pública `model_snapshot_json_from_source`.
+- Se añadió `examples/todo-app/scripts/migration_e2e.sh`, que construye la CLI, crea una migración inicial desde el snapshot del `todo-app`, crea una segunda migración incremental no-op y genera `database_update.sql` en un directorio temporal.
+- La validación inicial reveló que `diff_relational_operations(...)` no emitía índices ni foreign keys para tablas nuevas, por lo que una migración inicial perdía parte de la metadata relacional.
+- Se corrigió `mssql-orm-migrate` para emitir `CreateIndex` y `AddForeignKey` para tablas nuevas, tanto en schemas nuevos como en schemas existentes.
+- Se agregó cobertura unitaria para fijar índices y foreign keys sobre tablas nuevas dentro del diff relacional.
+- Se ajustó el dominio de `todo-app`: `completed_by_user_id` usa `NO ACTION` en vez de `SET NULL`, alineándolo con el fixture existente y evitando la combinación que SQL Server rechaza por múltiples rutas de cascada.
+- Se actualizó `examples/todo-app/README.md` con el exportador de snapshot y el script reproducible de migraciones.
+
+### Resultado
+
+- `examples/todo-app/scripts/migration_e2e.sh` genera una migración inicial con schema, tres tablas, tres índices y cuatro foreign keys, una migración incremental no-op con `-- No schema changes detected.`, y un `database_update.sql` acumulado con historial idempotente.
+- La aplicación real con `sqlcmd` quedó pendiente por falta de variables de conexión en el entorno.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot`
+- `examples/todo-app/scripts/migration_e2e.sh`
+- Verificación manual con `rg` sobre el `up.sql` y `database_update.sql` generados en `/tmp/mssql-orm-todo-migrations.8NYeZp`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test -p mssql-orm-cli`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm-migrate -p mssql-orm-cli --all-targets`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No se pudo aplicar el script contra SQL Server real porque el entorno no tiene configuradas variables de conexión (`DATABASE_URL`, `MSSQL_ORM_TEST_CONNECTION_STRING` ni `MSSQL_ORM_SQLCMD_SERVER/USER/PASSWORD`).
+- `cargo clippy -p mssql-orm-migrate -p mssql-orm-cli --all-targets` terminó con código 0, pero volvió a reportar warnings preexistentes `collapsible_if` en `crates/mssql-orm-migrate/src/diff.rs`; no se corrigieron por estar fuera del alcance.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Aplicar contra SQL Server real el script generado desde examples/todo-app para validar creación desde cero e historial idempotente con DATABASE_URL`.
+
 ### Sesión: consolidar artefacto editable MVP de migración
 
 - Se ejecutó la subtarea `Etapa 7+: Consolidar el artefacto editable MVP de migration add con up.sql, down.sql, model_snapshot.json y migration.rs explícitamente diferido`, derivada de la tarea grande sobre artefacto editable real.

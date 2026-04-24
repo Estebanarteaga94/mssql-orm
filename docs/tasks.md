@@ -1,7 +1,7 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7+: Validar end-to-end la generación automática con un consumidor real (`examples/todo-app`) creando base desde cero y migración incremental reproducible
+- [ ] Etapa 7+: Aplicar contra SQL Server real el script generado desde `examples/todo-app` para validar creación desde cero e historial idempotente con `DATABASE_URL`
 - [ ] Etapa 7+: Evaluar generación reversible de `down.sql` cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura
 - [ ] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
 - [ ] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
@@ -13,6 +13,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 7+: Preparar validación reproducible de generación automática con `examples/todo-app` usando snapshot exportado, migración inicial y migración incremental no-op
 - [x] Etapa 7+: Consolidar el artefacto editable MVP de `migration add` con `up.sql`, `down.sql`, `model_snapshot.json` y `migration.rs` explícitamente diferido
 - [x] Etapa 7+: Detectar cambios destructivos en `migration add` y bloquear por defecto salvo confirmación/flag explícita alineada con el plan
 - [x] Etapa 7+: Generar `up.sql` automáticamente desde operaciones compiladas y versionar `model_snapshot.json` con el estado actual del modelo
