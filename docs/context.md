@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene la base real del ejemplo web async `todo_app`, su dominio inicial, sus consultas públicas base y un endpoint HTTP real de health check. Quedan pendientes los endpoints mínimos, el wiring real con pool y la validación contra SQL Server.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene la base real del ejemplo web async `todo_app`, su dominio inicial, sus consultas públicas base, un endpoint HTTP real de health check y endpoints mínimos de lectura. Quedan pendientes el wiring real con pool y la validación contra SQL Server.
 
 ## Dirección Arquitectónica Vigente
 
@@ -46,6 +46,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `examples/todo-app/src/queries.rs` ya define consultas reutilizables del ejemplo (`user_lists_page_query`, `list_items_page_query`, `open_items_preview_query`, `open_items_count_query`) mostrando uso real desde `db.todo_lists.query()...` y `db.todo_items.query()...`; los `SelectQuery` manuales quedaron reducidos a helpers internos de prueba.
 - La cobertura del ejemplo ya fija AST y SQL compilado para filtros, ordenamientos, joins, paginación de página, preview con offset cero y conteo de ítems abiertos.
 - `examples/todo-app/src/lib.rs` ya monta `GET /health` en `build_app(...)` y delega su ejecución a `DbContext::health_check()`, con respuestas HTTP mínimas `200 ok` y `503 database unavailable`.
+- `examples/todo-app/src/http.rs` ya concentra los endpoints mínimos del ejemplo y su contrato de lectura (`TodoAppApi`), incluyendo DTOs serializables y handlers de lectura para listas e ítems.
+- Esos handlers ya muestran uso real de `DbSet::find`, `DbSetQuery::all()` y `DbSetQuery::count()` desde el consumidor web del ejemplo.
 - `examples/todo-app/src/main.rs` sigue usando `PendingTodoAppDbContext` para no adelantar todavía la integración con pool; eso deja el ejemplo compilable y el endpoint visible, pero sin conectividad real hasta la siguiente subtarea.
 - El dominio del ejemplo ya implementa `FromRow` para `User`, `TodoList` y `TodoItem`, requisito práctico para derivar `TodoAppDbContext` y base del siguiente paso de endpoints CRUD.
 - La crate pública `mssql-orm` ahora también incluye un fixture `trybuild` específico del dominio `todo_app` que valida el uso público de `DbSetQuery` con `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`.
@@ -255,7 +257,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 14: Implementar endpoints mínimos del todo_app usando DbSet y cubrir la lógica HTTP con pruebas unitarias o de servicio local`.
-2. Después avanzar en el wiring con pool y la validación real contra SQL Server.
+1. Ejecutar `Etapa 14: Integrar MssqlPool y DbContext::from_pool(...) en el ejemplo web async todo_app con coverage feature-gated del wiring del consumidor`.
+2. Después avanzar en la validación real contra SQL Server.
 3. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

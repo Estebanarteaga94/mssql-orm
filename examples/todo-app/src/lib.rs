@@ -13,10 +13,16 @@ use std::time::Duration;
 
 pub mod db;
 pub mod domain;
+pub mod http;
 pub mod queries;
 
 pub use db::TodoAppDbContext;
 pub use domain::{TodoItem, TodoList, User as TodoUser};
+pub use http::{
+    OpenItemsCountResponse, PageParams, PreviewParams, TodoAppApi, TodoItemPreviewResponse,
+    TodoListResponse, count_open_items_handler, get_todo_list_handler, list_user_lists_handler,
+    preview_open_items_handler,
+};
 pub use queries::{
     list_items_page_query, open_items_count_query, open_items_preview_query, user_lists_page_query,
 };
@@ -41,6 +47,32 @@ impl DbContext for PendingTodoAppDbContext {
     }
 
     fn health_check(&self) -> impl std::future::Future<Output = Result<(), OrmError>> + Send {
+        async { Err(OrmError::new("todo_app pool wiring is still pending")) }
+    }
+}
+
+impl TodoAppApi for PendingTodoAppDbContext {
+    fn find_list(&self, _list_id: i64) -> impl http::FutureResult<Option<TodoList>> {
+        async { Err(OrmError::new("todo_app pool wiring is still pending")) }
+    }
+
+    fn list_user_lists(
+        &self,
+        _user_id: i64,
+        _page: mssql_orm::PageRequest,
+    ) -> impl http::FutureResult<Vec<TodoList>> {
+        async { Err(OrmError::new("todo_app pool wiring is still pending")) }
+    }
+
+    fn preview_open_items(
+        &self,
+        _list_id: i64,
+        _limit: u64,
+    ) -> impl http::FutureResult<Vec<TodoItem>> {
+        async { Err(OrmError::new("todo_app pool wiring is still pending")) }
+    }
+
+    fn count_open_items(&self, _list_id: i64) -> impl http::FutureResult<i64> {
         async { Err(OrmError::new("todo_app pool wiring is still pending")) }
     }
 }
@@ -137,10 +169,23 @@ impl<Db> TodoAppState<Db> {
 
 pub fn build_app<Db>(state: TodoAppState<Db>) -> Router
 where
-    Db: DbContext + Clone + Send + Sync + 'static,
+    Db: TodoAppApi,
 {
     Router::new()
         .route("/health", get(health_check_handler::<Db>))
+        .route("/todo-lists/{list_id}", get(get_todo_list_handler::<Db>))
+        .route(
+            "/users/{user_id}/todo-lists",
+            get(list_user_lists_handler::<Db>),
+        )
+        .route(
+            "/todo-lists/{list_id}/items/preview",
+            get(preview_open_items_handler::<Db>),
+        )
+        .route(
+            "/todo-lists/{list_id}/open-items/count",
+            get(count_open_items_handler::<Db>),
+        )
         .with_state(state)
 }
 
@@ -171,7 +216,13 @@ mod tests {
         DEFAULT_APP_ADDR, DEFAULT_RUST_LOG, TodoAppSettings, TodoAppState, build_app,
         default_operational_options, health_check_handler,
     };
+    use crate::http::{
+        PageParams, PreviewParams, TodoAppApi, count_open_items_handler, get_todo_list_handler,
+        list_user_lists_handler, preview_open_items_handler,
+    };
+    use crate::{TodoItem, TodoList, http};
     use axum::body::to_bytes;
+    use axum::extract::Query;
     use axum::extract::State;
     use axum::http::StatusCode;
     use axum::response::IntoResponse;
@@ -186,18 +237,24 @@ mod tests {
     #[derive(Debug, Clone)]
     struct FakeDbContext {
         health_check_result: Result<(), OrmError>,
+        todo_lists: Vec<TodoList>,
+        todo_items: Vec<TodoItem>,
     }
 
     impl FakeDbContext {
         fn healthy() -> Self {
             Self {
                 health_check_result: Ok(()),
+                todo_lists: sample_lists(),
+                todo_items: sample_items(),
             }
         }
 
         fn unhealthy() -> Self {
             Self {
                 health_check_result: Err(OrmError::new("database unavailable")),
+                todo_lists: Vec::new(),
+                todo_items: Vec::new(),
             }
         }
     }
@@ -219,6 +276,122 @@ mod tests {
             let result = self.health_check_result.clone();
             async move { result }
         }
+    }
+
+    impl TodoAppApi for FakeDbContext {
+        fn find_list(&self, list_id: i64) -> impl http::FutureResult<Option<TodoList>> {
+            let list = self
+                .todo_lists
+                .iter()
+                .find(|list| list.id == list_id)
+                .cloned();
+            async move { Ok(list) }
+        }
+
+        fn list_user_lists(
+            &self,
+            user_id: i64,
+            page: mssql_orm::PageRequest,
+        ) -> impl http::FutureResult<Vec<TodoList>> {
+            let pagination = page.to_pagination();
+            let start = pagination.offset as usize;
+            let end = start.saturating_add(pagination.limit as usize);
+            let lists = self
+                .todo_lists
+                .iter()
+                .filter(|list| list.owner_user_id == user_id && !list.is_archived)
+                .cloned()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect::<Vec<_>>();
+            async move { Ok(lists) }
+        }
+
+        fn preview_open_items(
+            &self,
+            list_id: i64,
+            limit: u64,
+        ) -> impl http::FutureResult<Vec<TodoItem>> {
+            let items = self
+                .todo_items
+                .iter()
+                .filter(|item| item.list_id == list_id && !item.is_completed)
+                .take(limit as usize)
+                .cloned()
+                .collect::<Vec<_>>();
+            async move { Ok(items) }
+        }
+
+        fn count_open_items(&self, list_id: i64) -> impl http::FutureResult<i64> {
+            let count = self
+                .todo_items
+                .iter()
+                .filter(|item| item.list_id == list_id && !item.is_completed)
+                .count() as i64;
+            async move { Ok(count) }
+        }
+    }
+
+    fn sample_lists() -> Vec<TodoList> {
+        vec![
+            TodoList {
+                id: 10,
+                owner_user_id: 7,
+                title: "Inbox".to_string(),
+                is_archived: false,
+                created_at: "2026-04-23T00:00:00".to_string(),
+                version: vec![1],
+            },
+            TodoList {
+                id: 11,
+                owner_user_id: 7,
+                title: "Archived".to_string(),
+                is_archived: true,
+                created_at: "2026-04-23T00:00:00".to_string(),
+                version: vec![2],
+            },
+        ]
+    }
+
+    fn sample_items() -> Vec<TodoItem> {
+        vec![
+            TodoItem {
+                id: 100,
+                list_id: 10,
+                created_by_user_id: 7,
+                completed_by_user_id: None,
+                title: "Ship release".to_string(),
+                position: 1,
+                is_completed: false,
+                completed_at: None,
+                created_at: "2026-04-23T00:00:00".to_string(),
+                version: vec![1],
+            },
+            TodoItem {
+                id: 101,
+                list_id: 10,
+                created_by_user_id: 7,
+                completed_by_user_id: Some(7),
+                title: "Write docs".to_string(),
+                position: 2,
+                is_completed: true,
+                completed_at: Some("2026-04-23T01:00:00".to_string()),
+                created_at: "2026-04-23T00:00:00".to_string(),
+                version: vec![2],
+            },
+            TodoItem {
+                id: 102,
+                list_id: 10,
+                created_by_user_id: 7,
+                completed_by_user_id: None,
+                title: "Review PR".to_string(),
+                position: 3,
+                is_completed: false,
+                completed_at: None,
+                created_at: "2026-04-23T00:00:00".to_string(),
+                version: vec![3],
+            },
+        ]
     }
 
     fn env_with_database_url() -> HashMap<String, String> {
@@ -340,5 +513,110 @@ mod tests {
 
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(&body[..], b"database unavailable");
+    }
+
+    #[tokio::test]
+    async fn get_todo_list_handler_returns_json_payload_for_existing_list() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response =
+            get_todo_list_handler::<FakeDbContext>(State(state), axum::extract::Path(10))
+                .await
+                .into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            r#"{"id":10,"owner_user_id":7,"title":"Inbox","is_archived":false,"created_at":"2026-04-23T00:00:00"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn get_todo_list_handler_returns_not_found_for_unknown_list() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response =
+            get_todo_list_handler::<FakeDbContext>(State(state), axum::extract::Path(999))
+                .await
+                .into_response();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn list_user_lists_handler_filters_archived_lists() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response = list_user_lists_handler::<FakeDbContext>(
+            State(state),
+            axum::extract::Path(7),
+            Query(PageParams {
+                page: 1,
+                page_size: 20,
+            }),
+        )
+        .await
+        .into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            r#"[{"id":10,"owner_user_id":7,"title":"Inbox","is_archived":false,"created_at":"2026-04-23T00:00:00"}]"#
+        );
+    }
+
+    #[tokio::test]
+    async fn preview_open_items_handler_limits_open_items() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response = preview_open_items_handler::<FakeDbContext>(
+            State(state),
+            axum::extract::Path(10),
+            Query(PreviewParams { limit: 1 }),
+        )
+        .await
+        .into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            r#"[{"id":100,"list_id":10,"title":"Ship release","position":1,"is_completed":false}]"#
+        );
+    }
+
+    #[tokio::test]
+    async fn count_open_items_handler_returns_json_count() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response =
+            count_open_items_handler::<FakeDbContext>(State(state), axum::extract::Path(10))
+                .await
+                .into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(String::from_utf8(body.to_vec()).unwrap(), r#"{"count":2}"#);
     }
 }

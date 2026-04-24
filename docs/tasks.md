@@ -1,15 +1,15 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Implementar endpoints mínimos del `todo_app` usando `DbSet` y cubrir la lógica HTTP con pruebas unitarias o de servicio local
 - [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async `todo_app` con coverage feature-gated del wiring del consumidor
 - [ ] Etapa 14: Validar el ejemplo web async `todo_app` contra SQL Server real con smoke test/documentación operativa reproducible
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso
-- [ ] Etapa 14: Implementar endpoints mínimos del `todo_app` usando `DbSet` y cubrir la lógica HTTP con pruebas unitarias o de servicio local
+- [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async `todo_app` con coverage feature-gated del wiring del consumidor
 
 ## Completadas
+- [x] Etapa 14: Implementar endpoints mínimos del `todo_app` usando `DbSet` y cubrir la lógica HTTP con pruebas unitarias o de servicio local
 - [x] Etapa 14: Implementar endpoint de health check del ejemplo web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
 - [x] Etapa 14: Cubrir consultas públicas usadas por `todo_app` para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`
 - [x] Etapa 14: Definir el dominio `todo_app` (`users`, `todo_lists`, `todo_items`) y cubrir metadata/relaciones entre tablas con coverage unitaria y `trybuild`

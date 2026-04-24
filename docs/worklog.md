@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: endpoints mínimos de lectura para `todo_app`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Implementar endpoints mínimos del todo_app usando DbSet y cubrir la lógica HTTP con pruebas unitarias o de servicio local`.
+- Se implementó `examples/todo-app/src/http.rs` como módulo HTTP específico del ejemplo, con DTOs mínimos serializables, parámetros de query (`PageParams`, `PreviewParams`) y handlers para:
+  `GET /todo-lists/{list_id}`,
+  `GET /users/{user_id}/todo-lists`,
+  `GET /todo-lists/{list_id}/items/preview`,
+  `GET /todo-lists/{list_id}/open-items/count`.
+- El módulo define además el trait de lectura `TodoAppApi`; su implementación real sobre `TodoAppDbContext` usa `DbSet::find`, `DbSetQuery::all()` y `DbSetQuery::count()` mediante la surface pública del ORM y las queries del ejemplo ya definidas.
+- `examples/todo-app/src/lib.rs` ahora registra esas rutas en `build_app(...)` y hace que el ejemplo compile también con `PendingTodoAppDbContext`, retornando errores explícitos mientras el wiring real con pool sigue pendiente.
+- Se añadió `serde` como dependencia directa del ejemplo para modelar payloads/params HTTP de forma explícita y estable; no afecta el workspace principal ni mueve responsabilidades arquitectónicas fuera del ejemplo consumidor.
+- Las pruebas unitarias del ejemplo ahora cubren los handlers mínimos con un `FakeDbContext` propio del ejemplo, verificando `404` para listas inexistentes, filtrado de listas archivadas, preview limitado de ítems abiertos y conteo JSON de ítems abiertos.
+
+### Resultado
+
+- El ejemplo `todo_app` ya muestra un uso real del ORM desde HTTP: `find`, `query`, `all` y `count` quedan visibles detrás de endpoints mínimos del consumidor, no solo en tests o helpers internos.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --workspace`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Los endpoints quedan montados sobre `PendingTodoAppDbContext` en `main.rs` hasta integrar el wiring real con `MssqlPool`; eso es deliberado para no adelantar la siguiente subtarea del backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Integrar MssqlPool y DbContext::from_pool(...) en el ejemplo web async todo_app con coverage feature-gated del wiring del consumidor`.
+
 ### Sesión: health check HTTP real en el ejemplo `todo_app`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Implementar endpoint de health check del ejemplo web async reutilizando DbContext::health_check() y cubrirlo con pruebas de handler`.
