@@ -150,6 +150,19 @@ async fn sqlserver_adapter_surfaces_missing_rows_as_none() -> Result<(), OrmErro
     Ok(())
 }
 
+#[tokio::test]
+async fn sqlserver_adapter_health_check_succeeds_against_real_database() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!("skipping SQL Server integration test because {TEST_CONNECTION_ENV} is not set");
+        return Ok(());
+    };
+
+    let mut connection = MssqlConnection::connect(&connection_string).await?;
+    connection.health_check().await?;
+
+    Ok(())
+}
+
 fn test_connection_string() -> Option<String> {
     std::env::var(TEST_CONNECTION_ENV)
         .ok()

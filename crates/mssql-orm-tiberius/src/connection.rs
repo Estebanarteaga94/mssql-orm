@@ -1,11 +1,13 @@
 use crate::config::MssqlConnectionConfig;
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
+use crate::executor::fetch_one_compiled;
 use crate::telemetry::trace_connection;
 use crate::transaction::{
     MssqlTransaction, begin_transaction_scope, commit_transaction_scope, rollback_transaction_scope,
 };
 use futures_io::{AsyncRead, AsyncWrite};
 use mssql_orm_core::OrmError;
+use mssql_orm_query::CompiledQuery;
 use std::time::Duration;
 use tiberius::Client;
 use tokio::net::TcpStream;
@@ -84,6 +86,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
         self.config.options().slow_query
     }
 
+    pub(crate) fn health_options(&self) -> crate::config::MssqlHealthCheckOptions {
+        self.config.options().health
+    }
+
     pub(crate) fn server_addr(&self) -> String {
         self.config.addr()
     }
@@ -142,9 +148,66 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
         .await
     }
 
+    pub async fn health_check(&mut self) -> Result<(), OrmError> {
+        let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
+        let server_addr = self.server_addr();
+        let health_options = self.health_options();
+        let health_timeout = resolve_health_timeout(health_options, self.query_timeout());
+        let query = build_health_check_query(health_options);
+
+        let row = run_with_timeout(health_timeout, "SQL Server health check timed out", async {
+            fetch_one_compiled::<_, HealthCheckRow>(
+                self.client_mut(),
+                query,
+                tracing_options,
+                slow_query_options,
+                &server_addr,
+                health_timeout,
+            )
+            .await
+        })
+        .await?;
+
+        match row {
+            Some(HealthCheckRow { value: 1 }) => Ok(()),
+            Some(_) => Err(OrmError::new(
+                "SQL Server health check returned an unexpected value",
+            )),
+            None => Err(OrmError::new(
+                "SQL Server health check did not return a row",
+            )),
+        }
+    }
+
     pub fn into_inner(self) -> Client<S> {
         self.client
     }
+}
+
+struct HealthCheckRow {
+    value: i32,
+}
+
+impl mssql_orm_core::FromRow for HealthCheckRow {
+    fn from_row<R: mssql_orm_core::Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            value: row.get_required_typed::<i32>("health_check")?,
+        })
+    }
+}
+
+fn resolve_health_timeout(
+    health_options: crate::config::MssqlHealthCheckOptions,
+    query_timeout: Option<Duration>,
+) -> Option<Duration> {
+    health_options.timeout.or(query_timeout)
+}
+
+fn build_health_check_query(
+    health_options: crate::config::MssqlHealthCheckOptions,
+) -> CompiledQuery {
+    CompiledQuery::new(health_options.query.sql().to_string(), vec![])
 }
 
 pub(crate) async fn run_with_timeout<F, T>(
@@ -165,8 +228,41 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::run_with_timeout;
+    use super::{build_health_check_query, resolve_health_timeout, run_with_timeout};
+    use crate::config::{MssqlHealthCheckOptions, MssqlHealthCheckQuery};
     use std::time::Duration;
+
+    #[test]
+    fn health_check_prefers_explicit_health_timeout_over_query_timeout() {
+        let health = MssqlHealthCheckOptions::enabled(MssqlHealthCheckQuery::SelectOne)
+            .with_timeout(Duration::from_secs(3));
+
+        assert_eq!(
+            resolve_health_timeout(health, Some(Duration::from_secs(30))),
+            Some(Duration::from_secs(3))
+        );
+    }
+
+    #[test]
+    fn health_check_falls_back_to_query_timeout_when_no_dedicated_timeout_exists() {
+        let health = MssqlHealthCheckOptions::enabled(MssqlHealthCheckQuery::SelectOne);
+
+        assert_eq!(
+            resolve_health_timeout(health, Some(Duration::from_secs(30))),
+            Some(Duration::from_secs(30))
+        );
+        assert_eq!(resolve_health_timeout(health, None), None);
+    }
+
+    #[test]
+    fn health_check_builds_expected_compiled_query() {
+        let query = build_health_check_query(MssqlHealthCheckOptions::enabled(
+            MssqlHealthCheckQuery::SelectOne,
+        ));
+
+        assert_eq!(query.sql, "SELECT 1 AS [health_check]");
+        assert!(query.params.is_empty());
+    }
 
     #[tokio::test]
     async fn run_with_timeout_returns_future_result_without_timeout() {

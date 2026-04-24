@@ -288,6 +288,14 @@ pub enum MssqlHealthCheckQuery {
     SelectOne,
 }
 
+impl MssqlHealthCheckQuery {
+    pub(crate) fn sql(self) -> &'static str {
+        match self {
+            Self::SelectOne => "SELECT 1 AS [health_check]",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MssqlPoolOptions {
     pub enabled: bool,
@@ -452,5 +460,13 @@ mod tests {
         let error = MssqlConnectionConfig::from_connection_string("server=").unwrap_err();
 
         assert_eq!(error.message(), "invalid SQL Server connection string");
+    }
+
+    #[test]
+    fn health_check_query_uses_stable_sql() {
+        assert_eq!(
+            MssqlHealthCheckQuery::SelectOne.sql(),
+            "SELECT 1 AS [health_check]"
+        );
     }
 }

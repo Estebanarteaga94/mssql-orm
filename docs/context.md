@@ -198,8 +198,9 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
-- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing` y `slow_query` ya alteran runtime del adaptador Tiberius. Health checks, retries y pooling siguen pendientes por subtarea.
+- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing`, `slow_query` y `health_check` ya alteran runtime del adaptador Tiberius. Retries y pooling siguen pendientes por subtarea.
 - `MssqlSlowQueryOptions` ya reutiliza exactamente la medición de duración de `trace_query(...)`: puede emitir `orm.query.slow` con `threshold_ms` y redacción configurable de parámetros, incluso si `MssqlTracingOptions.enabled` está apagado.
+- `MssqlConnection::health_check()` y `DbContext::health_check()` ya ejecutan `SELECT 1 AS [health_check]` sobre la conexión activa, usando `health.timeout` cuando existe y fallback a `query_timeout` en caso contrario.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -237,7 +238,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius`.
-2. Después construir retry policy opcional y acotada sobre la misma base operativa ya instrumentada.
-3. Dejar pooling opcional y su wiring público después de cerrar health checks y retries básicos.
+1. Implementar `Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes`.
+2. Después construir pooling opcional con feature gate y límites explícitos de ownership.
+3. Dejar el wiring público `DbContext` desde pool y el ejemplo web async para después de cerrar retry/pool base.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

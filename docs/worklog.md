@@ -2,6 +2,40 @@
 
 ## 2026-04-23
 
+### Sesión: health checks mínimos para SQL Server/Tiberius
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la siguiente subtarea prioritaria de Etapa 14: `Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/src/config.rs` ahora fija el SQL estable del health check mínimo mediante `MssqlHealthCheckQuery::sql()`, quedando `SelectOne => SELECT 1 AS [health_check]`.
+- `crates/mssql-orm-tiberius/src/connection.rs` ahora expone `MssqlConnection::health_check()`, que ejecuta el health check mínimo sobre la conexión real reutilizando el pipeline existente de ejecución, tracing y slow query logging.
+- El health check usa `MssqlHealthCheckOptions::timeout` cuando existe y, si no, cae en `query_timeout`; si la ejecución vence el plazo retorna `SQL Server health check timed out`.
+- La misma capa valida explícitamente que el query devuelva una fila con el valor esperado, de modo que el health check cubra tanto conectividad como ejecución simple y no solo apertura de socket.
+- `crates/mssql-orm/src/context.rs` ahora añade `DbContext::health_check(&self)` como helper público por defecto sobre `SharedConnection`, y `crates/mssql-orm-macros/src/lib.rs` genera el wrapper inherente `AppDbContext::health_check(&self)` sin romper `connect`, `connect_with_config`, `transaction` ni `save_changes`.
+- Se añadió cobertura unitaria para SQL estable y resolución efectiva de timeout, una aserción pública en `crates/mssql-orm/src/lib.rs` para el nuevo método del contexto y un integration test mínimo en `crates/mssql-orm-tiberius/tests/sqlserver_integration.rs`.
+
+### Resultado
+
+- La Etapa 14 ya dispone de health checks mínimos en la capa adaptadora y en la crate pública: `MssqlConnection::health_check()` y `DbContext::health_check()`/`AppDbContext::health_check()` ejecutan `SELECT 1` con timeout operativo coherente y reutilizan el runtime ya instrumentado.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-tiberius --test sqlserver_integration health_check -- --nocapture`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales.
+- La validación real del integration test de health check hizo skip limpio en este entorno porque `MSSQL_ORM_TEST_CONNECTION_STRING` no estaba definido; el wiring quedó validado hasta ese punto y la prueba queda lista para CI o entorno local con SQL Server disponible.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes`.
+
 ### Sesión: corrección de fixtures `trybuild` para Active Record en CI
 
 - Se revisó el fallo reportado por GitHub Actions en `cargo test -p mssql-orm --test active_record_trybuild` y se confirmó que no provenía de la lógica productiva de Active Record, sino de drift en fixtures UI frente al diagnóstico actual del compilador y del derive `DbContext`.

@@ -144,6 +144,12 @@ mod tests {
     }
 
     #[test]
+    fn exposes_dbcontext_health_check_contract_in_prelude() {
+        let _health_check = DerivedDbContext::health_check;
+        let _trait_health_check = <DerivedDbContext as DbContext>::health_check;
+    }
+
+    #[test]
     fn exposes_active_record_contract_in_prelude() {
         fn require_trait<E: ActiveRecord>() {}
 

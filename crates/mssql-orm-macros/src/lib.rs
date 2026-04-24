@@ -653,6 +653,10 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::transaction(self, operation).await
             }
 
+            pub async fn health_check(&self) -> Result<(), ::mssql_orm::core::OrmError> {
+                <Self as ::mssql_orm::DbContext>::health_check(self).await
+            }
+
             pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
             where
                 #(#save_changes_bounds,)*

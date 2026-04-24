@@ -24,6 +24,15 @@ pub trait DbContext: Sized {
     #[doc(hidden)]
     fn tracking_registry(&self) -> TrackingRegistryHandle;
 
+    fn health_check(&self) -> impl Future<Output = Result<(), OrmError>> + Send {
+        let shared_connection = self.shared_connection();
+
+        async move {
+            let mut connection = shared_connection.lock().await;
+            connection.health_check().await
+        }
+    }
+
     fn transaction<F, Fut, T>(
         &self,
         operation: F,

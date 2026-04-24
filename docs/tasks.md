@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius
 - [ ] Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes
 - [ ] Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership
 - [ ] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
@@ -11,6 +10,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius
 - [x] Operativo: Sincronizar fixture `trybuild` de Active Record con el diagnóstico actual de `DbContext`
 - [x] Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de `tracing`
 - [x] Etapa 14: Instrumentar conexión, ejecución y transacciones con `tracing` estructurado y campos estables
