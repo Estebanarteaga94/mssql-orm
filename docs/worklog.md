@@ -2,6 +2,38 @@
 
 ## 2026-04-24
 
+### Sesión: entrada explícita de snapshot actual en `migration add`
+
+- Se tomó la subtarea `Etapa 7+: Resolver en mssql-orm-cli el contexto objetivo del consumidor para migration add y obtener desde él el snapshot actual del modelo`.
+- Durante la implementación se acotó la tarea: cargar dinámicamente el `DbContext` Rust consumidor y ejecutar `MigrationModelSource` desde la CLI requiere una pieza de exportación/carga separada, por lo que el backlog quedó dividido.
+- Se completó la parte verificable inmediata: `migration add <Name> --model-snapshot <Path>` permite pasar a la CLI un `ModelSnapshot` actual explícito.
+- `mssql-orm-cli` ahora parsea el flag opcional `--model-snapshot`, resuelve rutas relativas contra el root del proyecto y falla con mensaje contextual si no puede leer o deserializar el snapshot.
+- `mssql-orm-migrate` ahora expone `create_migration_scaffold_with_snapshot(...)` para crear scaffolds versionando un snapshot provisto.
+- Se agregó cobertura en la CLI para parsing del nuevo flag y para comprobar que el `model_snapshot.json` de la migración contiene el snapshot de entrada.
+- `docs/migrations.md` documenta el nuevo uso explícito y deja claro que la carga automática del `DbContext` consumidor sigue pendiente.
+
+### Resultado
+
+- `migration add` ya puede obtener y versionar un snapshot actual real cuando el consumidor o un fixture lo provee como JSON.
+- La carga/exportación automática del contexto Rust consumidor queda como subtarea pendiente separada y explícita en `docs/tasks.md`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-cli`
+- `cargo test -p mssql-orm-migrate`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm-cli --all-targets && cargo clippy -p mssql-orm-migrate --all-targets`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos para el alcance completado.
+- `cargo clippy -p mssql-orm-migrate --all-targets` terminó con código 0, pero volvió a reportar warnings preexistentes `collapsible_if` en `crates/mssql-orm-migrate/src/diff.rs`; no se corrigieron porque son limpieza ajena a la tarea.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde mssql-orm-cli para generar el ModelSnapshot actual directamente desde MigrationModelSource`.
+
 ### Sesión: serializar snapshots de modelo para migraciones
 
 - Se ejecutó la subtarea `Etapa 7+: Serializar y deserializar ModelSnapshot y artefactos relacionados para reemplazar el model_snapshot.json placeholder actual`.

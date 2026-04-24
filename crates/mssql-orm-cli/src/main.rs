@@ -1,7 +1,10 @@
-use mssql_orm_migrate::{build_database_update_script, create_migration_scaffold, list_migrations};
+use mssql_orm_migrate::{
+    build_database_update_script, create_migration_scaffold,
+    create_migration_scaffold_with_snapshot, list_migrations, read_model_snapshot,
+};
 use mssql_orm_sqlserver::SqlServerCompiler;
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn main() {
     match run(env::args().collect(), Path::new(".")) {
@@ -15,9 +18,25 @@ fn main() {
 
 fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
     match parse_command(&args)? {
-        CliCommand::MigrationAdd { name } => {
-            let scaffold =
-                create_migration_scaffold(root, &name).map_err(|error| error.to_string())?;
+        CliCommand::MigrationAdd {
+            name,
+            model_snapshot,
+        } => {
+            let scaffold = match model_snapshot {
+                Some(path) => {
+                    let snapshot_path = resolve_project_path(root, &path);
+                    let snapshot = read_model_snapshot(&snapshot_path).map_err(|error| {
+                        format!(
+                            "failed to load current model snapshot from {}: {error}",
+                            snapshot_path.display()
+                        )
+                    })?;
+                    create_migration_scaffold_with_snapshot(root, &name, &snapshot)
+                }
+                None => create_migration_scaffold(root, &name),
+            }
+            .map_err(|error| error.to_string())?;
+
             Ok(format!(
                 "Created migration {}\nPath: {}",
                 scaffold.id,
@@ -52,9 +71,20 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
     }
 }
 
+fn resolve_project_path(root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CliCommand {
-    MigrationAdd { name: String },
+    MigrationAdd {
+        name: String,
+        model_snapshot: Option<PathBuf>,
+    },
     MigrationList,
     DatabaseUpdate,
 }
@@ -62,7 +92,18 @@ enum CliCommand {
 fn parse_command(args: &[String]) -> Result<CliCommand, String> {
     match args {
         [_bin, group, action, name] if group == "migration" && action == "add" => {
-            Ok(CliCommand::MigrationAdd { name: name.clone() })
+            Ok(CliCommand::MigrationAdd {
+                name: name.clone(),
+                model_snapshot: None,
+            })
+        }
+        [_bin, group, action, name, flag, path]
+            if group == "migration" && action == "add" && flag == "--model-snapshot" =>
+        {
+            Ok(CliCommand::MigrationAdd {
+                name: name.clone(),
+                model_snapshot: Some(PathBuf::from(path)),
+            })
         }
         [_bin, group, action] if group == "migration" && action == "list" => {
             Ok(CliCommand::MigrationList)
@@ -71,7 +112,7 @@ fn parse_command(args: &[String]) -> Result<CliCommand, String> {
             Ok(CliCommand::DatabaseUpdate)
         }
         _ => Err(
-            "Usage:\n  mssql-orm-cli migration add <Name>\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
+            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
         ),
     }
 }
@@ -79,6 +120,7 @@ fn parse_command(args: &[String]) -> Result<CliCommand, String> {
 #[cfg(test)]
 mod tests {
     use super::{CliCommand, parse_command, run};
+    use mssql_orm_migrate::read_model_snapshot;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -104,7 +146,23 @@ mod tests {
             ])
             .unwrap(),
             CliCommand::MigrationAdd {
-                name: "CreateCustomers".to_string()
+                name: "CreateCustomers".to_string(),
+                model_snapshot: None
+            }
+        );
+        assert_eq!(
+            parse_command(&[
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "CreateCustomers".to_string(),
+                "--model-snapshot".to_string(),
+                "target/current_model_snapshot.json".to_string(),
+            ])
+            .unwrap(),
+            CliCommand::MigrationAdd {
+                name: "CreateCustomers".to_string(),
+                model_snapshot: Some(PathBuf::from("target/current_model_snapshot.json"))
             }
         );
         assert_eq!(
@@ -144,6 +202,39 @@ mod tests {
 
         assert!(output.contains("Created migration"));
         assert!(root.join("migrations").exists());
+    }
+
+    #[test]
+    fn run_migration_add_uses_current_model_snapshot_when_provided() {
+        let root = temp_project_root();
+        let snapshot_path = root.join("current_model_snapshot.json");
+        fs::write(
+            &snapshot_path,
+            "{\n  \"schemas\": [\n    {\n      \"name\": \"sales\",\n      \"tables\": []\n    }\n  ]\n}\n",
+        )
+        .unwrap();
+
+        let output = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "CreateCustomers".to_string(),
+                "--model-snapshot".to_string(),
+                "current_model_snapshot.json".to_string(),
+            ],
+            &root,
+        )
+        .unwrap();
+
+        let migration_path = output
+            .lines()
+            .find_map(|line| line.strip_prefix("Path: "))
+            .map(PathBuf::from)
+            .unwrap();
+        let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
+
+        assert!(snapshot.schema("sales").is_some());
     }
 
     #[test]

@@ -42,6 +42,13 @@ Mientras la CLI no este instalada globalmente, desde el repo puedes usar:
 cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add CreateCustomers
 ```
 
+Si ya tienes un snapshot actual del modelo generado por un consumidor o fixture, puedes pasarlo de forma explicita:
+
+```bash
+cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- \
+  migration add CreateCustomers --model-snapshot target/current_model_snapshot.json
+```
+
 Eso crea un directorio dentro de `./migrations/` con este shape:
 
 ```text
@@ -57,7 +64,9 @@ Detalles operativos relevantes:
 - el `id` incluye timestamp con resolucion de nanosegundos para reducir colisiones y preservar orden lexico
 - el nombre visible se deriva del slug del directorio
 - `up.sql` y `down.sql` nacen como plantillas vacias con comentario
-- `model_snapshot.json` hoy se scaffolda como placeholder minimo; la CLI actual no lo recalcula automaticamente desde tus entidades
+- sin `--model-snapshot`, `model_snapshot.json` se scaffolda con un snapshot vacio valido
+- con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
+- la CLI actual todavia no carga automaticamente el tipo `DbContext` desde tu crate Rust; esa integracion queda como siguiente paso del pipeline code-first
 
 ## 3. Como nombrar bien una migracion
 

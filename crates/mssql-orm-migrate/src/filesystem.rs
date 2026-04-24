@@ -55,10 +55,7 @@ pub fn create_migration_scaffold_with_snapshot(
         format!("-- Migration: {id}\n-- Write rollback SQL here.\n"),
     )
     .map_err(|_| OrmError::new("failed to write migration down.sql"))?;
-    write_model_snapshot(
-        &directory.join("model_snapshot.json"),
-        snapshot,
-    )?;
+    write_model_snapshot(&directory.join("model_snapshot.json"), snapshot)?;
 
     Ok(MigrationScaffold {
         id,
@@ -221,8 +218,9 @@ fn split_sql_statements(sql: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_database_update_script, create_migration_scaffold, create_migration_scaffold_with_snapshot,
-        list_migrations, read_model_snapshot, write_model_snapshot,
+        build_database_update_script, create_migration_scaffold,
+        create_migration_scaffold_with_snapshot, list_migrations, read_model_snapshot,
+        write_model_snapshot,
     };
     use crate::{ModelSnapshot, SchemaSnapshot};
     use std::fs;
