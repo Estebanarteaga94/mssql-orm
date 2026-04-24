@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: reencauzar `todo_app` al objetivo original de Etapa 14
+
+- El usuario aclaró que la tarea original seguía siendo `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real` y que `todo_app` era una sugerencia para hacer ese ejemplo más realista, no para cambiar de objetivo.
+- Se corrigió `docs/tasks.md` para que `todo_app` vuelva a ser la forma concreta del ejemplo web async de Etapa 14, en lugar de quedar desplazado como iniciativa separada o posterior.
+- El backlog de Etapa 14 quedó reordenado alrededor de ese ejemplo realista: shape/configuración, dominio y relaciones, consultas usadas por el ejemplo, endpoint de health check, endpoints mínimos, wiring con pool y validación real contra SQL Server.
+
+### Resultado
+
+- La Etapa 14 recuperó su sentido original: construir un ejemplo de integración web async usando pool, health check y configuración operativa real, ahora con `todo_app` como materialización más realista de ese objetivo.
+
+### Validación
+
+- Revisión manual de consistencia de `docs/tasks.md` con la instrucción original del usuario y el estado operativo actual.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión corrige el backlog; no introduce todavía código nuevo del ejemplo.
+
+### Próximo paso recomendado
+
+- Empezar por `Etapa 14: Definir el ejemplo web async realista (todo_app) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real`.
+
 ### Sesión: aclarar que `todo_app` es ejemplo, no suite de tests
 
 - El usuario aclaró que `todo_app` debe usarse como ejemplo futuro y no como nombre/vehículo de la suite de pruebas.

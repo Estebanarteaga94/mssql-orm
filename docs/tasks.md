@@ -1,14 +1,13 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real
-- [ ] Etapa 14: Agregar pruebas dedicadas de relaciones entre tablas con coverage unitaria y `trybuild`, independientes del ejemplo final
-- [ ] Etapa 14: Agregar pruebas dedicadas de consultas públicas para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`, independientes del ejemplo final
-- [ ] Etapa 14: Implementar endpoint mínimo de health check sobre framework web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
-- [ ] Etapa 14: Integrar listado/inserción mínima usando `DbSet` en el ejemplo web async y cubrir la lógica HTTP con pruebas unitarias o de servicio local
-- [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async con coverage feature-gated del wiring del consumidor
-- [ ] Etapa 14: Validar el ejemplo web async contra SQL Server real con smoke test/documentación operativa reproducible
-- [ ] Etapa 15: Crear ejemplo end-to-end `todo_app` como referencia funcional de relaciones, queries, paginación y wiring web async
+- [ ] Etapa 14: Definir el ejemplo web async realista (`todo_app`) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real
+- [ ] Etapa 14: Definir el dominio `todo_app` (`users`, `todo_lists`, `todo_items`) y cubrir metadata/relaciones entre tablas con coverage unitaria y `trybuild`
+- [ ] Etapa 14: Cubrir consultas públicas usadas por `todo_app` para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`
+- [ ] Etapa 14: Implementar endpoint de health check del ejemplo web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
+- [ ] Etapa 14: Implementar endpoints mínimos del `todo_app` usando `DbSet` y cubrir la lógica HTTP con pruebas unitarias o de servicio local
+- [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async `todo_app` con coverage feature-gated del wiring del consumidor
+- [ ] Etapa 14: Validar el ejemplo web async `todo_app` contra SQL Server real con smoke test/documentación operativa reproducible
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso
