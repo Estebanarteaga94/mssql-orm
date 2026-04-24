@@ -1,0 +1,18 @@
+[package]
+name = "todo-app"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+default = ["pool-bb8"]
+pool-bb8 = ["mssql-orm/pool-bb8"]
+
+[dependencies]
+axum = "0.8"
+mssql-orm = { path = "../../crates/mssql-orm", default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+

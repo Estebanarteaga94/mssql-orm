@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Definir el ejemplo web async realista (`todo_app`) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real
 - [ ] Etapa 14: Definir el dominio `todo_app` (`users`, `todo_lists`, `todo_items`) y cubrir metadata/relaciones entre tablas con coverage unitaria y `trybuild`
 - [ ] Etapa 14: Cubrir consultas públicas usadas por `todo_app` para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`
 - [ ] Etapa 14: Implementar endpoint de health check del ejemplo web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
@@ -13,6 +12,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 14: Definir el ejemplo web async realista (`todo_app`) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real
 - [x] Operativo: Ampliar backlog del ejemplo web async hacia un `todo_app` con relaciones y cobertura explícita de queries/paginación
 - [x] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
 - [x] Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership

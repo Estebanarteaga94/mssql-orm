@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: base del ejemplo web async realista `todo_app`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Definir el ejemplo web async realista (todo_app) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se creó la crate aislada `examples/todo-app/`, fuera del workspace principal, como base del ejemplo web async realista de Etapa 14.
+- `examples/todo-app/src/lib.rs` ahora fija `TodoAppSettings`, `default_operational_options()`, `TodoAppState<Db>` y `build_app(...)`, dejando establecida la shape de configuración, state y arranque sin introducir aún dominio, endpoints ni wiring real de base de datos.
+- La configuración operativa del ejemplo ya queda explícita y alineada con la surface productiva existente: `connect_timeout`, `query_timeout`, `acquire_timeout`, retry acotado, tracing, slow query, health check y pool `bb8`.
+- `examples/todo-app/src/main.rs` ahora levanta un `Router` vacío sobre `axum`, inicializa tracing desde `RUST_LOG` y hace bind del listener con `APP_ADDR`, preservando que esta subtarea solo cubra arranque/configuración y no endpoints funcionales todavía.
+- `examples/todo-app/README.md` documenta el alcance actual del ejemplo, las variables de entorno y el orden de las siguientes extensiones de Etapa 14.
+- Se añadieron seis pruebas unitarias en la propia crate del ejemplo para cubrir: obligatoriedad de `DATABASE_URL`, defaults de `APP_ADDR`/`RUST_LOG`, overrides explícitos, perfil fijo de `MssqlOperationalOptions`, propagación de opciones a `MssqlConnectionConfig` y construcción de `AppState`/`Router` sin servidor HTTP real.
+
+### Resultado
+
+- La Etapa 14 ya tiene una base real y compilable del ejemplo web async `todo_app`, con configuración y arranque definidos y cubiertos unitariamente, lista para extenderse con dominio, queries, health check, endpoints y wiring con pool.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --workspace`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Durante la validación hubo esperas breves por file locks de `cargo` mientras resolvía/compilaba dependencias del ejemplo aislado.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Definir el dominio todo_app (users, todo_lists, todo_items) y cubrir metadata/relaciones entre tablas con coverage unitaria y trybuild`.
+
 ### Sesión: reencauzar `todo_app` al objetivo original de Etapa 14
 
 - El usuario aclaró que la tarea original seguía siendo `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real` y que `todo_app` era una sugerencia para hacer ese ejemplo más realista, no para cambiar de objetivo.
