@@ -81,6 +81,7 @@ async fn main() -> Result<(), OrmError> {
 ```
 
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
+Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
 
 ## Arquitectura
 
@@ -123,6 +124,17 @@ Guía reproducible para:
 - usar `filter`, `order_by` y `take`
 
 Documento: [docs/quickstart.md](docs/quickstart.md)
+
+### Guía `code-first`
+
+Guía conceptual y práctica para:
+
+- modelar entidades con `#[derive(Entity)]`
+- definir `Insertable`, `Changeset` y `DbContext`
+- entender el rol de `DbSet<T>` en CRUD y consultas
+- fijar límites reales de la estrategia `code-first` actual
+
+Documento: [docs/code-first.md](docs/code-first.md)
 
 ### `todo-app`
 

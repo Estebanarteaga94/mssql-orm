@@ -2,6 +2,32 @@
 
 ## 2026-04-23
 
+### Sesión: preparar guía `code-first` pública
+
+- Se ejecutó la subtarea `Etapa 15: Preparar guía code-first alineada con derives, DbContext, DbSet y límites actuales`.
+- Se añadió `docs/code-first.md` como guía pública específica del enfoque `code-first` actual del proyecto.
+- La guía deja explícito qué piezas componen hoy esa experiencia: `#[derive(Entity)]`, `#[derive(Insertable)]`, `#[derive(Changeset)]`, `#[derive(DbContext)]`, `DbSet<T>`, relaciones por `foreign_key` y los límites vigentes de la surface.
+- Se evitó documentar como disponible lo que todavía es roadmap: la guía aclara que no existe aún una capa de fluent configuration pública y que el soporte sigue centrado en SQL Server y primary keys simples para la ruta base de `DbSet`.
+- `README.md` ahora enlaza también la nueva guía `code-first` para que forme parte del surface documental público del release.
+- Para mantener la documentación honesta respecto a la API real, se añadió `crates/mssql-orm/tests/ui/code_first_public_valid.rs` y se registró en `crates/mssql-orm/tests/trybuild.rs`.
+
+### Resultado
+
+- El repositorio ya tiene una guía `code-first` pública y verificable, separada del quickstart y alineada con la surface real de derives, `DbContext` y `DbSet`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar guía de migraciones (migration add, migration list, database update) y límites explícitos`.
+
 ### Sesión: re-alinear la descomposición de Etapa 15 con el plan maestro
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe una copia vigente en la raíz del repositorio.
