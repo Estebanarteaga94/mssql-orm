@@ -1,13 +1,13 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
 - [ ] Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
 - [x] Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership
 - [x] Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes
 - [x] Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius

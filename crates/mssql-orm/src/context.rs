@@ -15,8 +15,76 @@ use mssql_orm_sqlserver::SqlServerCompiler;
 use mssql_orm_tiberius::{
     MssqlConnection, MssqlConnectionConfig, MssqlOperationalOptions, TokioConnectionStream,
 };
+#[cfg(feature = "pool-bb8")]
+use mssql_orm_tiberius::{MssqlPool, MssqlPooledConnection};
 
-pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>>;
+#[derive(Clone)]
+pub struct SharedConnection {
+    inner: Arc<SharedConnectionInner>,
+}
+
+enum SharedConnectionInner {
+    Direct(tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>),
+    #[cfg(feature = "pool-bb8")]
+    Pool(MssqlPool),
+}
+
+pub enum SharedConnectionGuard<'a> {
+    Direct(tokio::sync::MutexGuard<'a, MssqlConnection<TokioConnectionStream>>),
+    #[cfg(feature = "pool-bb8")]
+    Pool(MssqlPooledConnection<'a>),
+}
+
+impl SharedConnection {
+    pub fn from_connection(connection: MssqlConnection<TokioConnectionStream>) -> Self {
+        Self {
+            inner: Arc::new(SharedConnectionInner::Direct(tokio::sync::Mutex::new(
+                connection,
+            ))),
+        }
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    pub fn from_pool(pool: MssqlPool) -> Self {
+        Self {
+            inner: Arc::new(SharedConnectionInner::Pool(pool)),
+        }
+    }
+
+    pub async fn lock(&self) -> Result<SharedConnectionGuard<'_>, OrmError> {
+        match self.inner.as_ref() {
+            SharedConnectionInner::Direct(connection) => {
+                Ok(SharedConnectionGuard::Direct(connection.lock().await))
+            }
+            #[cfg(feature = "pool-bb8")]
+            SharedConnectionInner::Pool(pool) => {
+                Ok(SharedConnectionGuard::Pool(pool.acquire().await?))
+            }
+        }
+    }
+}
+
+impl core::ops::Deref for SharedConnectionGuard<'_> {
+    type Target = MssqlConnection<TokioConnectionStream>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            SharedConnectionGuard::Direct(connection) => connection,
+            #[cfg(feature = "pool-bb8")]
+            SharedConnectionGuard::Pool(connection) => connection,
+        }
+    }
+}
+
+impl core::ops::DerefMut for SharedConnectionGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            SharedConnectionGuard::Direct(connection) => connection,
+            #[cfg(feature = "pool-bb8")]
+            SharedConnectionGuard::Pool(connection) => connection,
+        }
+    }
+}
 
 pub trait DbContext: Sized {
     fn from_shared_connection(connection: SharedConnection) -> Self;
@@ -28,7 +96,7 @@ pub trait DbContext: Sized {
         let shared_connection = self.shared_connection();
 
         async move {
-            let mut connection = shared_connection.lock().await;
+            let mut connection = shared_connection.lock().await?;
             connection.health_check().await
         }
     }
@@ -45,21 +113,21 @@ pub trait DbContext: Sized {
         let shared_connection = self.shared_connection();
         async move {
             {
-                let mut connection = shared_connection.lock().await;
+                let mut connection = shared_connection.lock().await?;
                 connection.begin_transaction_scope().await?;
             }
 
-            let transaction_context = Self::from_shared_connection(Arc::clone(&shared_connection));
+            let transaction_context = Self::from_shared_connection(shared_connection.clone());
             let result = operation(transaction_context).await;
 
             match result {
                 Ok(value) => {
-                    let mut connection = shared_connection.lock().await;
+                    let mut connection = shared_connection.lock().await?;
                     connection.commit_transaction().await?;
                     Ok(value)
                 }
                 Err(error) => {
-                    let mut connection = shared_connection.lock().await;
+                    let mut connection = shared_connection.lock().await?;
                     connection.rollback_transaction().await?;
                     Err(error)
                 }
@@ -264,7 +332,7 @@ impl<E: Entity> DbSet<E> {
     {
         let compiled = SqlServerCompiler::compile_insert(&self.insert_query(&insertable))?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let inserted = connection.fetch_one(compiled).await?;
 
         inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
@@ -284,7 +352,7 @@ impl<E: Entity> DbSet<E> {
             concurrency_token.clone(),
         )?)?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let updated = connection.fetch_one(compiled).await?;
         drop(connection);
 
@@ -304,7 +372,7 @@ impl<E: Entity> DbSet<E> {
     {
         let compiled = SqlServerCompiler::compile_delete(&self.delete_query(key)?)?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let result = connection.execute(compiled).await?;
 
         Ok(result.total() > 0)
@@ -319,7 +387,7 @@ impl<E: Entity> DbSet<E> {
             &self.delete_query_sql_value(key, concurrency_token)?,
         )?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let result = connection.execute(compiled).await?;
 
         Ok(result.total() > 0)
@@ -362,7 +430,7 @@ impl<E: Entity> DbSet<E> {
     {
         let compiled = SqlServerCompiler::compile_insert(&self.insert_query_values(values))?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let inserted = connection.fetch_one(compiled).await?;
 
         inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
@@ -390,7 +458,7 @@ impl<E: Entity> DbSet<E> {
             concurrency_token.clone(),
         )?)?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let updated = connection.fetch_one(compiled).await?;
         drop(connection);
 
@@ -418,11 +486,10 @@ impl<E: Entity> DbSet<E> {
     }
 
     pub fn shared_connection(&self) -> SharedConnection {
-        Arc::clone(
-            self.connection
-                .as_ref()
-                .expect("DbSet requires an initialized shared connection"),
-        )
+        self.connection
+            .as_ref()
+            .expect("DbSet requires an initialized shared connection")
+            .clone()
     }
 
     #[doc(hidden)]
@@ -588,7 +655,7 @@ impl<E: Entity> Changeset<E> for RawChangeset {
 
 pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection, OrmError> {
     let connection = MssqlConnection::connect(connection_string).await?;
-    Ok(Arc::new(tokio::sync::Mutex::new(connection)))
+    Ok(SharedConnection::from_connection(connection))
 }
 
 pub async fn connect_shared_with_options(
@@ -604,7 +671,12 @@ pub async fn connect_shared_with_config(
     config: MssqlConnectionConfig,
 ) -> Result<SharedConnection, OrmError> {
     let connection = MssqlConnection::connect_with_config(config).await?;
-    Ok(Arc::new(tokio::sync::Mutex::new(connection)))
+    Ok(SharedConnection::from_connection(connection))
+}
+
+#[cfg(feature = "pool-bb8")]
+pub fn connect_shared_from_pool(pool: MssqlPool) -> SharedConnection {
+    SharedConnection::from_pool(pool)
 }
 
 #[cfg(test)]

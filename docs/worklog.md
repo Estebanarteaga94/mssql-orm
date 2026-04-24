@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: wiring público de `DbContext` sobre pool
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Exponer wiring público DbContext desde pool sin romper connect, from_connection ni SharedConnection`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/src/context.rs` dejó de modelar `SharedConnection` como alias a `Arc<Mutex<MssqlConnection>>` y ahora lo representa como wrapper clonable capaz de envolver conexión directa o pool, manteniendo el mismo nombre público.
+- La nueva implementación introduce un guard uniforme `SharedConnectionGuard<'_>` que expone `Deref/DerefMut` hacia `MssqlConnection`, permitiendo que `DbSet`, `DbSetQuery`, `health_check()` y `transaction(...)` sigan reutilizando la misma semántica operativa aunque el origen real sea una conexión directa o una adquisición desde pool.
+- Bajo `pool-bb8`, `SharedConnection::from_pool(...)` y `connect_shared_from_pool(...)` ya permiten integrar un `MssqlPool` con la surface existente sin romper `connect_shared(...)`, `connect_shared_with_options(...)`, `connect_shared_with_config(...)` ni la ruta directa `from_connection(...)`.
+- `crates/mssql-orm-macros/src/lib.rs` ahora genera `AppDbContext::from_pool(pool)` detrás de `pool-bb8`, preservando simultáneamente `from_shared_connection(...)`, `from_connection(...)`, `connect(...)`, `connect_with_options(...)` y `connect_with_config(...)`.
+- La ruta directa se conserva intacta: `connect*` y `from_connection(...)` siguen construyendo un `SharedConnection` sobre una conexión única, mientras que la ruta de pool crea un `SharedConnection` respaldado por `MssqlPool`.
+- `crates/mssql-orm/src/lib.rs` ahora reexporta también `connect_shared_from_pool` bajo `pool-bb8`, y la cobertura pública feature-gated ya verifica que existan tanto la surface del pool como el wiring `DerivedDbContext::from_pool`.
+
+### Resultado
+
+- La Etapa 14 ya expone wiring público de `DbContext` desde pool sin romper las rutas previas de conexión directa ni el contrato público `SharedConnection`; el mismo contexto derivado puede nacer ahora desde conexión única o desde pool según el feature y el constructor usados.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --lib`
+- `cargo check -p mssql-orm --features pool-bb8`
+- `cargo test -p mssql-orm --features pool-bb8 --lib`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Esta sesión no creó todavía el ejemplo web async real; esa capacidad permanece como siguiente subtarea de Etapa 14.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`.
+
 ### Sesión: pooling opcional con feature gate `pool-bb8`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership`.

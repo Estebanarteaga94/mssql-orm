@@ -495,7 +495,7 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
 
             Ok(quote! {
                 #field_ident: ::mssql_orm::DbSet::<#entity_type>::with_tracking_registry(
-                    ::std::sync::Arc::clone(&connection),
+                    connection.clone(),
                     ::std::sync::Arc::clone(&tracking_registry)
                 )
             })
@@ -615,7 +615,14 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 >,
             ) -> Self {
                 <Self as ::mssql_orm::DbContext>::from_shared_connection(
-                    ::std::sync::Arc::new(::mssql_orm::tokio::sync::Mutex::new(connection))
+                    ::mssql_orm::SharedConnection::from_connection(connection)
+                )
+            }
+
+            #[cfg(feature = "pool-bb8")]
+            pub fn from_pool(pool: ::mssql_orm::MssqlPool) -> Self {
+                <Self as ::mssql_orm::DbContext>::from_shared_connection(
+                    ::mssql_orm::SharedConnection::from_pool(pool)
                 )
             }
 

@@ -78,7 +78,7 @@ impl<E: Entity> DbSetQuery<E> {
     {
         let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         connection.fetch_all(compiled).await
     }
 
@@ -88,14 +88,14 @@ impl<E: Entity> DbSetQuery<E> {
     {
         let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         connection.fetch_one(compiled).await
     }
 
     pub async fn count(self) -> Result<i64, OrmError> {
         let compiled = SqlServerCompiler::compile_count(&self.count_query())?;
         let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await;
+        let mut connection = shared_connection.lock().await?;
         let row = connection.fetch_one::<CountRow>(compiled).await?;
 
         row.map(|row| row.value)

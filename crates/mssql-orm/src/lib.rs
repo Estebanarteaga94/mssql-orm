@@ -20,6 +20,8 @@ pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
 pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
+#[cfg(feature = "pool-bb8")]
+pub use context::connect_shared_from_pool;
 pub use context::{
     DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
     connect_shared_with_config, connect_shared_with_options,
@@ -41,6 +43,8 @@ pub use tracking::{EntityState, Tracked};
 pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
 
 pub mod prelude {
+    #[cfg(feature = "pool-bb8")]
+    pub use crate::connect_shared_from_pool;
     pub use crate::{
         ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
         EntityColumnPredicateExt, EntityState, MssqlConnectionConfig, MssqlHealthCheckOptions,
@@ -141,6 +145,13 @@ mod tests {
         let builder = super::MssqlPool::builder().max_size(8);
 
         assert_eq!(builder.options().max_size, 8);
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn exposes_dbcontext_pool_wiring_when_feature_is_enabled() {
+        let _from_pool = DerivedDbContext::from_pool;
+        let _shared_from_pool = super::connect_shared_from_pool;
     }
 
     #[test]
