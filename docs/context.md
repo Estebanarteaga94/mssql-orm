@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: además de la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool`), el ejemplo web async `todo_app` ya tiene dominio, queries públicas, endpoints mínimos, wiring real con `MssqlPool` y validación reproducible contra SQL Server real. La Etapa 15 ya quedó descompuesta en subtareas de release/documentación pública y ya tiene cerradas las dos primeras: `README.md` principal y quickstart reproducible. El siguiente foco natural es consolidar ejemplos y guías operativas.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: además de la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool`), el ejemplo web async `todo_app` ya tiene dominio, queries públicas, endpoints mínimos, wiring real con `MssqlPool` y validación reproducible contra SQL Server real. La Etapa 15 ya quedó descompuesta en subtareas de release/documentación pública y ya tiene cerradas las tres primeras: `README.md` principal, quickstart reproducible y consolidación de ejemplos/guías operativas. El siguiente foco natural es preparar el changelog inicial.
 
 ## Dirección Arquitectónica Vigente
 
@@ -28,6 +28,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
 - Para la Etapa 15, el usuario quiere que el `README.md` principal sea llamativo, didáctico y orientado a “vender” la librería: debe priorizar propuesta de valor, claridad de uso, quick wins y ejemplos atractivos, no solo inventario técnico de módulos.
 - `docs/quickstart.md` ya existe como quickstart público reproducible para conexión, CRUD base y query builder; además quedó respaldado por el fixture `trybuild` `crates/mssql-orm/tests/ui/quickstart_public_valid.rs`, para que la documentación no derive hacia una API inválida.
+- `examples/README.md` ya centraliza la guía de ejemplos disponibles y deja explícito que `todo-app` es el ejemplo ejecutable real presente en el árbol actual.
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
 - `mssql-orm-core` ahora también expone helpers explícitos de metadata relacional sobre `ForeignKeyMetadata` y `EntityMetadata`, incluyendo búsqueda por nombre, por columna local y por tabla referenciada.
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.
@@ -175,8 +176,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La misma prueba pública ahora acepta `KEEP_TEST_TABLES=1` para conservar `dbo.mssql_orm_public_crud` y facilitar inspección manual posterior en SQL Server.
 - La misma prueba pública ahora también acepta `KEEP_TEST_ROWS=1` para conservar la tabla y dejar una fila final persistida, facilitando inspección manual con datos reales.
 - La misma batería pública ahora también cubre `db.transaction(...)` contra SQL Server real, validando persistencia con `COMMIT` y reversión con `ROLLBACK`.
-- El repositorio ahora también incluye `examples/basic-crud/` como ejemplo ejecutable fuera del workspace principal, validado con `cargo run --manifest-path`.
-- Ese ejemplo usa `DATABASE_URL`, prepara `dbo.basic_crud_users`, recorre `insert`, `find`, `query`, `update` y `delete`, y limpia la tabla al final.
+- El árbol actual de `examples/` expone de forma verificable `examples/todo-app/` como ejemplo ejecutable real; la guía índice quedó centralizada en `examples/README.md`.
+- El worklog conserva referencias históricas a un ejemplo `basic-crud`, pero ese ejemplo no está presente en el árbol actual del repositorio y no debe seguir tratándose como artefacto disponible en la documentación vigente.
 - `mssql-orm-sqlserver` ahora compila `CountQuery` con alias estable `AS [count]`, habilitando materialización consistente del conteo desde la crate pública.
 - `mssql-orm-macros` ya implementa `#[derive(DbContext)]` para structs con campos `DbSet<Entidad>`, validando en compilación que el shape del contexto siga el contrato previsto.
 - La crate pública `mssql-orm` ahora también expone `ActiveRecord`, implementado blanket sobre toda `Entity`; su superficie de Etapa 10 ya incluye `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.delete(&db)` y `entity.save(&db)`, delegando estrictamente a `DbContextEntitySet<E>` y `DbSet<E>`.
@@ -211,7 +212,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 - Connection string actualmente usada para validaciones reales e integraciones locales:
   `Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;`
-- Usarla para `MSSQL_ORM_TEST_CONNECTION_STRING` en pruebas reales y para `DATABASE_URL` en el ejemplo `examples/basic-crud/` mientras el entorno local siga siendo el mismo.
+- Usarla para `MSSQL_ORM_TEST_CONNECTION_STRING` en pruebas reales y para `DATABASE_URL` en `examples/todo-app/` mientras el entorno local siga siendo el mismo.
 - Esta configuración es específica del entorno local actual; si SQL Server, credenciales o base cambian, debe actualizarse el mismo día en esta sección y en el `worklog`.
 
 ## Riesgos Inmediatos

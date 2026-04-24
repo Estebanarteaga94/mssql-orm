@@ -14,6 +14,8 @@ Estado actual:
 
 La siguiente etapa del backlog ya no es del ejemplo en sí, sino del release/documentación pública del proyecto.
 
+Índice de ejemplos disponibles en el repo: [../README.md](../README.md).
+
 ## Variables de entorno
 
 - `DATABASE_URL` obligatoria

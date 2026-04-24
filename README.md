@@ -142,6 +142,8 @@ cargo run --manifest-path examples/todo-app/Cargo.toml
 
 Más detalle en [examples/todo-app/README.md](examples/todo-app/README.md).
 
+Índice de ejemplos disponibles: [examples/README.md](examples/README.md).
+
 ## Estado Real del Proyecto
 
 El proyecto ya no está en fase “placeholder”. Las etapas fundacionales y gran parte de la superficie pública principal están implementadas y validadas.

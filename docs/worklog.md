@@ -2,6 +2,34 @@
 
 ## 2026-04-23
 
+### Sesión: consolidar ejemplos y guías operativas del release
+
+- Se ejecutó la subtarea `Etapa 15: Consolidar ejemplos ejecutables y guías de uso (todo_app, variables de entorno y smoke local, y resolver la inconsistencia documental de basic-crud)`.
+- Se añadió `examples/README.md` como índice público del árbol `examples/`, dejando claro que el ejemplo ejecutable real disponible hoy es `todo-app`.
+- `README.md` principal ahora enlaza ese índice de ejemplos.
+- `examples/todo-app/README.md` ahora también enlaza el índice general de `examples/`.
+- `docs/context.md` se mantuvo alineado con el árbol real: `todo-app` figura como ejemplo actual disponible y `basic-crud` queda solo como referencia histórica en el `worklog`.
+- Se preservó la información operativa útil del ejemplo real: variables de entorno, comando de ejecución y smoke local con `sqlcmd`.
+
+### Resultado
+
+- La documentación vigente del release ya es consistente con el árbol real del repositorio: `todo-app` es el ejemplo disponible y `basic-crud` ya no aparece como artefacto ejecutable actual.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- Revisión manual de `README.md`, `examples/README.md`, `examples/todo-app/README.md` y `docs/context.md`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Las referencias a `basic-crud` se preservan en el historial (`docs/worklog.md`) porque siguen siendo parte del registro de sesiones; la corrección se aplicó sobre la documentación vigente y no sobre el histórico.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas`.
+
 ### Sesión: quickstart reproducible para la API pública
 
 - Se ejecutó la subtarea `Etapa 15: Preparar quickstart reproducible para conexión, CRUD base y query builder público`.

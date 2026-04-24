@@ -2,13 +2,13 @@
 
 ## Pendientes
 - [ ] Operativo: Descomponer la Etapa 15 de release en subtareas verificables y ordenadas
-- [ ] Etapa 15: Consolidar ejemplos ejecutables y guías de uso (`todo_app`, variables de entorno y smoke local, y resolver la inconsistencia documental de `basic-crud`)
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 15: Consolidar ejemplos ejecutables y guías de uso (`todo_app`, variables de entorno y smoke local, y resolver la inconsistencia documental de `basic-crud`)
 - [x] Etapa 15: Preparar quickstart reproducible para conexión, CRUD base y query builder público
 - [x] Etapa 15: Consolidar documentación pública base del release (`README`, alcance actual, estado por etapas y límites explícitos)
 - [x] Operativo: Re-alinear el row mapping con el plan maestro generando `FromRow` automático desde derive y retirando boilerplate manual de ejemplos/tests
