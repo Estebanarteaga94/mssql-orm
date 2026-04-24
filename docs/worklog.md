@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: timeouts configurables de conexión y ejecución
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14 usando la surface de configuración definida en la sesión previa.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de sqlserver ni ejecución fuera de tiberius` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/src/connection.rs` ahora aplica `connect_timeout` desde `MssqlOperationalOptions` al bootstrap completo del cliente Tiberius mediante un helper interno `run_with_timeout(...)`, retornando error explícito `SQL Server connection timed out` cuando vence el plazo.
+- La misma capa ahora expone `query_timeout()` en `MssqlConnection` y propaga ese valor a la apertura y cierre de transacciones.
+- `crates/mssql-orm-tiberius/src/executor.rs` ahora aplica `query_timeout` a `execute`, `query_raw`, `fetch_one` y `fetch_all`, de modo que el límite de ejecución viva exclusivamente en la crate adaptadora y no contamine el compilador SQL ni la API pública con un pipeline paralelo.
+- `crates/mssql-orm-tiberius/src/transaction.rs` ahora preserva `query_timeout` dentro de `MssqlTransaction` y lo reaplica a ejecución de queries y a comandos `BEGIN`, `COMMIT` y `ROLLBACK`.
+- Se añadieron pruebas unitarias del helper de timeout y se activó `tokio::time` en la crate adaptadora para soportar la implementación real.
+
+### Resultado
+
+- La Etapa 14 ya soporta timeouts configurables de conexión y ejecución en la capa correcta (`mssql-orm-tiberius`), reutilizando la surface pública ya definida y sin mover SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera del adaptador Tiberius.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La sesión cubre timeouts de conexión, ejecución y comandos transaccionales, pero todavía no instrumenta eventos, slow query logs ni health checks; esas capacidades siguen como subtareas separadas de Etapa 14.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Instrumentar conexión, ejecución y transacciones con tracing estructurado y campos estables`.
+
 ### Sesión: surface y configuración operativa de producción para `mssql-orm-tiberius`
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la Etapa 14 del plan exige `pool opcional`, `timeouts`, `retry policy`, `tracing`, `slow query logs` y `health checks`, así que esta sesión se limitó a definir el contrato y el wiring público sin activar todavía comportamiento nuevo.

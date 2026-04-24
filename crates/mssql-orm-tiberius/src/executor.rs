@@ -1,4 +1,4 @@
-use crate::connection::MssqlConnection;
+use crate::connection::{MssqlConnection, run_with_timeout};
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use crate::parameter::PreparedQuery;
 use crate::row::MssqlRow;
@@ -93,28 +93,41 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     pub async fn execute(&mut self, query: CompiledQuery) -> Result<ExecuteResult, OrmError> {
-        execute_compiled(self.client_mut(), query).await
+        run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
+            execute_compiled(self.client_mut(), query).await
+        })
+        .await
     }
 
     pub async fn query_raw<'a>(
         &'a mut self,
         query: CompiledQuery,
     ) -> Result<QueryStream<'a>, OrmError> {
-        query_raw_compiled(self.client_mut(), query).await
+        let query_timeout = self.query_timeout();
+        run_with_timeout(query_timeout, "SQL Server query timed out", async {
+            query_raw_compiled(self.client_mut(), query).await
+        })
+        .await
     }
 
     pub async fn fetch_one<T>(&mut self, query: CompiledQuery) -> Result<Option<T>, OrmError>
     where
         T: FromRow + Send,
     {
-        fetch_one_compiled(self.client_mut(), query).await
+        run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
+            fetch_one_compiled(self.client_mut(), query).await
+        })
+        .await
     }
 
     pub async fn fetch_all<T>(&mut self, query: CompiledQuery) -> Result<Vec<T>, OrmError>
     where
         T: FromRow + Send,
     {
-        fetch_all_compiled(self.client_mut(), query).await
+        run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
+            fetch_all_compiled(self.client_mut(), query).await
+        })
+        .await
     }
 }
 

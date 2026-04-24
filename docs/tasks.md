@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de `sqlserver` ni ejecución fuera de `tiberius`
 - [ ] Etapa 14: Instrumentar conexión, ejecución y transacciones con `tracing` estructurado y campos estables
 - [ ] Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de `tracing`
 - [ ] Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius
@@ -14,6 +13,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de `sqlserver` ni ejecución fuera de `tiberius`
 - [x] Etapa 14: Definir surface y configuración operativa de producción para `mssql-orm-tiberius` y la crate pública (`timeouts`, `retry`, `tracing`, slow query, health, pool)
 - [x] Operativo: Descomponer la Etapa 14 de producción en subtareas verificables y ordenadas
 - [x] Etapa 13: Soportar `RenameTable` explícito en snapshots, diff y DDL SQL Server
