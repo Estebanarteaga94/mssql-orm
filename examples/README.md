@@ -24,9 +24,9 @@ cargo run --manifest-path examples/todo-app/Cargo.toml
 Smoke local:
 
 ```bash
-sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
+sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
 
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
 APP_ADDR='127.0.0.1:4011' \
 RUST_LOG='warn,todo_app=info,mssql_orm=warn' \
 cargo run --manifest-path examples/todo-app/Cargo.toml

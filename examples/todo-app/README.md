@@ -33,13 +33,13 @@ cargo run --manifest-path examples/todo-app/Cargo.toml
 Preparar fixture:
 
 ```bash
-sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
+sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
 ```
 
 Levantar el ejemplo:
 
 ```bash
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
 APP_ADDR='127.0.0.1:4011' \
 RUST_LOG='warn,todo_app=info,mssql_orm=warn' \
 cargo run --manifest-path examples/todo-app/Cargo.toml
@@ -58,7 +58,7 @@ curl -i 'http://127.0.0.1:4011/todo-lists/10/open-items/count'
 También queda una prueba ignorada, útil para repetir la lectura real sin pasar por HTTP:
 
 ```bash
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
 cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture
 ```
 

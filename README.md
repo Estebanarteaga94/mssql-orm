@@ -62,7 +62,7 @@ struct AppDb {
 #[tokio::main]
 async fn main() -> Result<(), OrmError> {
     let db = AppDb::connect(
-        "Server=localhost;Database=tempdb;User Id=SA;Password=secret;TrustServerCertificate=True;Encrypt=False;"
+        "Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;"
     )
     .await?;
 

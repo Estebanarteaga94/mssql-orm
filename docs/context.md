@@ -210,10 +210,10 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Configuración Operativa Local
 
-- Connection string actualmente usada para validaciones reales e integraciones locales:
-  `Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;`
-- Usarla para `MSSQL_ORM_TEST_CONNECTION_STRING` en pruebas reales y para `DATABASE_URL` en `examples/todo-app/` mientras el entorno local siga siendo el mismo.
-- Esta configuración es específica del entorno local actual; si SQL Server, credenciales o base cambian, debe actualizarse el mismo día en esta sección y en el `worklog`.
+- Plantilla de connection string para validaciones reales e integraciones locales:
+  `Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;`
+- Usarla como forma base para `MSSQL_ORM_TEST_CONNECTION_STRING` en pruebas reales y para `DATABASE_URL` en `examples/todo-app/`, reemplazando credenciales por valores propios del entorno local.
+- Esta configuración debe mantenerse sin credenciales reales en la documentación; si cambia el entorno local, actualizar solo la plantilla o las notas operativas necesarias.
 
 ## Riesgos Inmediatos
 

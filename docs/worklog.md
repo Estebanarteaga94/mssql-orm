@@ -2,6 +2,28 @@
 
 ## 2026-04-23
 
+### Sesión: sanitizar credenciales en documentación
+
+- Se retiraron cadenas de conexión y credenciales reales de la documentación vigente y del historial operativo.
+- `README.md`, `docs/quickstart.md`, `examples/README.md`, `examples/todo-app/README.md`, `docs/context.md` y `docs/worklog.md` ahora usan placeholders como `<usuario>` y `<password>` en lugar de valores reales.
+- La documentación mantiene la forma de los comandos y connection strings, pero ya no expone secretos del entorno local.
+
+### Resultado
+
+- La documentación quedó apta para compartirse sin revelar credenciales reales usadas durante validaciones locales.
+
+### Validación
+
+- Búsqueda global en `README.md`, `docs/` y `examples/` para confirmar que no quedaran cadenas sensibles previas.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Continuar con `Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas`.
+
 ### Sesión: consolidar ejemplos y guías operativas del release
 
 - Se ejecutó la subtarea `Etapa 15: Consolidar ejemplos ejecutables y guías de uso (todo_app, variables de entorno y smoke local, y resolver la inconsistencia documental de basic-crud)`.
@@ -191,7 +213,7 @@
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Validar el ejemplo web async todo_app contra SQL Server real con smoke test/documentación operativa reproducible`.
 - Se añadió `examples/todo-app/scripts/smoke_setup.sql` como fixture reproducible para `tempdb`, creando `todo.users`, `todo.todo_lists` y `todo.todo_items` con datos mínimos para el smoke del ejemplo.
 - Ese fixture deja documentado un matiz operativo de SQL Server: la combinación `users -> todo_lists ON DELETE CASCADE`, `todo_lists -> todo_items ON DELETE CASCADE` y `todo_items.completed_by_user_id -> users ON DELETE SET NULL` cae en `multiple cascade paths`, así que el script de smoke usa `NO ACTION` para esa FK porque la validación aquí es de lectura y no de borrado.
-- La validación real se ejecutó con `sqlcmd` sobre SQL Server local (`localhost`, `tempdb`, login `SA`) y luego con el binario del ejemplo usando `DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;'`.
+- La validación real se ejecutó con `sqlcmd` sobre SQL Server local (`localhost`, `tempdb`) y luego con el binario del ejemplo usando una `DATABASE_URL` local propia del entorno.
 - El smoke HTTP verificó con `curl` las rutas reales del ejemplo:
   `GET /health`,
   `GET /todo-lists/10`,
@@ -208,8 +230,8 @@
 
 ### Validación
 
-- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql`
-- `DATABASE_URL='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture`
+- `sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql`
+- `DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture`
 - `cargo test --manifest-path examples/todo-app/Cargo.toml`
 - Smoke HTTP manual con `cargo run --manifest-path examples/todo-app/Cargo.toml` y `curl` sobre `/health`, `/todo-lists/10`, `/users/7/todo-lists?page=1&page_size=20`, `/todo-lists/10/items/preview?limit=2` y `/todo-lists/10/open-items/count`
 
@@ -1238,7 +1260,7 @@
 - `cargo check --workspace`
 - `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
 - `cargo test -p mssql-orm --test trybuild`
-- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
 
 ### Bloqueos
 
@@ -1270,7 +1292,7 @@
 - `cargo test -p mssql-orm --lib`
 - `cargo check --workspace`
 - `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
-- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
 
 ### Bloqueos
 
@@ -1302,7 +1324,7 @@
 - `cargo test -p mssql-orm --lib`
 - `cargo check --workspace`
 - `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
-- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
 
 ### Bloqueos
 
@@ -1335,7 +1357,7 @@
 - `cargo test -p mssql-orm --lib`
 - `cargo check --workspace`
 - `cargo clippy -p mssql-orm --all-targets --all-features -- -D warnings`
-- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' cargo test -p mssql-orm --test stage5_public_crud -- --test-threads=1`
 
 ### Bloqueos
 
@@ -2132,7 +2154,7 @@
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add QaCreateCustomers`
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add QaAddPhone`
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update`
-- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i /tmp/mssql_orm_stage7_retry.sql`
+- `sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i /tmp/mssql_orm_stage7_retry.sql`
 - Consultas `sqlcmd` sobre `sys.tables`, `sys.columns` y `dbo.__mssql_orm_migrations`
 
 ### Próximo paso recomendado
@@ -2161,7 +2183,7 @@
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add CreateCustomers`
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- migration add AddPhone`
 - `cargo run -q --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update`
-- `sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -b -i <script.sql>`
+- `sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i <script.sql>`
 - Consultas `sqlcmd` sobre `sys.tables`, `sys.columns` y `dbo.__mssql_orm_migrations` para verificar creación inicial, cambio incremental e idempotencia
 
 ### Bloqueos
@@ -2919,7 +2941,7 @@
 - Durante la primera validación real apareció una particularidad importante de SQL Server/Tiberius: las `#temp tables` creadas en una llamada RPC no persistieron entre ejecuciones separadas, por lo que las pruebas se rediseñaron para usar tablas únicas en `tempdb.dbo`.
 - La connection string proporcionada originalmente (`Database=test`) no fue usable porque la base `test` no estaba accesible para el login `sa`; se comprobó esto con `sqlcmd` y la validación real se ejecutó con la misma credencial sobre `master`.
 - Se verificó conectividad TCP a `localhost:1433` y autenticación real con `sqlcmd` antes de cerrar la implementación, para separar problemas de infraestructura de problemas del adaptador.
-- Se validó de forma explícita la prueba real con `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=master;User Id=SA;Password=...;' cargo test -p mssql-orm-tiberius --test sqlserver_integration -- --nocapture`.
+- Se validó de forma explícita la prueba real con `MSSQL_ORM_TEST_CONNECTION_STRING='Server=localhost;Database=master;User Id=<usuario>;Password=<password>;' cargo test -p mssql-orm-tiberius --test sqlserver_integration -- --nocapture`.
 - También se validó el workspace con `cargo check --workspace`, `cargo fmt --all --check`, `cargo test --workspace` y `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
 
 ### Resultado

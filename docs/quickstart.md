@@ -29,10 +29,10 @@ CREATE TABLE dbo.quickstart_users (
 GO
 ```
 
-Si estás en el mismo entorno local usado durante el desarrollo de este repo:
+Si estás en tu entorno local:
 
 ```bash
-sqlcmd -S localhost -U SA -P 'Ea.930318' -d tempdb -C -Q "IF OBJECT_ID('dbo.quickstart_users', 'U') IS NOT NULL DROP TABLE dbo.quickstart_users; CREATE TABLE dbo.quickstart_users (id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL);"
+sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -Q "IF OBJECT_ID('dbo.quickstart_users', 'U') IS NOT NULL DROP TABLE dbo.quickstart_users; CREATE TABLE dbo.quickstart_users (id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL);"
 ```
 
 ## 2. Crear un proyecto Rust
@@ -88,6 +88,12 @@ struct AppDb {
 }
 ```
 
+Configura la conexión mediante una cadena propia de tu entorno, por ejemplo:
+
+```text
+Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;
+```
+
 ## 4. Conectar y ejecutar CRUD + query builder
 
 ```rust
@@ -96,7 +102,7 @@ use mssql_orm::prelude::*;
 #[tokio::main]
 async fn main() -> Result<(), OrmError> {
     let db = AppDb::connect(
-        "Server=localhost;Database=tempdb;User Id=SA;Password=Ea.930318;TrustServerCertificate=True;Encrypt=False;"
+        "Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;"
     )
     .await?;
 
