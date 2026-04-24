@@ -2,6 +2,34 @@
 
 ## 2026-04-24
 
+### Sesión: generar `up.sql` automático desde el plan compilado
+
+- Se ejecutó la subtarea `Etapa 7+: Generar up.sql automáticamente desde operaciones compiladas y versionar model_snapshot.json con el estado actual del modelo`.
+- `mssql-orm-migrate` ahora expone `write_migration_up_sql(...)` para persistir el SQL compilado del plan de migración.
+- `mssql-orm-cli migration add` ahora escribe `up.sql` automáticamente cuando dispone de `MigrationPlan`.
+- El contenido de `up.sql` se genera a partir del SQL observable de `SqlServerCompiler::compile_migration_operations(...)`; cuando no hay operaciones, se escribe explícitamente `-- No schema changes detected.`.
+- `model_snapshot.json` ya venía versionándose con el snapshot actual; esta sesión completa ese artefacto dejando también `up.sql` materializado en el scaffold.
+- Se añadieron pruebas en `mssql-orm-migrate` para escritura de `up.sql` con sentencias reales y con caso no-op, y se extendieron pruebas de la CLI para validar el contenido del archivo generado.
+
+### Resultado
+
+- `migration add` ya no solo scaffolda y calcula el plan: ahora deja una migración utilizable con `up.sql` generado automáticamente y `model_snapshot.json` sincronizado con el snapshot actual.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test -p mssql-orm-cli`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión no introduce todavía guards sobre cambios destructivos; el plan puede generar `DropTable` o `DropColumn` y volcarlos a `up.sql` mientras la detección/bloqueo siga pendiente como subtarea separada.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Detectar cambios destructivos en migration add y bloquear por defecto salvo confirmación/flag explícita alineada con el plan`.
+
 ### Sesión: integrar diff y compilación SQL en `migration add`
 
 - Se ejecutó la subtarea `Etapa 7+: Integrar el pipeline completo snapshot -> diff -> MigrationOperation -> DDL SQL Server dentro de migration add`.

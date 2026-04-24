@@ -90,13 +90,13 @@ Detalles operativos relevantes:
 
 - el `id` incluye timestamp con resolucion de nanosegundos para reducir colisiones y preservar orden lexico
 - el nombre visible se deriva del slug del directorio
-- `up.sql` y `down.sql` nacen como plantillas vacias con comentario
+- `up.sql` se genera automaticamente cuando `migration add` dispone de snapshot actual real; `down.sql` sigue naciendo como plantilla vacia con comentario
 - sin `--model-snapshot`, `model_snapshot.json` se scaffolda con un snapshot vacio valido
 - con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
 - con `--snapshot-bin`, la CLI ejecuta `cargo run --bin <bin>` sobre el manifest indicado, captura `stdout` y valida que sea un `ModelSnapshot` JSON valido
 - el exportador del consumidor sigue siendo explicito: la CLI no resuelve sola el nombre del `DbContext`, sino que delega esa seleccion al binario que uses para exportar el snapshot
 - cuando existe una migracion local previa y `migration add` recibe un snapshot actual real, la CLI carga el `model_snapshot.json` de la ultima migracion y reporta ambos lados (`Previous snapshot` y `Current snapshot`) como base del siguiente paso de diff
-- en ese mismo caso, la CLI ya ejecuta internamente `snapshot -> diff -> MigrationOperation -> DDL SQL Server` y reporta `Planned operations` y `Compiled SQL statements`; el SQL todavia no se escribe automaticamente en `up.sql` en esta etapa
+- en ese mismo caso, la CLI ejecuta internamente `snapshot -> diff -> MigrationOperation -> DDL SQL Server`, reporta `Planned operations` y `Compiled SQL statements`, y escribe ese SQL compilado en `up.sql`
 
 ## 3. Como nombrar bien una migracion
 
@@ -118,6 +118,7 @@ La regla practica es simple: una migracion deberia representar una intencion cla
 ## 4. Que editar en `up.sql`
 
 `up.sql` es la fuente de verdad operativa de lo que se aplicara en la base.
+Ahora puede nacer autogenerado por la CLI, pero sigue siendo un artefacto revisable y editable antes de aplicar la migracion.
 
 Ejemplo:
 
@@ -220,7 +221,7 @@ Reglas recomendadas para no romper historial:
 
 Conviene asumir estos limites hoy:
 
-- la CLI actual no genera automaticamente `up.sql` desde tus entidades
+- la CLI actual ya genera `up.sql` desde el diff del snapshot actual contra la ultima migracion local cuando le proporcionas un snapshot actual real
 - la CLI actual no aplica el script directamente a SQL Server; solo lo imprime
 - la CLI actual no expone `database downgrade`
 - `down.sql` no se consume automaticamente

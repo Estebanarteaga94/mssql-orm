@@ -13,7 +13,7 @@ pub use diff::{
 pub use filesystem::{
     MigrationEntry, MigrationScaffold, build_database_update_script, create_migration_scaffold,
     create_migration_scaffold_with_snapshot, latest_migration, list_migrations,
-    read_latest_model_snapshot, read_model_snapshot, write_model_snapshot,
+    read_latest_model_snapshot, read_model_snapshot, write_migration_up_sql, write_model_snapshot,
 };
 pub use operation::{
     AddColumn, AddForeignKey, AlterColumn, CreateIndex, CreateSchema, CreateTable, DropColumn,

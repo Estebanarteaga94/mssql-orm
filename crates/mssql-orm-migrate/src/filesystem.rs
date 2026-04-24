@@ -69,6 +69,18 @@ pub fn write_model_snapshot(path: &Path, snapshot: &ModelSnapshot) -> Result<(),
         .map_err(|_| OrmError::new("failed to write migration model snapshot"))
 }
 
+pub fn write_migration_up_sql(path: &Path, sql_statements: &[String]) -> Result<(), OrmError> {
+    let sql = if sql_statements.is_empty() {
+        String::from("-- No schema changes detected.\n")
+    } else {
+        let mut sql = sql_statements.join(";\n\n");
+        sql.push_str(";\n");
+        sql
+    };
+
+    fs::write(path, sql).map_err(|_| OrmError::new("failed to write migration up.sql"))
+}
+
 pub fn read_model_snapshot(path: &Path) -> Result<ModelSnapshot, OrmError> {
     let json = fs::read_to_string(path)
         .map_err(|_| OrmError::new("failed to read migration model snapshot"))?;
@@ -235,7 +247,8 @@ mod tests {
     use super::{
         build_database_update_script, create_migration_scaffold,
         create_migration_scaffold_with_snapshot, latest_migration, list_migrations,
-        read_latest_model_snapshot, read_model_snapshot, write_model_snapshot,
+        read_latest_model_snapshot, read_model_snapshot, write_migration_up_sql,
+        write_model_snapshot,
     };
     use crate::{ModelSnapshot, SchemaSnapshot};
     use std::fs;
@@ -399,5 +412,40 @@ mod tests {
 
         assert!(!script.contains("EXEC(N'');"));
         assert!(script.contains("INSERT INTO [dbo].[__mssql_orm_migrations]"));
+    }
+
+    #[test]
+    fn writes_up_sql_from_compiled_statements() {
+        let root = temp_project_root();
+        let up_sql_path = root.join("up.sql");
+
+        write_migration_up_sql(
+            &up_sql_path,
+            &[
+                "CREATE SCHEMA [sales]".to_string(),
+                "CREATE TABLE [sales].[customers] ([id] bigint NOT NULL)".to_string(),
+            ],
+        )
+        .unwrap();
+
+        let sql = fs::read_to_string(up_sql_path).unwrap();
+
+        assert_eq!(
+            sql,
+            "CREATE SCHEMA [sales];\n\nCREATE TABLE [sales].[customers] ([id] bigint NOT NULL);\n"
+        );
+    }
+
+    #[test]
+    fn writes_noop_up_sql_when_no_statements_exist() {
+        let root = temp_project_root();
+        let up_sql_path = root.join("up.sql");
+
+        write_migration_up_sql(&up_sql_path, &[]).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(up_sql_path).unwrap(),
+            "-- No schema changes detected.\n"
+        );
     }
 }

@@ -2,7 +2,7 @@ use mssql_orm_migrate::{
     MigrationOperation, ModelSnapshot, build_database_update_script, create_migration_scaffold,
     create_migration_scaffold_with_snapshot, diff_column_operations, diff_relational_operations,
     diff_schema_and_table_operations, list_migrations, read_latest_model_snapshot,
-    read_model_snapshot,
+    read_model_snapshot, write_migration_up_sql,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 use std::env;
@@ -37,6 +37,10 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                 None => create_migration_scaffold(root, &name),
             }
             .map_err(|error| error.to_string())?;
+            if let Some(plan) = migration_plan.as_ref() {
+                write_migration_up_sql(&scaffold.directory.join("up.sql"), &plan.sql_statements)
+                    .map_err(|error| error.to_string())?;
+            }
 
             let mut output = format!(
                 "Created migration {}\nPath: {}",
@@ -72,6 +76,7 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                     "\nCompiled SQL statements: {}",
                     plan.sql_statements.len()
                 ));
+                output.push_str("\nup.sql: generated");
             }
 
             Ok(output)
@@ -427,6 +432,7 @@ mod tests {
         assert!(output.contains("Current snapshot: schemas=1 tables=0"));
         assert!(output.contains("Planned operations: 1"));
         assert!(output.contains("Compiled SQL statements: 1"));
+        assert!(output.contains("up.sql: generated"));
 
         let migration_path = output
             .lines()
@@ -434,8 +440,13 @@ mod tests {
             .map(PathBuf::from)
             .unwrap();
         let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
+        let up_sql = fs::read_to_string(migration_path.join("up.sql")).unwrap();
 
         assert!(snapshot.schema("sales").is_some());
+        assert_eq!(
+            up_sql,
+            "IF SCHEMA_ID(N'sales') IS NULL EXEC(N'CREATE SCHEMA [sales]');\n"
+        );
     }
 
     #[test]
@@ -486,12 +497,14 @@ mod tests {
         assert!(output.contains("Current snapshot: schemas=1 tables=1"));
         assert!(output.contains("Planned operations: 2"));
         assert!(output.contains("Compiled SQL statements: 2"));
+        assert!(output.contains("up.sql: generated"));
         let migration_path = output
             .lines()
             .find_map(|line| line.strip_prefix("Path: "))
             .map(PathBuf::from)
             .unwrap();
         let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
+        let up_sql = fs::read_to_string(migration_path.join("up.sql")).unwrap();
 
         assert_eq!(snapshot.schemas.len(), 1);
         assert!(
@@ -501,6 +514,8 @@ mod tests {
                 .table("customers")
                 .is_some()
         );
+        assert!(up_sql.contains("IF SCHEMA_ID(N'sales') IS NULL EXEC(N'CREATE SCHEMA [sales]')"));
+        assert!(up_sql.contains("CREATE TABLE [sales].[customers]"));
     }
 
     #[test]
@@ -540,6 +555,7 @@ mod tests {
         assert!(output.contains("Current snapshot: schemas=1 tables=0"));
         assert!(output.contains("Planned operations: 2"));
         assert!(output.contains("Compiled SQL statements: 2"));
+        assert!(output.contains("up.sql: generated"));
     }
 
     #[test]
