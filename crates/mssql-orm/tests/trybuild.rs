@@ -12,6 +12,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/insertable_changeset_valid.rs");
     tests.pass("tests/ui/dbcontext_valid.rs");
     tests.pass("tests/ui/query_builder_public_valid.rs");
+    tests.pass("tests/ui/query_builder_todo_app_valid.rs");
     tests.compile_fail("tests/ui/entity_missing_primary_key.rs");
     tests.compile_fail("tests/ui/entity_identity_invalid_type.rs");
     tests.compile_fail("tests/ui/entity_foreign_key_empty_segment.rs");

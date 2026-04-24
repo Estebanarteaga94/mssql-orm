@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: consultas públicas del dominio `todo_app`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Cubrir consultas públicas usadas por todo_app para filter, order_by, joins, limit, take, paginate y count`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y, tras validarla, se dejó cerrada y se avanzó la siguiente subtarea a `En Progreso`.
+- Se añadió `examples/todo-app/src/queries.rs` como módulo reutilizable del ejemplo, con queries puras para `user_lists_page_query`, `list_items_page_query`, `open_items_preview_query` y `open_items_count_query`.
+- Ese módulo cubre el shape real que el ejemplo podrá reutilizar después en handlers/servicios: filtros por owner/lista, ordenamiento por `title` y `position`, joins entre `todo_items`, `todo_lists` y `users`, paginación explícita para páginas y previews, y conteo de ítems abiertos.
+- Las pruebas unitarias del ejemplo ahora validan tanto el AST esperado como el SQL Server compilado para las consultas principales de listado y conteo, sin mover compilación SQL fuera de `mssql-orm-sqlserver`.
+- Se añadió el fixture `crates/mssql-orm/tests/ui/query_builder_todo_app_valid.rs` y su registro en `crates/mssql-orm/tests/trybuild.rs` para fijar en compile-time el uso público del query builder del ejemplo, incluyendo `filter`, `order_by`, `inner_join`, `left_join`, `limit`, `take`, `paginate` y `count`.
+- Durante la validación apareció un detalle de Rust, no del ORM: una closure `async` que devolvía `query.count().await` sobre `&DbContext` introducía un problema de lifetime en `trybuild`. Se sustituyó por una `async fn` explícita para dejar la cobertura estable.
+
+### Resultado
+
+- La Etapa 14 ya tiene consultas públicas reutilizables para el ejemplo `todo_app`, con cobertura observable sobre AST, SQL compilado y type-check del query builder público usado por consumidores.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --workspace`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Durante la validación hubo esperas breves por file locks de `cargo` al ejecutar verificaciones concurrentes.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Implementar endpoint de health check del ejemplo web async reutilizando DbContext::health_check() y cubrirlo con pruebas de handler`.
+
 ### Sesión: dominio base de `todo_app` con metadata relacional
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Definir el dominio todo_app (users, todo_lists, todo_items) y cubrir metadata/relaciones entre tablas con coverage unitaria y trybuild`.

@@ -9,8 +9,12 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 pub mod domain;
+pub mod queries;
 
 pub use domain::{TodoItem, TodoList, User as TodoUser};
+pub use queries::{
+    list_items_page_query, open_items_count_query, open_items_preview_query, user_lists_page_query,
+};
 
 const DEFAULT_APP_ADDR: &str = "127.0.0.1:3000";
 const DEFAULT_RUST_LOG: &str = "info,todo_app=debug,mssql_orm=debug";
