@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: health check HTTP real en el ejemplo `todo_app`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Implementar endpoint de health check del ejemplo web async reutilizando DbContext::health_check() y cubrirlo con pruebas de handler`.
+- Se mantuvo la implementación dentro del ejemplo real, no como fixture aislado de tests: `examples/todo-app/src/db.rs` ahora define `TodoAppDbContext` derivado con `DbSet<User>`, `DbSet<TodoList>` y `DbSet<TodoItem>`.
+- `examples/todo-app/src/lib.rs` ahora registra `GET /health` en `build_app(...)` y expone `health_check_handler(...)`, que delega en `state.db.health_check().await` y traduce el resultado a `200 ok` o `503 database unavailable`.
+- Para no adelantar todavía la subtarea de pool, `examples/todo-app/src/main.rs` usa temporalmente `PendingTodoAppDbContext`; esto deja el ejemplo compilable y expone el endpoint HTTP real, pero sigue haciendo explícito que el wiring de base de datos queda pendiente para la siguiente fase.
+- Como `#[derive(DbContext)]` exige que las entidades puedan mapearse desde filas, `examples/todo-app/src/domain.rs` ahora implementa `FromRow` para `User`, `TodoList` y `TodoItem`, preparando además el terreno para los endpoints CRUD mínimos que siguen en el backlog.
+- A raíz del feedback del usuario, `examples/todo-app/src/queries.rs` dejó de exponer construcción manual de `SelectQuery` como surface del ejemplo y ahora muestra uso real desde consumidor: `db.todo_lists.query()...`, `db.todo_items.query()...`, manteniendo los helpers AST solo para pruebas internas.
+- La cobertura del ejemplo ahora incluye pruebas unitarias del handler de health check con un `FakeDbContext` que devuelve `Ok(())` o error, además de seguir validando dominio, queries y arranque.
+
+### Resultado
+
+- El ejemplo `todo_app` ya expone un endpoint HTTP real de health check y muestra consultas idiomáticas desde `DbContext`, listo para que la siguiente subtarea agregue endpoints mínimos sobre la misma base.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --workspace`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- El endpoint `/health` queda montado sobre `PendingTodoAppDbContext` en `main.rs` hasta integrar el wiring real con `MssqlPool`; eso es deliberado para no adelantar la siguiente subtarea del backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Implementar endpoints mínimos del todo_app usando DbSet y cubrir la lógica HTTP con pruebas unitarias o de servicio local`.
+
 ### Sesión: consultas públicas del dominio `todo_app`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Cubrir consultas públicas usadas por todo_app para filter, order_by, joins, limit, take, paginate y count`.

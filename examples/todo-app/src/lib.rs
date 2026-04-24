@@ -1,16 +1,21 @@
-use axum::Router;
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::{Router, routing::get};
 use mssql_orm::prelude::{
-    MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
-    MssqlParameterLogMode, MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions,
-    MssqlTimeoutOptions, MssqlTracingOptions, OrmError,
+    DbContext, MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
+    MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolOptions, MssqlRetryOptions,
+    MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, OrmError,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+pub mod db;
 pub mod domain;
 pub mod queries;
 
+pub use db::TodoAppDbContext;
 pub use domain::{TodoItem, TodoList, User as TodoUser};
 pub use queries::{
     list_items_page_query, open_items_count_query, open_items_preview_query, user_lists_page_query,
@@ -18,6 +23,27 @@ pub use queries::{
 
 const DEFAULT_APP_ADDR: &str = "127.0.0.1:3000";
 const DEFAULT_RUST_LOG: &str = "info,todo_app=debug,mssql_orm=debug";
+
+#[derive(Debug, Clone, Default)]
+pub struct PendingTodoAppDbContext;
+
+impl DbContext for PendingTodoAppDbContext {
+    fn from_shared_connection(_connection: mssql_orm::SharedConnection) -> Self {
+        Self
+    }
+
+    fn shared_connection(&self) -> mssql_orm::SharedConnection {
+        panic!("pending todo_app db context does not expose a shared connection yet")
+    }
+
+    fn tracking_registry(&self) -> mssql_orm::TrackingRegistryHandle {
+        std::sync::Arc::new(mssql_orm::TrackingRegistry::default())
+    }
+
+    fn health_check(&self) -> impl std::future::Future<Output = Result<(), OrmError>> + Send {
+        async { Err(OrmError::new("todo_app pool wiring is still pending")) }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TodoAppSettings {
@@ -111,9 +137,21 @@ impl<Db> TodoAppState<Db> {
 
 pub fn build_app<Db>(state: TodoAppState<Db>) -> Router
 where
-    Db: Clone + Send + Sync + 'static,
+    Db: DbContext + Clone + Send + Sync + 'static,
 {
-    Router::new().with_state(state)
+    Router::new()
+        .route("/health", get(health_check_handler::<Db>))
+        .with_state(state)
+}
+
+pub async fn health_check_handler<Db>(State(state): State<TodoAppState<Db>>) -> impl IntoResponse
+where
+    Db: DbContext + Clone + Send + Sync + 'static,
+{
+    match state.db.health_check().await {
+        Ok(()) => (StatusCode::OK, "ok"),
+        Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "database unavailable"),
+    }
 }
 
 pub fn init_tracing(rust_log: &str) {
@@ -131,11 +169,57 @@ pub fn init_tracing(rust_log: &str) {
 mod tests {
     use super::{
         DEFAULT_APP_ADDR, DEFAULT_RUST_LOG, TodoAppSettings, TodoAppState, build_app,
-        default_operational_options,
+        default_operational_options, health_check_handler,
     };
+    use axum::body::to_bytes;
+    use axum::extract::State;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use mssql_orm::prelude::OrmError;
+    use mssql_orm::{DbContext, SharedConnection, TrackingRegistry, TrackingRegistryHandle};
     use std::collections::HashMap;
+    use std::future;
     use std::net::SocketAddr;
+    use std::sync::Arc;
     use std::time::Duration;
+
+    #[derive(Debug, Clone)]
+    struct FakeDbContext {
+        health_check_result: Result<(), OrmError>,
+    }
+
+    impl FakeDbContext {
+        fn healthy() -> Self {
+            Self {
+                health_check_result: Ok(()),
+            }
+        }
+
+        fn unhealthy() -> Self {
+            Self {
+                health_check_result: Err(OrmError::new("database unavailable")),
+            }
+        }
+    }
+
+    impl DbContext for FakeDbContext {
+        fn from_shared_connection(_connection: SharedConnection) -> Self {
+            Self::healthy()
+        }
+
+        fn shared_connection(&self) -> SharedConnection {
+            panic!("fake db context does not expose a real shared connection")
+        }
+
+        fn tracking_registry(&self) -> TrackingRegistryHandle {
+            Arc::new(TrackingRegistry::default())
+        }
+
+        fn health_check(&self) -> impl future::Future<Output = Result<(), OrmError>> + Send {
+            let result = self.health_check_result.clone();
+            async move { result }
+        }
+    }
 
     fn env_with_database_url() -> HashMap<String, String> {
         HashMap::from([(
@@ -222,9 +306,39 @@ mod tests {
     #[test]
     fn app_state_and_router_can_be_built_without_http_server() {
         let settings = TodoAppSettings::from_map(&env_with_database_url()).unwrap();
-        let state = TodoAppState::new((), settings.clone());
+        let state = TodoAppState::new(FakeDbContext::healthy(), settings.clone());
         let _app = build_app(state.clone());
 
         assert_eq!(state.settings, settings);
+    }
+
+    #[tokio::test]
+    async fn health_check_handler_returns_ok_when_dbcontext_is_healthy() {
+        let state = TodoAppState::new(
+            FakeDbContext::healthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response = health_check_handler(State(state)).await.into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(&body[..], b"ok");
+    }
+
+    #[tokio::test]
+    async fn health_check_handler_returns_service_unavailable_when_dbcontext_fails() {
+        let state = TodoAppState::new(
+            FakeDbContext::unhealthy(),
+            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
+        );
+
+        let response = health_check_handler(State(state)).await.into_response();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(&body[..], b"database unavailable");
     }
 }
