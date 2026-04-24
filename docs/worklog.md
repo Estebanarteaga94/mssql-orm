@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: re-alinear la descomposición de Etapa 15 con el plan maestro
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe una copia vigente en la raíz del repositorio.
+- Se ejecutó la tarea operativa `Operativo: Descomponer la Etapa 15 de release en subtareas verificables y ordenadas`.
+- `docs/tasks.md` quedó corregido porque la descomposición anterior era incompleta frente a los entregables de Etapa 15 definidos en el plan maestro.
+- Se agregaron subtareas pendientes explícitas para las guías todavía no representadas en el backlog: `code-first`, migraciones, query builder, transacciones, relaciones y `API docs`.
+- También se actualizó `docs/context.md` para reflejar que la Etapa 15 sigue abierta y que el próximo foco ya no es solo el changelog, sino primero completar esas guías faltantes del release.
+
+### Resultado
+
+- La Etapa 15 volvió a quedar trazada de forma consistente entre plan maestro, backlog y contexto operativo.
+- El backlog ahora cubre todos los entregables documentales del release mencionados en el plan, en lugar de una versión reducida a README, quickstart, ejemplos, changelog y validación final.
+
+### Validación
+
+- Revisión manual de consistencia entre `docs/plan_orm_sqlserver_tiberius_code_first.md`, `docs/tasks.md` y `docs/context.md`.
+- Verificación de que `docs/tasks.md` mantiene exactamente las secciones `Pendientes`, `En Progreso` y `Completadas`.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No aplican validaciones `cargo` en esta sesión porque el cambio fue exclusivamente documental y no tocó código Rust ni manifests.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar guía code-first alineada con derives, DbContext, DbSet y límites actuales`.
+
 ### Sesión: sanitizar credenciales en documentación
 
 - Se retiraron cadenas de conexión y credenciales reales de la documentación vigente y del historial operativo.
