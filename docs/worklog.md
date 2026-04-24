@@ -2,37 +2,6 @@
 
 ## 2026-04-23
 
-### Sesión: ejemplo web async con pool y health check
-
-- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`.
-- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
-- Se añadió la crate aislada `examples/axum-pool/`, fuera del workspace principal igual que `examples/basic-crud/`, para demostrar integración HTTP async sin contaminar la build base del workspace.
-- `examples/axum-pool/src/main.rs` implementa un ejemplo sobre `axum` que construye `MssqlOperationalOptions`, crea `MssqlConnectionConfig`, levanta `MssqlPool`, construye `AppDb` desde `from_pool(...)`, ejecuta `health_check()` al arranque y expone `GET /healthz`, `GET /users` y `POST /users`.
-- El mismo ejemplo bootstrappea una tabla demo `dbo.axum_pool_users` mediante una adquisición explícita desde el pool, de modo que el flujo web pueda ejecutarse localmente sin depender de migraciones previas.
-- `examples/axum-pool/Cargo.toml` declara dependencias nuevas `axum`, `serde`, `tracing` y `tracing-subscriber`, limitadas al ejemplo y no al workspace principal; también reexpone un feature local `pool-bb8` que reenvía a `mssql-orm/pool-bb8` para que el derive `DbContext` del crate consumidor pueda generar `from_pool(...)`.
-- `examples/axum-pool/README.md` documenta variables de entorno, ejecución y endpoints, dejando explícito que el ejemplo demuestra pool, health check y configuración operativa real.
-
-### Resultado
-
-- La Etapa 14 quedó cerrada también con un ejemplo web async ejecutable sobre la surface pública ya construida: pool opcional, `DbContext::from_pool(...)`, `health_check()` y configuración operativa real ya tienen una integración HTTP concreta de referencia.
-
-### Validación
-
-- `cargo fmt --all --check`
-- `cargo fmt --all --check` en `examples/axum-pool/`
-- `cargo check --workspace`
-- `cargo check -p mssql-orm --features pool-bb8`
-- `cargo check --manifest-path examples/axum-pool/Cargo.toml`
-
-### Bloqueos
-
-- No hubo bloqueos funcionales persistentes.
-- Durante `cargo check --manifest-path examples/axum-pool/Cargo.toml` hubo espera breve por file locks de `cargo` mientras resolvía dependencias nuevas del ejemplo.
-
-### Próximo paso recomendado
-
-- Iniciar `Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog`.
-
 ### Sesión: wiring público de `DbContext` sobre pool
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Exponer wiring público DbContext desde pool sin romper connect, from_connection ni SharedConnection`.
