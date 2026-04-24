@@ -6,6 +6,7 @@ mod error;
 mod executor;
 mod parameter;
 mod row;
+mod telemetry;
 mod transaction;
 
 use mssql_orm_core::CrateIdentity;

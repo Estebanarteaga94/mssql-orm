@@ -2,6 +2,38 @@
 
 ## 2026-04-23
 
+### Sesión: instrumentación con `tracing` en conexión, queries y transacciones
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; para esta subtarea se siguieron explícitamente las secciones `17.3. Logs sin datos sensibles` y `18. Observabilidad`, que exigen `tracing`, eventos `orm.query.start/finish/error`, eventos transaccionales y no exponer parámetros por defecto.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 14: Instrumentar conexión, ejecución y transacciones con tracing estructurado y campos estables` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `crates/mssql-orm-tiberius/src/telemetry.rs` como módulo interno de instrumentación, centralizando clasificación de operaciones SQL, formateo de timeouts y redacción estable de parámetros (`disabled` o `[REDACTED]`) según `MssqlTracingOptions`.
+- `crates/mssql-orm-tiberius/src/connection.rs` ahora emite tracing estructurado para la conexión (`orm.connection.start`, `orm.connection.finish`, `orm.connection.error`) usando `server_addr` y `timeout_ms` como campos estables.
+- `crates/mssql-orm-tiberius/src/executor.rs` ahora instrumenta ejecución de queries con span `mssql_orm.query` y eventos `orm.query.start`, `orm.query.finish` y `orm.query.error`, incluyendo `server_addr`, `operation`, `timeout_ms`, `param_count`, `sql`, `params_mode` y `params`.
+- La redacción de parámetros quedó alineada con el plan: por defecto no se exponen valores; el tracing solo deja `disabled` o `[REDACTED]` según la configuración vigente.
+- `crates/mssql-orm-tiberius/src/transaction.rs` ahora instrumenta `BEGIN`, `COMMIT` y `ROLLBACK` con span `mssql_orm.transaction` y eventos `orm.transaction.begin`, `orm.transaction.commit`, `orm.transaction.rollback`; los fallos transaccionales se reportan mediante `orm.transaction.error`.
+- Se añadió la dependencia `tracing` a `mssql-orm-tiberius` y cobertura unitaria específica para clasificación de operaciones, estabilidad del formateo de timeouts y redacción de parámetros.
+
+### Resultado
+
+- La Etapa 14 ya dispone de instrumentación estructurada con `tracing` en conexión, queries y transacciones dentro del adaptador Tiberius, manteniendo SQL y ejecución en sus crates correctas y sin exponer parámetros sensibles por defecto.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- Esta sesión solo instrumenta tracing base; todavía no existe diferenciación específica para slow queries, métricas agregadas ni health checks. Esas capacidades siguen pendientes como subtareas separadas.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de tracing`.
+
 ### Sesión: timeouts configurables de conexión y ejecución
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14 usando la surface de configuración definida en la sesión previa.

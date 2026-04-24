@@ -1,5 +1,6 @@
 use crate::config::MssqlConnectionConfig;
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
+use crate::telemetry::trace_connection;
 use crate::transaction::{
     MssqlTransaction, begin_transaction_scope, commit_transaction_scope, rollback_transaction_scope,
 };
@@ -25,21 +26,28 @@ impl MssqlConnection<TokioConnectionStream> {
     }
 
     pub async fn connect_with_config(config: MssqlConnectionConfig) -> Result<Self, OrmError> {
+        let tracing_options = config.options().tracing;
         let connect_timeout = config.options().timeouts.connect_timeout;
         let addr = config.addr();
+        let trace_addr = addr.clone();
         let tiberius_config = config.tiberius_config().clone();
 
-        let client = run_with_timeout(connect_timeout, "SQL Server connection timed out", async {
-            let tcp = TcpStream::connect(addr).await.map_err(|error| {
-                map_tiberius_error(&error.into(), TiberiusErrorContext::ConnectTcp)
-            })?;
-            tcp.set_nodelay(true).map_err(|error| {
-                map_tiberius_error(&error.into(), TiberiusErrorContext::ConfigureTcp)
-            })?;
+        let client = trace_connection(tracing_options, &trace_addr, connect_timeout, async {
+            run_with_timeout(connect_timeout, "SQL Server connection timed out", async {
+                let tcp = TcpStream::connect(addr).await.map_err(|error| {
+                    map_tiberius_error(&error.into(), TiberiusErrorContext::ConnectTcp)
+                })?;
+                tcp.set_nodelay(true).map_err(|error| {
+                    map_tiberius_error(&error.into(), TiberiusErrorContext::ConfigureTcp)
+                })?;
 
-            Client::connect(tiberius_config, tcp.compat_write())
-                .await
-                .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::InitializeClient))
+                Client::connect(tiberius_config, tcp.compat_write())
+                    .await
+                    .map_err(|error| {
+                        map_tiberius_error(&error, TiberiusErrorContext::InitializeClient)
+                    })
+            })
+            .await
         })
         .await?;
 
@@ -68,24 +76,64 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
         self.config.options().timeouts.query_timeout
     }
 
+    pub(crate) fn tracing_options(&self) -> crate::config::MssqlTracingOptions {
+        self.config.options().tracing
+    }
+
+    pub(crate) fn server_addr(&self) -> String {
+        self.config.addr()
+    }
+
     pub async fn begin_transaction<'a>(&'a mut self) -> Result<MssqlTransaction<'a, S>, OrmError> {
         let query_timeout = self.query_timeout();
-        MssqlTransaction::begin(self.client_mut(), query_timeout).await
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        MssqlTransaction::begin(
+            self.client_mut(),
+            query_timeout,
+            tracing_options,
+            server_addr,
+        )
+        .await
     }
 
     pub async fn begin_transaction_scope(&mut self) -> Result<(), OrmError> {
         let query_timeout = self.query_timeout();
-        begin_transaction_scope(self.client_mut(), query_timeout).await
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        begin_transaction_scope(
+            self.client_mut(),
+            query_timeout,
+            tracing_options,
+            &server_addr,
+        )
+        .await
     }
 
     pub async fn commit_transaction(&mut self) -> Result<(), OrmError> {
         let query_timeout = self.query_timeout();
-        commit_transaction_scope(self.client_mut(), query_timeout).await
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        commit_transaction_scope(
+            self.client_mut(),
+            query_timeout,
+            tracing_options,
+            &server_addr,
+        )
+        .await
     }
 
     pub async fn rollback_transaction(&mut self) -> Result<(), OrmError> {
         let query_timeout = self.query_timeout();
-        rollback_transaction_scope(self.client_mut(), query_timeout).await
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        rollback_transaction_scope(
+            self.client_mut(),
+            query_timeout,
+            tracing_options,
+            &server_addr,
+        )
+        .await
     }
 
     pub fn into_inner(self) -> Client<S> {

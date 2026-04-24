@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya tiene backlog descompuesto, contrato explícito de configuración operativa y soporte real de timeouts; el siguiente foco natural pasa a instrumentar `tracing` sobre esos boundaries antes de slow query logs, health checks, retries o pooling.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya tiene backlog descompuesto, contrato explícito de configuración operativa, soporte real de timeouts e instrumentación base con `tracing`; el siguiente foco natural pasa a reutilizar esa base para slow query logs y luego health checks, retries y pooling.
 
 ## Dirección Arquitectónica Vigente
 
@@ -61,6 +61,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `MssqlConnectionConfig` ya parsea ADO connection strings mediante `tiberius::Config`, conserva el string original, rechaza entradas vacías o sin host usable y ahora también preserva `MssqlOperationalOptions` como contrato estable para preocupaciones de producción.
 - `mssql-orm-tiberius` ahora expone además `MssqlOperationalOptions`, `MssqlTimeoutOptions`, `MssqlRetryOptions`, `MssqlTracingOptions`, `MssqlSlowQueryOptions`, `MssqlHealthCheckOptions` y `MssqlPoolOptions`, junto a enums auxiliares (`MssqlParameterLogMode`, `MssqlHealthCheckQuery`, `MssqlPoolBackend`) como surface explícita para las siguientes subtareas de Etapa 14.
 - `mssql-orm-tiberius` ahora aplica `connect_timeout` al bootstrap del cliente y `query_timeout` a ejecución de queries y comandos transaccionales (`BEGIN`, `COMMIT`, `ROLLBACK`), manteniendo esa lógica estrictamente dentro del adaptador.
+- `mssql-orm-tiberius` ahora también instrumenta conexión, queries y transacciones con `tracing`, usando spans `mssql_orm.connection`, `mssql_orm.query` y `mssql_orm.transaction`, y eventos estructurados para inicio/fin/error de queries, conexión y comandos transaccionales.
+- La instrumentación actual registra `server_addr`, `operation`, `timeout_ms`, `param_count`, `sql`, `params_mode`, `params` y `duration_ms` como campos estables; los parámetros siguen redactados o deshabilitados por defecto y no se exponen valores sensibles.
 - `MssqlConnection::connect` ya abre `TcpStream`, configura `TCP_NODELAY` e inicializa `tiberius::Client`, sin adelantar todavía ejecución de `CompiledQuery` ni mapeo de filas.
 - `mssql-orm-tiberius` ya expone `ExecuteResult`, el trait `Executor` y los métodos `execute`/`query_raw` sobre `MssqlConnection<S>`.
 - `mssql-orm-tiberius` ahora también expone `MssqlTransaction<'a, S>` y `MssqlConnection::begin_transaction()`, iniciando transacciones con `BEGIN TRANSACTION` y cerrándolas explícitamente mediante `commit()` o `rollback()`.
@@ -195,7 +197,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
-- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout` y `query_timeout` ya alteran runtime del adaptador Tiberius. `tracing`, slow query logs, health checks, retries y pooling siguen pendientes por subtarea.
+- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout` y `tracing` ya alteran runtime del adaptador Tiberius. Slow query logs, health checks, retries y pooling siguen pendientes por subtarea.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -233,7 +235,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 14: Instrumentar conexión, ejecución y transacciones con tracing estructurado y campos estables`.
-2. Después reutilizar esa instrumentación para `slow query logs` y `health checks` mínimos.
+1. Implementar `Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de tracing`.
+2. Después construir `health checks` mínimos sobre la misma base operativa de timeout y observabilidad.
 3. Dejar retry policy y pooling opcional después de cerrar observabilidad y health checks básicos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

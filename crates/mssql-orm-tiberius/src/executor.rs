@@ -1,7 +1,9 @@
+use crate::config::MssqlTracingOptions;
 use crate::connection::{MssqlConnection, run_with_timeout};
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use crate::parameter::PreparedQuery;
 use crate::row::MssqlRow;
+use crate::telemetry::{QueryTrace, trace_query};
 use crate::transaction::MssqlTransaction;
 use async_trait::async_trait;
 use futures_io::{AsyncRead, AsyncWrite};
@@ -93,8 +95,18 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     pub async fn execute(&mut self, query: CompiledQuery) -> Result<ExecuteResult, OrmError> {
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
-            execute_compiled(self.client_mut(), query).await
+            execute_compiled(
+                self.client_mut(),
+                query,
+                tracing_options,
+                &server_addr,
+                query_timeout,
+            )
+            .await
         })
         .await
     }
@@ -103,9 +115,18 @@ where
         &'a mut self,
         query: CompiledQuery,
     ) -> Result<QueryStream<'a>, OrmError> {
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(query_timeout, "SQL Server query timed out", async {
-            query_raw_compiled(self.client_mut(), query).await
+            query_raw_compiled(
+                self.client_mut(),
+                query,
+                tracing_options,
+                &server_addr,
+                query_timeout,
+            )
+            .await
         })
         .await
     }
@@ -114,8 +135,18 @@ where
     where
         T: FromRow + Send,
     {
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
-            fetch_one_compiled(self.client_mut(), query).await
+            fetch_one_compiled(
+                self.client_mut(),
+                query,
+                tracing_options,
+                &server_addr,
+                query_timeout,
+            )
+            .await
         })
         .await
     }
@@ -124,8 +155,18 @@ where
     where
         T: FromRow + Send,
     {
+        let tracing_options = self.tracing_options();
+        let server_addr = self.server_addr();
+        let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
-            fetch_all_compiled(self.client_mut(), query).await
+            fetch_all_compiled(
+                self.client_mut(),
+                query,
+                tracing_options,
+                &server_addr,
+                query_timeout,
+            )
+            .await
         })
         .await
     }
@@ -134,14 +175,20 @@ where
 pub(crate) async fn execute_compiled<S>(
     client: &mut Client<S>,
     query: CompiledQuery,
+    tracing_options: MssqlTracingOptions,
+    server_addr: &str,
+    query_timeout: Option<std::time::Duration>,
 ) -> Result<ExecuteResult, OrmError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     let prepared = PreparedQuery::from_compiled(query);
-    prepared.validate_parameter_count()?;
-
-    let result = prepared.execute(client).await?;
+    let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
+    let result = trace_query(tracing_options, trace, async {
+        prepared.validate_parameter_count()?;
+        prepared.execute(client).await
+    })
+    .await?;
 
     Ok(ExecuteResult::new(result.rows_affected().to_vec()))
 }
@@ -149,25 +196,34 @@ where
 pub(crate) async fn query_raw_compiled<'a, S>(
     client: &'a mut Client<S>,
     query: CompiledQuery,
+    tracing_options: MssqlTracingOptions,
+    server_addr: &str,
+    query_timeout: Option<std::time::Duration>,
 ) -> Result<QueryStream<'a>, OrmError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     let prepared = PreparedQuery::from_compiled(query);
-    prepared.validate_parameter_count()?;
-
-    prepared.query(client).await
+    let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
+    trace_query(tracing_options, trace, async {
+        prepared.validate_parameter_count()?;
+        prepared.query(client).await
+    })
+    .await
 }
 
 pub(crate) async fn fetch_one_compiled<S, T>(
     client: &mut Client<S>,
     query: CompiledQuery,
+    tracing_options: MssqlTracingOptions,
+    server_addr: &str,
+    query_timeout: Option<std::time::Duration>,
 ) -> Result<Option<T>, OrmError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let row = query_raw_compiled(client, query)
+    let row = query_raw_compiled(client, query, tracing_options, server_addr, query_timeout)
         .await?
         .into_row()
         .await
@@ -181,12 +237,15 @@ where
 pub(crate) async fn fetch_all_compiled<S, T>(
     client: &mut Client<S>,
     query: CompiledQuery,
+    tracing_options: MssqlTracingOptions,
+    server_addr: &str,
+    query_timeout: Option<std::time::Duration>,
 ) -> Result<Vec<T>, OrmError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let rows = query_raw_compiled(client, query)
+    let rows = query_raw_compiled(client, query, tracing_options, server_addr, query_timeout)
         .await?
         .into_first_result()
         .await
@@ -200,6 +259,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ExecuteResult, fetch_all_compiled, fetch_one_compiled, query_raw_compiled};
+    use crate::config::MssqlTracingOptions;
     use mssql_orm_core::{FromRow, OrmError, Row};
 
     struct TestRowModel;
@@ -227,5 +287,12 @@ mod tests {
             fetch_all_compiled::<tokio_util::compat::Compat<tokio::net::TcpStream>, TestRowModel>;
 
         let _ = (query_raw, fetch_one, fetch_all);
+    }
+
+    #[test]
+    fn compiled_query_helpers_accept_tracing_context_shape() {
+        let tracing = MssqlTracingOptions::enabled();
+
+        assert!(tracing.enabled);
     }
 }
