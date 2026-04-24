@@ -1,0 +1,485 @@
+{
+  "schemas": [
+    {
+      "name": "todo",
+      "tables": [
+        {
+          "name": "todo_items",
+          "renamed_from": null,
+          "columns": [
+            {
+              "name": "id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": true,
+              "identity": {
+                "seed": 1,
+                "increment": 1
+              },
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "list_id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "created_by_user_id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "completed_by_user_id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": true,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "title",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 200,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "position",
+              "renamed_from": null,
+              "sql_type": "int",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "is_completed",
+              "renamed_from": null,
+              "sql_type": "bit",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": "0",
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "completed_at",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": true,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 255,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "created_at",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": "SYSUTCDATETIME()",
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 255,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "version",
+              "renamed_from": null,
+              "sql_type": "rowversion",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": true,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            }
+          ],
+          "primary_key_name": null,
+          "primary_key_columns": [
+            "id"
+          ],
+          "indexes": [
+            {
+              "name": "ix_todo_items_list_position",
+              "columns": [
+                {
+                  "column_name": "list_id",
+                  "descending": false
+                },
+                {
+                  "column_name": "position",
+                  "descending": false
+                }
+              ],
+              "unique": false
+            }
+          ],
+          "foreign_keys": [
+            {
+              "name": "fk_todo_items_list_id_todo_lists",
+              "columns": [
+                "list_id"
+              ],
+              "referenced_schema": "todo",
+              "referenced_table": "todo_lists",
+              "referenced_columns": [
+                "id"
+              ],
+              "on_delete": "cascade",
+              "on_update": "no_action"
+            },
+            {
+              "name": "fk_todo_items_created_by_user_id_users",
+              "columns": [
+                "created_by_user_id"
+              ],
+              "referenced_schema": "todo",
+              "referenced_table": "users",
+              "referenced_columns": [
+                "id"
+              ],
+              "on_delete": "no_action",
+              "on_update": "no_action"
+            },
+            {
+              "name": "fk_todo_items_completed_by_user_id_users",
+              "columns": [
+                "completed_by_user_id"
+              ],
+              "referenced_schema": "todo",
+              "referenced_table": "users",
+              "referenced_columns": [
+                "id"
+              ],
+              "on_delete": "no_action",
+              "on_update": "no_action"
+            }
+          ]
+        },
+        {
+          "name": "todo_lists",
+          "renamed_from": null,
+          "columns": [
+            {
+              "name": "id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": true,
+              "identity": {
+                "seed": 1,
+                "increment": 1
+              },
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "owner_user_id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "title",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 160,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "is_archived",
+              "renamed_from": null,
+              "sql_type": "bit",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": "0",
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "created_at",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": "SYSUTCDATETIME()",
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 255,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "version",
+              "renamed_from": null,
+              "sql_type": "rowversion",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": true,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            }
+          ],
+          "primary_key_name": null,
+          "primary_key_columns": [
+            "id"
+          ],
+          "indexes": [
+            {
+              "name": "ix_todo_lists_owner_title",
+              "columns": [
+                {
+                  "column_name": "owner_user_id",
+                  "descending": false
+                },
+                {
+                  "column_name": "title",
+                  "descending": false
+                }
+              ],
+              "unique": false
+            }
+          ],
+          "foreign_keys": [
+            {
+              "name": "fk_todo_lists_owner_user_id_users",
+              "columns": [
+                "owner_user_id"
+              ],
+              "referenced_schema": "todo",
+              "referenced_table": "users",
+              "referenced_columns": [
+                "id"
+              ],
+              "on_delete": "cascade",
+              "on_update": "no_action"
+            }
+          ]
+        },
+        {
+          "name": "users",
+          "renamed_from": null,
+          "columns": [
+            {
+              "name": "id",
+              "renamed_from": null,
+              "sql_type": "bigint",
+              "nullable": false,
+              "primary_key": true,
+              "identity": {
+                "seed": 1,
+                "increment": 1
+              },
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "email",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 180,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "display_name",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 120,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "created_at",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": "SYSUTCDATETIME()",
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 255,
+              "precision": null,
+              "scale": null
+            },
+            {
+              "name": "version",
+              "renamed_from": null,
+              "sql_type": "rowversion",
+              "nullable": false,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": true,
+              "insertable": false,
+              "updatable": false,
+              "max_length": null,
+              "precision": null,
+              "scale": null
+            }
+          ],
+          "primary_key_name": null,
+          "primary_key_columns": [
+            "id"
+          ],
+          "indexes": [
+            {
+              "name": "ux_users_email",
+              "columns": [
+                {
+                  "column_name": "email",
+                  "descending": false
+                }
+              ],
+              "unique": true
+            }
+          ],
+          "foreign_keys": []
+        }
+      ]
+    }
+  ]
+}

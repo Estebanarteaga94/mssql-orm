@@ -7,6 +7,7 @@ Esta guia esta escrita contra la surface real disponible hoy:
 - `migration add <Name>`
 - `migration list`
 - `database update`
+- `database update --execute`
 
 Y deja explicito lo que la CLI hace y lo que todavia no hace.
 
@@ -16,7 +17,7 @@ Hoy el flujo de migraciones del repo es `code-first` en intencion arquitectonica
 
 - el modelo y la metadata viven en Rust
 - el workspace ya tiene snapshots, diff y DDL SQL Server en crates internas
-- la CLI publica actual scaffolda migraciones y genera un script SQL acumulado
+- la CLI publica actual scaffolda migraciones, genera un script SQL acumulado y puede aplicarlo explicitamente con `--execute`
 - `up.sql` se autogenera cuando entregas un snapshot actual real; sigue siendo un artefacto revisable y editable antes de aplicar la migracion
 
 Lo importante es no trabajar como si la CLI ya resolviera todo el ciclo de vida por ti: aun debes exportar el snapshot actual, revisar el SQL generado y aplicar el script conscientemente.
@@ -31,7 +32,7 @@ El flujo mas seguro hoy es este:
 4. Escribe `down.sql` aunque hoy no exista un comando publico que lo ejecute.
 5. Genera el script acumulado de `database update`.
 6. Revisalo antes de aplicarlo en SQL Server.
-7. Aplícalo con una herramienta externa como `sqlcmd`.
+7. Aplicalo explicitamente con `database update --execute` o con una herramienta externa como `sqlcmd`.
 8. Si ya se aplicó en una base compartida, no reescribas esa migracion: crea una nueva.
 
 ## 2. Crear una migracion
@@ -185,7 +186,7 @@ Usalo para confirmar orden antes de generar o aplicar el script acumulado.
 
 Este punto es el mas importante para trabajar bien.
 
-Hoy `database update` no se conecta a SQL Server ni ejecuta nada por si solo. Lo que hace es imprimir un script SQL acumulado a `stdout`.
+Por defecto, `database update` no se conecta a SQL Server ni ejecuta nada. Imprime un script SQL acumulado a `stdout`.
 
 Ejemplo:
 
@@ -193,7 +194,7 @@ Ejemplo:
 cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update > target/mssql-orm-database-update.sql
 ```
 
-Luego tu aplicas ese script con una herramienta externa, por ejemplo:
+Ese modo sigue siendo el recomendado cuando quieres revisar o archivar el SQL antes de aplicarlo. Luego puedes aplicar ese script con una herramienta externa, por ejemplo:
 
 ```bash
 sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i target/mssql-orm-database-update.sql
@@ -204,6 +205,22 @@ Eso obliga a una disciplina sana:
 - generar script
 - revisarlo
 - aplicarlo conscientemente
+
+Si quieres aplicar desde la CLI del proyecto, usa `--execute`:
+
+```bash
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+  cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- database update --execute
+```
+
+Tambien puedes pasar la conexion de forma explicita:
+
+```bash
+cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- \
+  database update --execute --connection-string '<connection-string>'
+```
+
+`--execute` reutiliza el mismo script acumulado de `database update` y lo ejecuta mediante `mssql-orm-tiberius`. La cadena de conexion se resuelve en este orden: `--connection-string`, `DATABASE_URL`, `MSSQL_ORM_TEST_CONNECTION_STRING`.
 
 ## 8. Garantias actuales del script acumulado
 

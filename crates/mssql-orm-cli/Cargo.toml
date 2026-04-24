@@ -6,7 +6,10 @@ description = "Command-line tooling for mssql-orm."
 
 [dependencies]
 mssql-orm-migrate.workspace = true
+mssql-orm-query.workspace = true
 mssql-orm-sqlserver.workspace = true
+mssql-orm-tiberius.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 mssql-orm-core.workspace = true

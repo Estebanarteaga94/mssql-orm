@@ -1,0 +1,3 @@
+-- Migration: 1777037241551380209_createtodoschema
+-- Manual rollback SQL for this editable migration.
+-- The current MVP does not execute down.sql automatically.

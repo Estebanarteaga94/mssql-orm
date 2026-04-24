@@ -36,6 +36,10 @@ pub struct TodoList {
     #[orm(length = 160)]
     pub title: String,
 
+    #[orm(nullable)]
+    #[orm(length = 500)]
+    pub description: Option<String>,
+
     #[orm(default_sql = "0")]
     pub is_archived: bool,
 
@@ -124,6 +128,13 @@ mod tests {
         assert_eq!(metadata.schema, "todo");
         assert_eq!(metadata.table, "todo_lists");
         assert_eq!(metadata.foreign_keys.len(), 1);
+        assert_eq!(
+            metadata
+                .column("description")
+                .expect("description column")
+                .nullable,
+            true
+        );
         assert_eq!(owner_fk.columns, &["owner_user_id"]);
         assert_eq!(owner_fk.referenced_schema, "todo");
         assert_eq!(owner_fk.referenced_table, "users");

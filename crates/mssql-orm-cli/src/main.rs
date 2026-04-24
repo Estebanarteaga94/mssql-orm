@@ -4,7 +4,9 @@ use mssql_orm_migrate::{
     diff_schema_and_table_operations, list_migrations, read_latest_model_snapshot,
     read_model_snapshot, write_migration_up_sql,
 };
+use mssql_orm_query::CompiledQuery;
 use mssql_orm_sqlserver::SqlServerCompiler;
+use mssql_orm_tiberius::MssqlConnection;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -114,11 +116,19 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                 .collect::<Vec<_>>()
                 .join("\n"))
         }
-        CliCommand::DatabaseUpdate => {
+        CliCommand::DatabaseUpdate { options } => {
             let history_table_sql = SqlServerCompiler::compile_migrations_history_table()
                 .map_err(|error| error.to_string())?;
-            build_database_update_script(root, &history_table_sql)
-                .map_err(|error| error.to_string())
+            let script = build_database_update_script(root, &history_table_sql)
+                .map_err(|error| error.to_string())?;
+
+            if !options.execute {
+                return Ok(script);
+            }
+
+            let connection_string = resolve_database_update_connection_string(&options)?;
+            execute_database_update_script(&connection_string, script)?;
+            Ok("Database update applied.".to_string())
         }
     }
 }
@@ -290,7 +300,9 @@ enum CliCommand {
         options: MigrationAddOptions,
     },
     MigrationList,
-    DatabaseUpdate,
+    DatabaseUpdate {
+        options: DatabaseUpdateOptions,
+    },
 }
 
 fn parse_command(args: &[String]) -> Result<CliCommand, String> {
@@ -304,13 +316,82 @@ fn parse_command(args: &[String]) -> Result<CliCommand, String> {
         [_bin, group, action] if group == "migration" && action == "list" => {
             Ok(CliCommand::MigrationList)
         }
-        [_bin, group, action] if group == "database" && action == "update" => {
-            Ok(CliCommand::DatabaseUpdate)
+        [_bin, group, action, rest @ ..] if group == "database" && action == "update" => {
+            Ok(CliCommand::DatabaseUpdate {
+                options: parse_database_update_options(rest)?,
+            })
         }
         _ => Err(
-            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>] [--snapshot-bin <BinName> [--manifest-path <Path>]] [--allow-destructive]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
+            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>] [--snapshot-bin <BinName> [--manifest-path <Path>]] [--allow-destructive]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update [--execute [--connection-string <ConnectionString>]]".to_string(),
         ),
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct DatabaseUpdateOptions {
+    execute: bool,
+    connection_string: Option<String>,
+}
+
+fn parse_database_update_options(args: &[String]) -> Result<DatabaseUpdateOptions, String> {
+    let mut options = DatabaseUpdateOptions::default();
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--execute" => {
+                options.execute = true;
+                index += 1;
+            }
+            "--connection-string" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--connection-string requires a value".to_string())?;
+                options.connection_string = Some(value.clone());
+                index += 2;
+            }
+            unknown => {
+                return Err(format!("unknown database update option: {unknown}"));
+            }
+        }
+    }
+
+    if options.connection_string.is_some() && !options.execute {
+        return Err("--connection-string requires --execute".to_string());
+    }
+
+    Ok(options)
+}
+
+fn resolve_database_update_connection_string(
+    options: &DatabaseUpdateOptions,
+) -> Result<String, String> {
+    if let Some(connection_string) = &options.connection_string {
+        return Ok(connection_string.clone());
+    }
+
+    env::var("DATABASE_URL")
+        .or_else(|_| env::var("MSSQL_ORM_TEST_CONNECTION_STRING"))
+        .map_err(|_| {
+            "database update --execute requires --connection-string, DATABASE_URL, or MSSQL_ORM_TEST_CONNECTION_STRING".to_string()
+        })
+}
+
+fn execute_database_update_script(connection_string: &str, script: String) -> Result<(), String> {
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|error| format!("failed to create async runtime: {error}"))?;
+
+    runtime.block_on(async {
+        let mut connection = MssqlConnection::connect(connection_string)
+            .await
+            .map_err(|error| format!("failed to connect to SQL Server: {error}"))?;
+        connection
+            .execute(CompiledQuery::new(script, vec![]))
+            .await
+            .map_err(|error| format!("failed to apply database update: {error}"))?;
+
+        Ok(())
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -372,7 +453,7 @@ fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, S
 #[cfg(test)]
 mod tests {
     use super::{
-        CliCommand, MigrationAddOptions, build_migration_plan,
+        CliCommand, DatabaseUpdateOptions, MigrationAddOptions, build_migration_plan,
         first_destructive_migration_operation, parse_command, run,
     };
     use mssql_orm_core::SqlServerType;
@@ -552,7 +633,26 @@ mod tests {
                 "update".to_string(),
             ])
             .unwrap(),
-            CliCommand::DatabaseUpdate
+            CliCommand::DatabaseUpdate {
+                options: DatabaseUpdateOptions::default()
+            }
+        );
+        assert_eq!(
+            parse_command(&[
+                "mssql-orm-cli".to_string(),
+                "database".to_string(),
+                "update".to_string(),
+                "--execute".to_string(),
+                "--connection-string".to_string(),
+                "Server=localhost;Database=tempdb;".to_string(),
+            ])
+            .unwrap(),
+            CliCommand::DatabaseUpdate {
+                options: DatabaseUpdateOptions {
+                    execute: true,
+                    connection_string: Some("Server=localhost;Database=tempdb;".to_string()),
+                }
+            }
         );
     }
 

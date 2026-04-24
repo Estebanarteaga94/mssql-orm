@@ -1,0 +1,3 @@
+-- Migration: 1777038734516571446_addtodolistdescription
+-- Manual rollback SQL for this editable migration.
+-- The current MVP does not execute down.sql automatically.

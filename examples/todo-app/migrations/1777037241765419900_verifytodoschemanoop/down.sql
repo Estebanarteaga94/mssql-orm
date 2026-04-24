@@ -1,0 +1,3 @@
+-- Migration: 1777037241765419900_verifytodoschemanoop
+-- Manual rollback SQL for this editable migration.
+-- The current MVP does not execute down.sql automatically.

@@ -2,6 +2,44 @@
 
 ## 2026-04-24
 
+### Sesión: aplicar migraciones de `todo-app` mediante CLI
+
+- Se tomó la tarea `Etapa 7+: Aplicar contra SQL Server real el script generado desde examples/todo-app para validar creación desde cero e historial idempotente con DATABASE_URL`.
+- El plan maestro se confirmó en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz del repositorio.
+- Se reconoció la validación histórica con `KEEP_TEST_ROWS`/`KEEP_TEST_TABLES` en pruebas reales, pero esta sesión se centró en aplicar migraciones a través de la CLI, como pidió el usuario.
+- Se cerró la implementación de `mssql-orm-cli database update --execute`, manteniendo el modo por defecto de imprimir SQL a `stdout`.
+- `--execute` usa `mssql-orm-tiberius::MssqlConnection` para aplicar el mismo script acumulado generado por `database update`.
+- La conexión se resuelve desde `--connection-string`, `DATABASE_URL` o `MSSQL_ORM_TEST_CONNECTION_STRING`, sin hardcodear credenciales en archivos del repositorio.
+- Se aplicaron las migraciones generadas de `examples/todo-app` contra SQL Server local (`tempdb`) mediante `mssql-orm-cli database update --execute`.
+- Se repitió el mismo comando y volvió a terminar correctamente, validando el salto idempotente por historial `dbo.__mssql_orm_migrations`.
+- Se actualizó `docs/migrations.md` para documentar el nuevo modo de ejecución directa por CLI y mantener explícito el modo de revisión por script.
+- Se actualizó `docs/context.md` con el nuevo estado operativo de migraciones.
+
+### Resultado
+
+- Las migraciones locales de `examples/todo-app` quedaron aplicadas por CLI: creación inicial del schema `todo`, migración incremental no-op y migración `AddTodoListDescription`.
+- El script acumulado conserva creación de `dbo.__mssql_orm_migrations`, checksums, transacción por migración y reejecución idempotente.
+
+### Validación
+
+- `cargo test -p mssql-orm-cli`
+- `cargo build -p mssql-orm-cli`
+- `DATABASE_URL=<redacted> ../../target/debug/mssql-orm-cli database update --execute` desde `examples/todo-app`
+- Reejecución del mismo `database update --execute` para validar idempotencia
+- `cargo fmt --all --check`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo clippy -p mssql-orm-cli --all-targets -- -D warnings` se ejecutó, pero no quedó en verde por warnings preexistentes en `mssql-orm-migrate/src/diff.rs`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se registró la cadena de conexión real en documentación para evitar persistir credenciales.
+- `cargo clippy -p mssql-orm-cli --all-targets -- -D warnings` falla por cuatro warnings `collapsible_if` preexistentes en `mssql-orm-migrate/src/diff.rs`; no se corrigieron en esta sesión por estar fuera del alcance de aplicar migraciones por CLI.
+
+### Próximo paso recomendado
+
+- Preparar la guía pública del query builder o cerrar la validación final de release sobre workspace y ejemplos documentados.
+
 ### Sesión: validar generación automática reproducible con `todo-app`
 
 - Se tomó la tarea `Etapa 7+: Validar end-to-end la generación automática con un consumidor real (examples/todo-app) creando base desde cero y migración incremental reproducible`.
