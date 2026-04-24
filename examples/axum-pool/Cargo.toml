@@ -1,0 +1,19 @@
+[package]
+name = "axum-pool"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[features]
+default = ["pool-bb8"]
+pool-bb8 = ["mssql-orm/pool-bb8"]
+
+[dependencies]
+axum = { version = "0.8", features = ["macros", "json"] }
+mssql-orm = { path = "../../crates/mssql-orm", default-features = false }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya tiene backlog descompuesto, contrato explícito de configuración operativa, soporte real de timeouts e instrumentación base con `tracing`; el siguiente foco natural pasa a reutilizar esa base para slow query logs y luego health checks, retries y pooling.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health check y pool) ya existe, el wiring público desde pool ya está expuesto y ahora también existe un ejemplo web async ejecutable en `examples/axum-pool/` sobre la crate pública.
 
 ## Dirección Arquitectónica Vigente
 
@@ -79,6 +79,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
 - La crate pública `mssql-orm` ahora también reexporta la surface operativa de producción y expone `connect_shared_with_options(...)` y `connect_shared_with_config(...)`, preservando compatibilidad con `connect_shared(...)`.
 - `#[derive(DbContext)]` ahora genera también `connect_with_options(...)` y `connect_with_config(...)`, de modo que los consumidores puedan fijar configuración operativa sin abandonar la API derivada actual.
+- Ya existe un ejemplo web async real en `examples/axum-pool/` que usa `axum`, `MssqlPool`, `AppDb::from_pool(...)`, `DbContext::health_check()` y configuración operativa explícita, con tabla demo bootstrappeada al arranque.
 - `DbContext` ahora también expone `shared_connection()` y `transaction(...)`, y `#[derive(DbContext)]` genera el método inherente `db.transaction(|tx| async move { ... })` construyendo un contexto transaccional sobre la misma conexión compartida.
 - La crate pública `mssql-orm` ahora también expone `DbContextEntitySet<E>`, y `#[derive(DbContext)]` implementa automáticamente ese trait para cada `DbSet<E>` del contexto, habilitando resolución tipada `DbContext -> DbSet<T>` para la futura capa Active Record.
 - Como esa resolución sería ambigua con dos `DbSet` del mismo tipo de entidad en un mismo contexto, el derive `DbContext` ahora rechaza en compile-time contextos con múltiples `DbSet` para la misma entidad.
@@ -205,6 +206,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El pooling ya existe detrás del feature `pool-bb8` mediante `MssqlPool::builder()` y `MssqlPool::acquire() -> MssqlPooledConnection<'_>`; ahora ese ownership también puede encapsularse en `SharedConnection` para alimentar `DbContext`, pero la adquisición explícita desde `MssqlPool` sigue disponible para consumidores que no quieran pasar por la crate pública.
 - `SharedConnection` ya no es un alias a `Arc<Mutex<MssqlConnection>>`; ahora es un wrapper público que puede representar conexión directa o pool, conservando el nombre/rol existente y permitiendo que `DbContext::from_shared_connection(...)` siga siendo el punto de entrada común para ambos casos.
 - `#[derive(DbContext)]` ya expone `from_pool(pool)` bajo `pool-bb8`, mientras mantiene `from_connection(...)` y `connect*` para la ruta directa; la diferencia de ownership queda encapsulada en `SharedConnection`.
+- En crates consumidoras, el ejemplo `examples/axum-pool/` confirmó que para obtener `AppDb::from_pool(...)` desde el derive conviene reenviar explícitamente un feature local `pool-bb8 -> mssql-orm/pool-bb8`, porque el `cfg(feature = "pool-bb8")` del código generado se evalúa en el crate consumidor.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -242,6 +244,6 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`.
-2. Después preparar la release con documentación pública, quickstart, ejemplos completos y changelog.
-4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
+1. Preparar `Etapa 15: release` con documentación pública, quickstart, ejemplos completos y changelog.
+2. Al preparar esa release, documentar explícitamente el patrón de feature forwarding para `pool-bb8` en crates consumidoras que usen `#[derive(DbContext)]` y quieran `from_pool(...)`.
+3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
