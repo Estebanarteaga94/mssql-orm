@@ -27,6 +27,7 @@ pub use context::{
     connect_shared_with_config, connect_shared_with_options,
 };
 pub use dbset_query::DbSetQuery;
+pub use mssql_orm_core::EntityMetadata;
 pub use mssql_orm_tiberius::{
     MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
     MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
@@ -42,15 +43,20 @@ pub use tracking::{EntityState, Tracked};
 #[doc(hidden)]
 pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
 
+pub trait MigrationModelSource {
+    fn entity_metadata() -> &'static [&'static EntityMetadata];
+}
+
 pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
         ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
-        EntityColumnPredicateExt, EntityState, MssqlConnectionConfig, MssqlHealthCheckOptions,
-        MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
-        MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
-        MssqlTracingOptions, PageRequest, PredicateCompositionExt, Tracked,
+        EntityColumnPredicateExt, EntityState, MigrationModelSource, MssqlConnectionConfig,
+        MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
+        MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+        MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
+        PredicateCompositionExt, Tracked,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -170,6 +176,20 @@ mod tests {
     fn exposes_dbcontext_health_check_contract_in_prelude() {
         let _health_check = DerivedDbContext::health_check;
         let _trait_health_check = <DerivedDbContext as DbContext>::health_check;
+    }
+
+    #[test]
+    fn exposes_migration_model_source_contract_in_prelude() {
+        fn require_trait<C: super::MigrationModelSource>() {}
+
+        require_trait::<DerivedDbContext>();
+        assert_eq!(
+            <DerivedDbContext as super::MigrationModelSource>::entity_metadata()
+                .iter()
+                .map(|metadata| metadata.table)
+                .collect::<Vec<_>>(),
+            vec!["users", "audit_entries"]
+        );
     }
 
     #[test]

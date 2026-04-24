@@ -2,10 +2,11 @@ use mssql_orm_core::{
     ColumnMetadata, EntityMetadata, ForeignKeyMetadata, IdentityMetadata, IndexColumnMetadata,
     IndexMetadata, ReferentialAction, SqlServerType,
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::collections::BTreeMap;
 
 /// Serializable model snapshot shape used by future migration history artifacts.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ModelSnapshot {
     pub schemas: Vec<SchemaSnapshot>,
 }
@@ -43,10 +44,21 @@ impl ModelSnapshot {
     pub fn schema(&self, name: &str) -> Option<&SchemaSnapshot> {
         self.schemas.iter().find(|schema| schema.name == name)
     }
+
+    pub fn to_json_pretty(&self) -> Result<String, mssql_orm_core::OrmError> {
+        serde_json::to_string_pretty(self)
+            .map(|json| format!("{json}\n"))
+            .map_err(|_| mssql_orm_core::OrmError::new("failed to serialize model snapshot"))
+    }
+
+    pub fn from_json(json: &str) -> Result<Self, mssql_orm_core::OrmError> {
+        serde_json::from_str(json)
+            .map_err(|_| mssql_orm_core::OrmError::new("failed to deserialize model snapshot"))
+    }
 }
 
 /// Snapshot of a SQL Server schema and the tables currently modeled inside it.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SchemaSnapshot {
     pub name: String,
     pub tables: Vec<TableSnapshot>,
@@ -67,7 +79,7 @@ impl SchemaSnapshot {
 
 /// Snapshot of a SQL Server table with the minimum structural information needed
 /// for the first migration diff passes.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct TableSnapshot {
     pub name: String,
     pub renamed_from: Option<String>,
@@ -120,13 +132,15 @@ impl TableSnapshot {
 
 /// Snapshot of a table column, aligned with the code-first metadata already
 /// defined in `mssql-orm-core`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnSnapshot {
     pub name: String,
     pub renamed_from: Option<String>,
+    #[serde(with = "sql_server_type_json")]
     pub sql_type: SqlServerType,
     pub nullable: bool,
     pub primary_key: bool,
+    #[serde(with = "identity_json")]
     pub identity: Option<IdentityMetadata>,
     pub default_sql: Option<String>,
     pub computed_sql: Option<String>,
@@ -201,7 +215,7 @@ impl From<&ColumnMetadata> for ColumnSnapshot {
 }
 
 /// Snapshot of an index, including the participating columns and sort order.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct IndexSnapshot {
     pub name: String,
     pub columns: Vec<IndexColumnSnapshot>,
@@ -233,7 +247,7 @@ impl From<&IndexMetadata> for IndexSnapshot {
 }
 
 /// Snapshot of a column inside an index definition.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndexColumnSnapshot {
     pub column_name: String,
     pub descending: bool,
@@ -265,14 +279,16 @@ impl From<&IndexColumnMetadata> for IndexColumnSnapshot {
 }
 
 /// Snapshot of a foreign key, including referenced target and referential actions.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForeignKeySnapshot {
     pub name: String,
     pub columns: Vec<String>,
     pub referenced_schema: String,
     pub referenced_table: String,
     pub referenced_columns: Vec<String>,
+    #[serde(with = "referential_action_json")]
     pub on_delete: ReferentialAction,
+    #[serde(with = "referential_action_json")]
     pub on_update: ReferentialAction,
 }
 
@@ -341,5 +357,234 @@ impl From<&EntityMetadata> for TableSnapshot {
                 .map(ForeignKeySnapshot::from)
                 .collect(),
         }
+    }
+}
+
+mod identity_json {
+    use super::*;
+
+    #[derive(Serialize, Deserialize)]
+    struct IdentitySnapshot {
+        seed: i64,
+        increment: i64,
+    }
+
+    pub fn serialize<S>(
+        identity: &Option<IdentityMetadata>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        identity
+            .map(|identity| IdentitySnapshot {
+                seed: identity.seed,
+                increment: identity.increment,
+            })
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<IdentityMetadata>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Option::<IdentitySnapshot>::deserialize(deserializer).map(|identity| {
+            identity.map(|identity| IdentityMetadata::new(identity.seed, identity.increment))
+        })
+    }
+}
+
+mod sql_server_type_json {
+    use super::*;
+
+    pub fn serialize<S>(sql_type: &SqlServerType, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match sql_type {
+            SqlServerType::Custom(value) => serializer.serialize_str(&format!("custom:{value}")),
+            other => serializer.serialize_str(to_str(other)),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SqlServerType, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        from_str(&value).ok_or_else(|| {
+            de::Error::custom(format!("unsupported SQL Server type in snapshot: {value}"))
+        })
+    }
+
+    fn to_str(sql_type: &SqlServerType) -> &str {
+        match sql_type {
+            SqlServerType::BigInt => "bigint",
+            SqlServerType::Int => "int",
+            SqlServerType::SmallInt => "smallint",
+            SqlServerType::TinyInt => "tinyint",
+            SqlServerType::Bit => "bit",
+            SqlServerType::UniqueIdentifier => "uniqueidentifier",
+            SqlServerType::Date => "date",
+            SqlServerType::DateTime2 => "datetime2",
+            SqlServerType::Decimal => "decimal",
+            SqlServerType::Float => "float",
+            SqlServerType::Money => "money",
+            SqlServerType::NVarChar => "nvarchar",
+            SqlServerType::VarBinary => "varbinary",
+            SqlServerType::RowVersion => "rowversion",
+            SqlServerType::Custom(value) => value,
+        }
+    }
+
+    fn from_str(value: &str) -> Option<SqlServerType> {
+        if let Some(custom) = value.strip_prefix("custom:") {
+            return if custom.is_empty() {
+                None
+            } else {
+                Some(SqlServerType::Custom(leak_static_str(custom)))
+            };
+        }
+
+        match value {
+            "bigint" => Some(SqlServerType::BigInt),
+            "int" => Some(SqlServerType::Int),
+            "smallint" => Some(SqlServerType::SmallInt),
+            "tinyint" => Some(SqlServerType::TinyInt),
+            "bit" => Some(SqlServerType::Bit),
+            "uniqueidentifier" => Some(SqlServerType::UniqueIdentifier),
+            "date" => Some(SqlServerType::Date),
+            "datetime2" => Some(SqlServerType::DateTime2),
+            "decimal" => Some(SqlServerType::Decimal),
+            "float" => Some(SqlServerType::Float),
+            "money" => Some(SqlServerType::Money),
+            "nvarchar" => Some(SqlServerType::NVarChar),
+            "varbinary" => Some(SqlServerType::VarBinary),
+            "rowversion" => Some(SqlServerType::RowVersion),
+            _ => None,
+        }
+    }
+
+    fn leak_static_str(value: &str) -> &'static str {
+        Box::leak(value.to_owned().into_boxed_str())
+    }
+}
+
+mod referential_action_json {
+    use super::*;
+
+    pub fn serialize<S>(action: &ReferentialAction, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(match action {
+            ReferentialAction::NoAction => "no_action",
+            ReferentialAction::Cascade => "cascade",
+            ReferentialAction::SetNull => "set_null",
+            ReferentialAction::SetDefault => "set_default",
+        })
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ReferentialAction, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "no_action" => Ok(ReferentialAction::NoAction),
+            "cascade" => Ok(ReferentialAction::Cascade),
+            "set_null" => Ok(ReferentialAction::SetNull),
+            "set_default" => Ok(ReferentialAction::SetDefault),
+            _ => Err(de::Error::custom(format!(
+                "unsupported referential action in snapshot: {value}"
+            ))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ColumnSnapshot, ForeignKeySnapshot, IndexColumnSnapshot, IndexSnapshot, ModelSnapshot,
+        SchemaSnapshot, TableSnapshot,
+    };
+    use mssql_orm_core::{IdentityMetadata, ReferentialAction, SqlServerType};
+
+    #[test]
+    fn serializes_empty_model_snapshot_as_stable_json() {
+        let json = ModelSnapshot::default().to_json_pretty().unwrap();
+
+        assert_eq!(json, "{\n  \"schemas\": []\n}\n");
+        assert_eq!(
+            ModelSnapshot::from_json(&json).unwrap(),
+            ModelSnapshot::default()
+        );
+    }
+
+    #[test]
+    fn roundtrips_complete_model_snapshot_json() {
+        let snapshot = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot {
+                name: "orders".to_string(),
+                renamed_from: Some("legacy_orders".to_string()),
+                columns: vec![
+                    ColumnSnapshot::new(
+                        "id",
+                        SqlServerType::BigInt,
+                        false,
+                        true,
+                        Some(IdentityMetadata::new(1, 1)),
+                        None,
+                        None,
+                        false,
+                        false,
+                        false,
+                        None,
+                        None,
+                        None,
+                    ),
+                    ColumnSnapshot::new(
+                        "status",
+                        SqlServerType::Custom("varchar(24)"),
+                        false,
+                        false,
+                        None,
+                        Some("'open'".to_string()),
+                        None,
+                        false,
+                        true,
+                        true,
+                        Some(24),
+                        None,
+                        None,
+                    )
+                    .with_renamed_from("state"),
+                ],
+                primary_key_name: Some("pk_orders".to_string()),
+                primary_key_columns: vec!["id".to_string()],
+                indexes: vec![IndexSnapshot::new(
+                    "ix_orders_status",
+                    vec![IndexColumnSnapshot::desc("status")],
+                    false,
+                )],
+                foreign_keys: vec![ForeignKeySnapshot::new(
+                    "fk_orders_customers",
+                    vec!["customer_id".to_string()],
+                    "sales",
+                    "customers",
+                    vec!["id".to_string()],
+                    ReferentialAction::Cascade,
+                    ReferentialAction::NoAction,
+                )],
+            }],
+        )]);
+
+        let json = snapshot.to_json_pretty().unwrap();
+        let parsed = ModelSnapshot::from_json(&json).unwrap();
+
+        assert_eq!(parsed, snapshot);
+        assert!(json.contains("\"sql_type\": \"custom:varchar(24)\""));
+        assert!(json.contains("\"on_delete\": \"cascade\""));
     }
 }

@@ -1,3 +1,4 @@
+use crate::ModelSnapshot;
 use mssql_orm_core::OrmError;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,6 +25,14 @@ pub struct MigrationEntry {
 }
 
 pub fn create_migration_scaffold(root: &Path, name: &str) -> Result<MigrationScaffold, OrmError> {
+    create_migration_scaffold_with_snapshot(root, name, &ModelSnapshot::default())
+}
+
+pub fn create_migration_scaffold_with_snapshot(
+    root: &Path,
+    name: &str,
+    snapshot: &ModelSnapshot,
+) -> Result<MigrationScaffold, OrmError> {
     if name.trim().is_empty() {
         return Err(OrmError::new("migration name cannot be empty"));
     }
@@ -46,17 +55,27 @@ pub fn create_migration_scaffold(root: &Path, name: &str) -> Result<MigrationSca
         format!("-- Migration: {id}\n-- Write rollback SQL here.\n"),
     )
     .map_err(|_| OrmError::new("failed to write migration down.sql"))?;
-    fs::write(
-        directory.join("model_snapshot.json"),
-        "{\n  \"schemas\": []\n}\n",
-    )
-    .map_err(|_| OrmError::new("failed to write migration model snapshot"))?;
+    write_model_snapshot(
+        &directory.join("model_snapshot.json"),
+        snapshot,
+    )?;
 
     Ok(MigrationScaffold {
         id,
         name: name.to_string(),
         directory,
     })
+}
+
+pub fn write_model_snapshot(path: &Path, snapshot: &ModelSnapshot) -> Result<(), OrmError> {
+    fs::write(path, snapshot.to_json_pretty()?)
+        .map_err(|_| OrmError::new("failed to write migration model snapshot"))
+}
+
+pub fn read_model_snapshot(path: &Path) -> Result<ModelSnapshot, OrmError> {
+    let json = fs::read_to_string(path)
+        .map_err(|_| OrmError::new("failed to read migration model snapshot"))?;
+    ModelSnapshot::from_json(&json)
 }
 
 pub fn list_migrations(root: &Path) -> Result<Vec<MigrationEntry>, OrmError> {
@@ -201,7 +220,11 @@ fn split_sql_statements(sql: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_database_update_script, create_migration_scaffold, list_migrations};
+    use super::{
+        build_database_update_script, create_migration_scaffold, create_migration_scaffold_with_snapshot,
+        list_migrations, read_model_snapshot, write_model_snapshot,
+    };
+    use crate::{ModelSnapshot, SchemaSnapshot};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -226,6 +249,35 @@ mod tests {
         assert!(scaffold.directory.join("up.sql").exists());
         assert!(scaffold.directory.join("down.sql").exists());
         assert!(scaffold.directory.join("model_snapshot.json").exists());
+
+        let snapshot =
+            read_model_snapshot(&scaffold.directory.join("model_snapshot.json")).unwrap();
+        assert_eq!(snapshot, ModelSnapshot::default());
+    }
+
+    #[test]
+    fn writes_and_reads_model_snapshot_artifact() {
+        let root = temp_project_root();
+        let snapshot_path = root.join("model_snapshot.json");
+        let snapshot = ModelSnapshot::new(vec![SchemaSnapshot::new("sales", Vec::new())]);
+
+        write_model_snapshot(&snapshot_path, &snapshot).unwrap();
+
+        assert_eq!(read_model_snapshot(&snapshot_path).unwrap(), snapshot);
+    }
+
+    #[test]
+    fn creates_scaffold_with_provided_model_snapshot() {
+        let root = temp_project_root();
+        let snapshot = ModelSnapshot::new(vec![SchemaSnapshot::new("sales", Vec::new())]);
+
+        let scaffold =
+            create_migration_scaffold_with_snapshot(&root, "Create Sales", &snapshot).unwrap();
+
+        assert_eq!(
+            read_model_snapshot(&scaffold.directory.join("model_snapshot.json")).unwrap(),
+            snapshot
+        );
     }
 
     #[test]

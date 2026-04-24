@@ -1,6 +1,12 @@
 # Tasks
 
 ## Pendientes
+- [ ] Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo
+- [ ] Etapa 7+: Integrar el pipeline completo `snapshot -> diff -> MigrationOperation -> DDL SQL Server` dentro de `migration add`
+- [ ] Etapa 7+: Generar `up.sql` automáticamente desde operaciones compiladas y versionar `model_snapshot.json` con el estado actual del modelo
+- [ ] Etapa 7+: Detectar cambios destructivos en `migration add` y bloquear por defecto salvo confirmación/flag explícita alineada con el plan
+- [ ] Etapa 7+: Generar artefacto editable de migración real (manteniendo `up.sql`, `down.sql` y snapshot; decidir si `migration.rs` entra en alcance MVP o queda diferido con límite explícito)
+- [ ] Etapa 7+: Validar end-to-end la generación automática con un consumidor real (`examples/todo-app`) creando base desde cero y migración incremental reproducible
 - [ ] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
 - [ ] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
 - [ ] Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas
@@ -9,8 +15,12 @@
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
 
 ## En Progreso
+- [ ] Etapa 7+: Resolver en `mssql-orm-cli` el contexto objetivo del consumidor para `migration add` y obtener desde él el snapshot actual del modelo
 
 ## Completadas
+- [x] Etapa 7+: Serializar y deserializar `ModelSnapshot` y artefactos relacionados para reemplazar el `model_snapshot.json` placeholder actual
+- [x] Etapa 7+: Exponer desde `#[derive(DbContext)]` una fuente estable de metadata de entidades para migraciones (`entity_metadata()` o equivalente) sin acoplar `core` a la CLI
+- [x] Operativo: Descomponer la generación automática de migraciones desde `DbContext` hacia subtareas verificables alineadas con el plan maestro
 - [x] Etapa 15: Preparar guía de migraciones (`migration add`, `migration list`, `database update`) y límites explícitos
 - [x] Etapa 15: Preparar guía code-first alineada con derives, `DbContext`, `DbSet` y límites actuales
 - [x] Operativo: Descomponer la Etapa 15 de release en subtareas verificables y ordenadas

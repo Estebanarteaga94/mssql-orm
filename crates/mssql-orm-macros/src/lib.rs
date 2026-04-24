@@ -609,6 +609,26 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         })
         .collect::<Result<Vec<_>>>()?;
 
+    let migration_entity_metadata_static = Ident::new(
+        &format!("__{}_MIGRATION_ENTITY_METADATA", ident),
+        Span::call_site(),
+    );
+    let migration_entity_metadata = fields
+        .iter()
+        .map(|field| {
+            let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "DbContext requiere campos con tipo DbSet<Entidad>",
+                )
+            })?;
+
+            Ok(quote! {
+                <#entity_type as ::mssql_orm::core::Entity>::metadata()
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     Ok(quote! {
         impl ::mssql_orm::DbContext for #ident {
             fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
@@ -697,6 +717,21 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #(#save_modified_steps)*
                 #(#save_deleted_steps)*
                 Ok(saved)
+            }
+        }
+
+        impl ::mssql_orm::MigrationModelSource for #ident {
+            fn entity_metadata() -> &'static [&'static ::mssql_orm::EntityMetadata] {
+                static #migration_entity_metadata_static:
+                    ::std::sync::OnceLock<
+                        ::std::boxed::Box<[&'static ::mssql_orm::EntityMetadata]>
+                    > = ::std::sync::OnceLock::new();
+
+                #migration_entity_metadata_static
+                    .get_or_init(|| {
+                        ::std::boxed::Box::new([#(#migration_entity_metadata),*])
+                    })
+                    .as_ref()
             }
         }
 

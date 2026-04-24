@@ -1,6 +1,91 @@
 # Worklog
 
+## 2026-04-24
+
+### Sesión: serializar snapshots de modelo para migraciones
+
+- Se ejecutó la subtarea `Etapa 7+: Serializar y deserializar ModelSnapshot y artefactos relacionados para reemplazar el model_snapshot.json placeholder actual`.
+- El plan maestro se encontró en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz del repositorio.
+- `mssql-orm-migrate` ahora depende directamente de `serde` y `serde_json` para persistir snapshots del modelo.
+- `ModelSnapshot`, `SchemaSnapshot`, `TableSnapshot`, `ColumnSnapshot`, `IndexSnapshot`, `IndexColumnSnapshot` y `ForeignKeySnapshot` ahora serializan y deserializan JSON.
+- Se añadieron `ModelSnapshot::to_json_pretty()` y `ModelSnapshot::from_json(...)`, con codificación explícita para tipos SQL Server, identity y acciones referenciales sin exigir `serde` en `mssql-orm-core`.
+- El filesystem de migraciones ahora expone `write_model_snapshot(...)` y `read_model_snapshot(...)`.
+- `create_migration_scaffold(...)` ya escribe `model_snapshot.json` mediante la API de snapshot, reemplazando el placeholder manual.
+- Se agregaron pruebas de roundtrip JSON y lectura/escritura del artefacto `model_snapshot.json`.
+
+### Resultado
+
+- La crate de migraciones ya tiene una base persistible real para versionar snapshots de modelo y para que las siguientes subtareas puedan cargar el snapshot previo y comparar contra el modelo actual.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-migrate`
+- `cargo check --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero reportó warnings preexistentes no corregidos en esta sesión: `collapsible_if` en `crates/mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `crates/mssql-orm/src/context.rs`.
+- No se realizó commit al cierre porque el worktree ya tenía cambios previos no originados en esta sesión (`mssql-orm-macros`, crate pública, fixture `dbcontext_valid` y documentación relacionada con `MigrationModelSource`), además de un artefacto no trackeado en `examples/todo-app/database_update.sql`; mezclar esos cambios con esta tarea en un commit automático perdería trazabilidad.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Resolver en mssql-orm-cli el contexto objetivo del consumidor para migration add y obtener desde él el snapshot actual del modelo`.
+
 ## 2026-04-23
+
+### Sesión: exponer metadata de entidades desde `DbContext` para migraciones
+
+- Se ejecutó la subtarea `Etapa 7+: Exponer desde #[derive(DbContext)] una fuente estable de metadata de entidades para migraciones (entity_metadata() o equivalente) sin acoplar core a la CLI`.
+- La crate pública `mssql-orm` ahora expone el trait `MigrationModelSource`.
+- `#[derive(DbContext)]` ahora implementa automáticamente ese trait y publica `entity_metadata()` para el conjunto de entidades declarado en el contexto.
+- La implementación se resolvió con inicialización perezosa (`OnceLock`) para evitar exigir `const fn` sobre `Entity::metadata()` y mantener una referencia `'static` estable.
+- Se amplió la cobertura pública en `crates/mssql-orm/src/lib.rs` y en `crates/mssql-orm/tests/ui/dbcontext_valid.rs` para fijar el nuevo contrato tanto en tests internos como desde `trybuild`.
+
+### Resultado
+
+- El repo ya tiene la primera pieza estructural necesaria para que la CLI pueda pedirle al consumidor su modelo actual sin reflexión runtime ni acoplar `core` a `mssql-orm-cli`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos permanentes.
+- Durante la implementación apareció un problema de lifetime/const-eval al devolver metadata desde el derive; se corrigió reemplazando el `static` directo por `OnceLock`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Serializar y deserializar ModelSnapshot y artefactos relacionados para reemplazar el model_snapshot.json placeholder actual`.
+
+### Sesión: descomponer backlog para migraciones automáticas desde el modelo
+
+- Se revisó el plan maestro en `docs/plan_orm_sqlserver_tiberius_code_first.md` y se confirmó la desalineación actual: el plan exige que `migration add` genere migraciones automáticamente desde structs Rust, mientras que la CLI vigente solo scaffolda archivos y genera el script acumulado de `database update`.
+- Se ejecutó la tarea operativa `Operativo: Descomponer la generación automática de migraciones desde DbContext hacia subtareas verificables alineadas con el plan maestro`.
+- `docs/tasks.md` ahora incluye una secuencia explícita de trabajo para cerrar ese gap sin mezclarlo con la Etapa 15 de documentación: exponer metadata desde `DbContext`, persistir snapshots reales, resolver el contexto del consumidor en CLI, integrar `snapshot -> diff -> DDL`, bloquear cambios destructivos por defecto y validar el flujo completo con `examples/todo-app`.
+- También se actualizó `docs/context.md` para dejar trazada esa brecha entre la surface pública actual y el comportamiento esperado por el plan.
+
+### Resultado
+
+- El repositorio ya tiene backlog estructurado y detallado para llevar la CLI de migraciones desde scaffold manual hasta generación automática desde el modelo Rust, con subtareas verificables y orden lógico de implementación.
+
+### Validación
+
+- Revisión manual de consistencia entre `docs/plan_orm_sqlserver_tiberius_code_first.md`, `docs/tasks.md` y `docs/context.md`.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No aplican validaciones `cargo` en esta sesión porque el cambio fue exclusivamente documental y de backlog.
+
+### Próximo paso recomendado
+
+- Mantener el foco inmediato de release en `Etapa 15: Preparar guía del query builder público (filter, order_by, joins, take, paginate, count)` y retomar luego la primera subtarea estructural de migraciones automáticas.
 
 ### Sesión: preparar guía pública de migraciones
 

@@ -24,6 +24,8 @@ fn main() {
     let _from_connection = AppDbContext::from_connection;
     let _db_set: fn(&AppDbContext) -> &DbSet<User> =
         <AppDbContext as mssql_orm::DbContextEntitySet<User>>::db_set;
+    let _entity_metadata: fn() -> &'static [&'static mssql_orm::EntityMetadata] =
+        <AppDbContext as mssql_orm::MigrationModelSource>::entity_metadata;
     let _options = MssqlOperationalOptions::new()
         .with_timeouts(MssqlTimeoutOptions::new())
         .with_pool(MssqlPoolOptions::bb8(8));
