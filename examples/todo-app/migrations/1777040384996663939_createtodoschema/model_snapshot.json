@@ -289,6 +289,22 @@
               "scale": null
             },
             {
+              "name": "description",
+              "renamed_from": null,
+              "sql_type": "nvarchar",
+              "nullable": true,
+              "primary_key": false,
+              "identity": null,
+              "default_sql": null,
+              "computed_sql": null,
+              "rowversion": false,
+              "insertable": true,
+              "updatable": true,
+              "max_length": 500,
+              "precision": null,
+              "scale": null
+            },
+            {
               "name": "is_archived",
               "renamed_from": null,
               "sql_type": "bit",

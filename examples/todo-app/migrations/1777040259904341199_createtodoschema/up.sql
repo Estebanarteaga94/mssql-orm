@@ -18,6 +18,7 @@ CREATE TABLE [todo].[todo_lists] (
     [id] bigint IDENTITY(1, 1) NOT NULL,
     [owner_user_id] bigint NOT NULL,
     [title] nvarchar(160) NOT NULL,
+    [description] nvarchar(500) NULL,
     [is_archived] bit NOT NULL DEFAULT 0,
     [created_at] nvarchar(255) NOT NULL DEFAULT SYSUTCDATETIME(),
     [version] rowversion,
