@@ -5,6 +5,8 @@ mod connection;
 mod error;
 mod executor;
 mod parameter;
+#[cfg(feature = "pool-bb8")]
+mod pool;
 mod row;
 mod telemetry;
 mod transaction;
@@ -22,6 +24,8 @@ pub use config::{
 };
 pub use connection::{MssqlConnection, TokioConnectionStream};
 pub use executor::{ExecuteResult, Executor};
+#[cfg(feature = "pool-bb8")]
+pub use pool::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
 pub use row::MssqlRow;
 pub use transaction::MssqlTransaction;
 
@@ -99,5 +103,13 @@ mod tests {
             core::mem::size_of::<Option<MssqlTransaction<'static, TokioConnectionStream>>>();
 
         assert!(wrapper > 0);
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn reexports_pool_surface() {
+        let builder = super::MssqlPool::builder();
+
+        assert_eq!(builder.options().backend, super::MssqlPoolBackend::Bb8);
     }
 }

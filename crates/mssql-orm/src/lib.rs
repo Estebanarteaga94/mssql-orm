@@ -30,6 +30,8 @@ pub use mssql_orm_tiberius::{
     MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
     MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
 };
+#[cfg(feature = "pool-bb8")]
+pub use mssql_orm_tiberius::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
 pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
@@ -46,6 +48,8 @@ pub mod prelude {
         MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
         MssqlTracingOptions, PageRequest, PredicateCompositionExt, Tracked,
     };
+    #[cfg(feature = "pool-bb8")]
+    pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
         ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
@@ -129,6 +133,14 @@ mod tests {
 
         assert_eq!(config.options().pool.backend, MssqlPoolBackend::Bb8);
         assert_eq!(config.options().pool.max_size, 12);
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn exposes_pool_surface_when_feature_is_enabled() {
+        let builder = super::MssqlPool::builder().max_size(8);
+
+        assert_eq!(builder.options().max_size, 8);
     }
 
     #[test]

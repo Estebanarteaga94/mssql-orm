@@ -2,6 +2,41 @@
 
 ## 2026-04-23
 
+### Sesión: pooling opcional con feature gate `pool-bb8`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/Cargo.toml` ahora declara el feature gate `pool-bb8` y añade `bb8` como dependencia opcional; `crates/mssql-orm/Cargo.toml` reexpone ese mismo feature hacia la crate pública.
+- Se añadió `crates/mssql-orm-tiberius/src/pool.rs`, implementando `MssqlPool`, `MssqlPoolBuilder`, `MssqlPooledConnection` y `MssqlConnectionManager` sobre `bb8`.
+- La API del pool quedó deliberadamente acotada para preservar ownership explícito en esta etapa: `MssqlPool::builder()` configura el pool y `MssqlPool::acquire()` entrega un `MssqlPooledConnection<'_>` que expone `Deref/DerefMut` hacia `MssqlConnection`, sin introducir todavía `DbContext::from_pool(...)` ni un nuevo tipo equivalente a `SharedConnection`.
+- `MssqlConnectionManager` reutiliza `MssqlConnection::connect_with_config(...)` para crear conexiones y `connection.health_check().await` como validación de checkout, manteniendo la lógica de ejecución/health en el adaptador Tiberius en lugar de duplicarla en el manager del pool.
+- La configuración efectiva del pool se sigue modelando con `MssqlPoolOptions`; el builder soporta `max_size`, `min_idle`, `acquire_timeout`, `idle_timeout`, `max_lifetime` y `with_pool_options(...)`, y al construir el pool preserva esas opciones también dentro de `MssqlConnectionConfig`.
+- `crates/mssql-orm-tiberius/src/lib.rs` y `crates/mssql-orm/src/lib.rs` ahora reexportan la surface del pool de forma condicional bajo `pool-bb8`, sin alterar la surface por defecto cuando el feature no está activo.
+- Se añadió cobertura unitaria feature-gated en ambas crates para la shape del builder, el reemplazo de opciones y la reexportación pública del pool.
+
+### Resultado
+
+- La Etapa 14 ya dispone de pooling opcional detrás de `pool-bb8`, con límites de ownership explícitos y sin romper el flujo actual basado en conexión directa o `SharedConnection`. El wiring de `DbContext` sobre pool sigue pendiente como subtarea separada.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo check -p mssql-orm-tiberius --features pool-bb8`
+- `cargo check -p mssql-orm --features pool-bb8`
+- `cargo test -p mssql-orm-tiberius --features pool-bb8 --lib`
+- `cargo test -p mssql-orm --features pool-bb8 --lib`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Esta sesión implementa solo el pool y su ownership explícito; todavía no existe `DbContext::from_pool(...)` ni integración de contexto sobre recursos del pool, porque esa capacidad permanece como subtarea separada en el backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Exponer wiring público DbContext desde pool sin romper connect, from_connection ni SharedConnection`.
+
 ### Sesión: retry policy mínima para operaciones idempotentes
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes`.

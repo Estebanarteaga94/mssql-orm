@@ -198,10 +198,11 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
-- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing`, `slow_query`, `health_check` y `retry` ya alteran runtime del adaptador Tiberius. Pooling sigue pendiente por subtarea.
+- La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing`, `slow_query`, `health_check`, `retry` y `pool` ya alteran runtime del adaptador Tiberius. El wiring de `DbContext` desde pool sigue pendiente por subtarea.
 - `MssqlSlowQueryOptions` ya reutiliza exactamente la medición de duración de `trace_query(...)`: puede emitir `orm.query.slow` con `threshold_ms` y redacción configurable de parámetros, incluso si `MssqlTracingOptions.enabled` está apagado.
 - `MssqlConnection::health_check()` y `DbContext::health_check()` ya ejecutan `SELECT 1 AS [health_check]` sobre la conexión activa, usando `health.timeout` cuando existe y fallback a `query_timeout` en caso contrario.
 - `MssqlRetryOptions` ya se aplica solo a lecturas materializadas clasificadas como `select` (`fetch_one`, `fetch_all` y rutas públicas que dependen de ellas); no reintenta `execute`, `query_raw` ni operaciones dentro de `MssqlTransaction`.
+- El pooling ya existe detrás del feature `pool-bb8` mediante `MssqlPool::builder()` y `MssqlPool::acquire() -> MssqlPooledConnection<'_>`; en esta etapa se evitó introducir un ownership implícito tipo `SharedConnection` sobre el pool para no adelantar la subtarea de wiring de `DbContext`.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -239,7 +240,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Implementar `Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership`.
-2. Después construir el wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`.
-3. Dejar el ejemplo web async real para después de cerrar pool y wiring público.
+1. Implementar `Etapa 14: Exponer wiring público DbContext desde pool sin romper connect, from_connection ni SharedConnection`.
+2. Después construir el ejemplo web async real usando pool, health check y configuración operativa.
+3. Dejar la preparación de release para después de cerrar ese wiring y el ejemplo de integración.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

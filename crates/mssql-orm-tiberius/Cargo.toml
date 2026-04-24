@@ -4,8 +4,13 @@ version.workspace = true
 edition.workspace = true
 description = "Tiberius execution adapter for mssql-orm."
 
+[features]
+default = []
+pool-bb8 = ["dep:bb8"]
+
 [dependencies]
 async-trait = "0.1"
+bb8 = { version = "0.8", optional = true }
 chrono = "0.4"
 futures-io = "0.3"
 mssql-orm-core.workspace = true
