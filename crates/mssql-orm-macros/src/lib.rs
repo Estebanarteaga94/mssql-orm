@@ -625,6 +625,25 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 Ok(Self::from_connection(connection))
             }
 
+            pub async fn connect_with_options(
+                connection_string: &str,
+                options: ::mssql_orm::MssqlOperationalOptions,
+            ) -> Result<Self, ::mssql_orm::core::OrmError> {
+                let config = ::mssql_orm::MssqlConnectionConfig::from_connection_string_with_options(
+                    connection_string,
+                    options,
+                )?;
+                Self::connect_with_config(config).await
+            }
+
+            pub async fn connect_with_config(
+                config: ::mssql_orm::MssqlConnectionConfig,
+            ) -> Result<Self, ::mssql_orm::core::OrmError> {
+                let connection =
+                    ::mssql_orm::tiberius::MssqlConnection::connect_with_config(config).await?;
+                Ok(Self::from_connection(connection))
+            }
+
             pub async fn transaction<F, Fut, T>(&self, operation: F) -> Result<T, ::mssql_orm::core::OrmError>
             where
                 F: FnOnce(Self) -> Fut + Send,

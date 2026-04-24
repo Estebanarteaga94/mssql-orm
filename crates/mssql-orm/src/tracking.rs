@@ -337,6 +337,7 @@ mod tests {
         rust_name: "DummyEntity",
         schema: "dbo",
         table: "dummy_entities",
+        renamed_from: None,
         columns: &[],
         primary_key: PrimaryKeyMetadata {
             name: None,

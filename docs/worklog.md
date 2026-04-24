@@ -2,6 +2,40 @@
 
 ## 2026-04-23
 
+### Sesión: surface y configuración operativa de producción para `mssql-orm-tiberius`
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la Etapa 14 del plan exige `pool opcional`, `timeouts`, `retry policy`, `tracing`, `slow query logs` y `health checks`, así que esta sesión se limitó a definir el contrato y el wiring público sin activar todavía comportamiento nuevo.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 14: Definir surface y configuración operativa de producción para mssql-orm-tiberius y la crate pública` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/src/config.rs` ahora define `MssqlOperationalOptions` como contrato raíz y los shapes explícitos `MssqlTimeoutOptions`, `MssqlRetryOptions`, `MssqlTracingOptions`, `MssqlSlowQueryOptions`, `MssqlHealthCheckOptions` y `MssqlPoolOptions`, además de enums auxiliares para `MssqlParameterLogMode`, `MssqlHealthCheckQuery` y `MssqlPoolBackend`.
+- `MssqlConnectionConfig` ahora preserva esas opciones operativas y expone `from_connection_string_with_options(...)`, `with_options(...)` y `options()`, dejando resuelto el ownership/config shape para las siguientes subtareas de implementación.
+- La crate pública `mssql-orm` ahora reexporta ese surface y expone `connect_shared_with_options(...)` y `connect_shared_with_config(...)` como puntos de entrada explícitos, sin romper `connect_shared(...)`.
+- `#[derive(DbContext)]` ahora genera también `connect_with_options(...)` y `connect_with_config(...)`, alineando la API derivada con la nueva configuración pública.
+- Se amplió la cobertura con pruebas unitarias del adaptador, pruebas de la crate pública, `trybuild` para `DbContext` y ajustes mecánicos en fixtures de tests que construyen `EntityMetadata` manualmente para mantener coherencia con `renamed_from`.
+
+### Resultado
+
+- La surface de configuración de producción quedó definida y expuesta de forma estable en el adaptador Tiberius y en la crate pública, sin adelantar todavía timeouts, tracing, slow query logs, health checks, retries ni pooling reales.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+- `cargo test -p mssql-orm --lib`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-query --lib`
+- `cargo test -p mssql-orm-sqlserver --test compiler_snapshots`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La sesión definió solo contratos y wiring; ninguna opción nueva cambia todavía el comportamiento runtime del adaptador. Esa implementación queda para las subtareas siguientes de timeouts, `tracing`, slow query logs, health checks, retries y pooling.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de sqlserver ni ejecución fuera de tiberius`.
+
 ### Sesión: descomposición de la Etapa 14 de producción
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la Etapa 14 del plan define explícitamente como entregables `pool opcional`, `timeouts`, `retry policy opcional`, `logging con tracing`, `slow query logs` y `health checks`, con `Definition of Done` ligada a uso en una API web async y ejemplo con Axum o Actix.

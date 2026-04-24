@@ -20,8 +20,16 @@ pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
 pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
-pub use context::{DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared};
+pub use context::{
+    DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
+    connect_shared_with_config, connect_shared_with_options,
+};
 pub use dbset_query::DbSetQuery;
+pub use mssql_orm_tiberius::{
+    MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
+    MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+    MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
+};
 pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
@@ -33,7 +41,10 @@ pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistry
 pub mod prelude {
     pub use crate::{
         ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
-        EntityColumnPredicateExt, EntityState, PageRequest, PredicateCompositionExt, Tracked,
+        EntityColumnPredicateExt, EntityState, MssqlConnectionConfig, MssqlHealthCheckOptions,
+        MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
+        MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
+        MssqlTracingOptions, PageRequest, PredicateCompositionExt, Tracked,
     };
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -50,10 +61,13 @@ mod tests {
     use super::prelude::{
         ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
         EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityState,
-        FromRow, IdentityMetadata, Insertable, OrmError, PageRequest, PredicateCompositionExt,
-        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
+        FromRow, IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
+        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
+        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
+        SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
+    use std::time::Duration;
 
     struct PublicEntity;
 
@@ -61,6 +75,7 @@ mod tests {
         rust_name: "PublicEntity",
         schema: "dbo",
         table: "public_entities",
+        renamed_from: None,
         columns: &[],
         primary_key: PrimaryKeyMetadata {
             name: None,
@@ -94,6 +109,26 @@ mod tests {
     #[test]
     fn exposes_entity_contract_in_prelude() {
         assert_eq!(PublicEntity::metadata().table, "public_entities");
+    }
+
+    #[test]
+    fn exposes_operational_configuration_surface() {
+        let options = MssqlOperationalOptions::new()
+            .with_timeouts(MssqlTimeoutOptions::new().with_query_timeout(Duration::from_secs(30)))
+            .with_retry(MssqlRetryOptions::enabled(
+                2,
+                Duration::from_millis(50),
+                Duration::from_secs(1),
+            ))
+            .with_pool(MssqlPoolOptions::bb8(12));
+        let config = MssqlConnectionConfig::from_connection_string_with_options(
+            "server=tcp:localhost,1433;database=master;user=sa;password=Password123;TrustServerCertificate=true",
+            options,
+        )
+        .unwrap();
+
+        assert_eq!(config.options().pool.backend, MssqlPoolBackend::Bb8);
+        assert_eq!(config.options().pool.max_size, 12);
     }
 
     #[test]

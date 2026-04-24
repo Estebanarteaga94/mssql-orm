@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya quedó descompuesta operativamente y el siguiente foco natural pasa a definir la surface/configuración de producción antes de tocar pooling, retries o integración web.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya tiene backlog descompuesto y también un contrato explícito de configuración operativa; el siguiente foco natural pasa a implementar timeouts reales sobre ese surface antes de tocar `tracing`, retries o pooling.
 
 ## Dirección Arquitectónica Vigente
 
@@ -58,7 +58,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `mssql-orm-sqlserver` ya cuenta con snapshots versionados para `select`, `insert`, `update`, `delete` y `count`, fijando el SQL generado y la secuencia observable de parámetros.
 - La crate `mssql-orm-sqlserver` ahora usa `insta` solo como `dev-dependency` para congelar el contrato del compilador sin introducir dependencia runtime nueva.
 - `mssql-orm-tiberius` ya integra la dependencia real `tiberius` y expone `MssqlConnectionConfig`, `MssqlConnection` y `TokioConnectionStream`.
-- `MssqlConnectionConfig` ya parsea ADO connection strings mediante `tiberius::Config`, conserva el string original y rechaza entradas vacías o sin host usable.
+- `MssqlConnectionConfig` ya parsea ADO connection strings mediante `tiberius::Config`, conserva el string original, rechaza entradas vacías o sin host usable y ahora también preserva `MssqlOperationalOptions` como contrato estable para preocupaciones de producción.
+- `mssql-orm-tiberius` ahora expone además `MssqlOperationalOptions`, `MssqlTimeoutOptions`, `MssqlRetryOptions`, `MssqlTracingOptions`, `MssqlSlowQueryOptions`, `MssqlHealthCheckOptions` y `MssqlPoolOptions`, junto a enums auxiliares (`MssqlParameterLogMode`, `MssqlHealthCheckQuery`, `MssqlPoolBackend`) como surface explícita para las siguientes subtareas de Etapa 14.
 - `MssqlConnection::connect` ya abre `TcpStream`, configura `TCP_NODELAY` e inicializa `tiberius::Client`, sin adelantar todavía ejecución de `CompiledQuery` ni mapeo de filas.
 - `mssql-orm-tiberius` ya expone `ExecuteResult`, el trait `Executor` y los métodos `execute`/`query_raw` sobre `MssqlConnection<S>`.
 - `mssql-orm-tiberius` ahora también expone `MssqlTransaction<'a, S>` y `MssqlConnection::begin_transaction()`, iniciando transacciones con `BEGIN TRANSACTION` y cerrándolas explícitamente mediante `commit()` o `rollback()`.
@@ -73,6 +74,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - La validación manual de esta sesión confirmó conectividad real con SQL Server local usando el login `sa`; la cadena original con `Database=test` no fue usable porque esa base no estaba accesible, así que la verificación se ejecutó contra `master`.
 - La crate pública `mssql-orm` declara `extern crate self as mssql_orm` para que los macros puedan apuntar a una ruta estable tanto dentro del workspace como desde crates consumidoras.
 - La crate pública `mssql-orm` ya expone `DbContext`, `DbSet`, `DbSetQuery`, `SharedConnection`, `connect_shared` y reexporta `tokio`, permitiendo que `#[derive(DbContext)]` genere métodos `connect`, `from_connection` y `from_shared_connection` sin depender de imports adicionales en el consumidor.
+- La crate pública `mssql-orm` ahora también reexporta la surface operativa de producción y expone `connect_shared_with_options(...)` y `connect_shared_with_config(...)`, preservando compatibilidad con `connect_shared(...)`.
+- `#[derive(DbContext)]` ahora genera también `connect_with_options(...)` y `connect_with_config(...)`, de modo que los consumidores puedan fijar configuración operativa sin abandonar la API derivada actual.
 - `DbContext` ahora también expone `shared_connection()` y `transaction(...)`, y `#[derive(DbContext)]` genera el método inherente `db.transaction(|tx| async move { ... })` construyendo un contexto transaccional sobre la misma conexión compartida.
 - La crate pública `mssql-orm` ahora también expone `DbContextEntitySet<E>`, y `#[derive(DbContext)]` implementa automáticamente ese trait para cada `DbSet<E>` del contexto, habilitando resolución tipada `DbContext -> DbSet<T>` para la futura capa Active Record.
 - Como esa resolución sería ambigua con dos `DbSet` del mismo tipo de entidad en un mismo contexto, el derive `DbContext` ahora rechaza en compile-time contextos con múltiples `DbSet` para la misma entidad.
@@ -191,6 +194,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional a nivel de pool o multiplexación.
+- La surface de producción de Etapa 14 ya existe a nivel de tipos y wiring público, pero sus opciones todavía no alteran runtime del adaptador; por ahora siguen siendo contrato estable en espera de implementación concreta por subtarea.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -228,7 +232,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Tomar `Etapa 14: Definir surface y configuración operativa de producción para mssql-orm-tiberius y la crate pública`.
-2. Después implementar `timeouts` e instrumentación con `tracing`, porque preparan el terreno para slow query logs, health checks y retry policy sin rehacer contratos.
-3. Dejar pooling opcional y wiring público sobre pool después de cerrar configuración, observabilidad y resiliencia básica.
+1. Implementar `Etapa 14: Implementar timeouts configurables de conexión y ejecución` reutilizando `MssqlOperationalOptions` y sin mover SQL fuera de `sqlserver` ni ejecución fuera de `tiberius`.
+2. Después implementar instrumentación con `tracing`, porque el shape de configuración y el wiring público ya quedaron fijados.
+3. Dejar retry policy y pooling opcional después de cerrar timeouts, observabilidad y health checks mínimos.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

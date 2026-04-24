@@ -165,6 +165,7 @@ mod tests {
         rust_name: "TestEntity",
         schema: "dbo",
         table: "test_entities",
+        renamed_from: None,
         columns: &[],
         primary_key: PrimaryKeyMetadata {
             name: None,
@@ -184,6 +185,7 @@ mod tests {
         rust_name: "JoinedEntity",
         schema: "dbo",
         table: "joined_entities",
+        renamed_from: None,
         columns: &[],
         primary_key: PrimaryKeyMetadata {
             name: None,

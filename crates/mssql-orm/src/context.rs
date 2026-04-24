@@ -12,7 +12,9 @@ use mssql_orm_query::{
     ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
-use mssql_orm_tiberius::{MssqlConnection, TokioConnectionStream};
+use mssql_orm_tiberius::{
+    MssqlConnection, MssqlConnectionConfig, MssqlOperationalOptions, TokioConnectionStream,
+};
 
 pub type SharedConnection = Arc<tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>>;
 
@@ -580,6 +582,22 @@ pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection,
     Ok(Arc::new(tokio::sync::Mutex::new(connection)))
 }
 
+pub async fn connect_shared_with_options(
+    connection_string: &str,
+    options: MssqlOperationalOptions,
+) -> Result<SharedConnection, OrmError> {
+    let config =
+        MssqlConnectionConfig::from_connection_string_with_options(connection_string, options)?;
+    connect_shared_with_config(config).await
+}
+
+pub async fn connect_shared_with_config(
+    config: MssqlConnectionConfig,
+) -> Result<SharedConnection, OrmError> {
+    let connection = MssqlConnection::connect_with_config(config).await?;
+    Ok(Arc::new(tokio::sync::Mutex::new(connection)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DbContext, DbContextEntitySet, DbSet};
@@ -670,6 +688,7 @@ mod tests {
         rust_name: "TestEntity",
         schema: "dbo",
         table: "test_entities",
+        renamed_from: None,
         columns: &TEST_ENTITY_COLUMNS,
         primary_key: PrimaryKeyMetadata {
             name: None,
@@ -720,6 +739,7 @@ mod tests {
         rust_name: "CompositeKeyEntity",
         schema: "dbo",
         table: "composite_entities",
+        renamed_from: None,
         columns: &COMPOSITE_KEY_ENTITY_COLUMNS,
         primary_key: PrimaryKeyMetadata {
             name: None,
@@ -787,6 +807,7 @@ mod tests {
         rust_name: "VersionedEntity",
         schema: "dbo",
         table: "versioned_entities",
+        renamed_from: None,
         columns: &VERSIONED_ENTITY_COLUMNS,
         primary_key: PrimaryKeyMetadata {
             name: None,
