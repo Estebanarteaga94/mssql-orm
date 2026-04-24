@@ -47,6 +47,15 @@ pub trait MigrationModelSource {
     fn entity_metadata() -> &'static [&'static EntityMetadata];
 }
 
+pub fn model_snapshot_from_source<S: MigrationModelSource>() -> migrate::ModelSnapshot {
+    migrate::ModelSnapshot::from_entities(S::entity_metadata())
+}
+
+pub fn model_snapshot_json_from_source<S: MigrationModelSource>() -> Result<String, core::OrmError>
+{
+    model_snapshot_from_source::<S>().to_json_pretty()
+}
+
 pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
@@ -56,7 +65,8 @@ pub mod prelude {
         MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
         MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
         MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
-        PredicateCompositionExt, Tracked,
+        PredicateCompositionExt, Tracked, model_snapshot_from_source,
+        model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -190,6 +200,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["users", "audit_entries"]
         );
+    }
+
+    #[test]
+    fn exposes_model_snapshot_export_helpers() {
+        let snapshot = super::model_snapshot_from_source::<DerivedDbContext>();
+        let json = super::model_snapshot_json_from_source::<DerivedDbContext>().unwrap();
+
+        assert_eq!(
+            snapshot
+                .schemas
+                .iter()
+                .flat_map(|schema| schema.tables.iter().map(|table| table.name.as_str()))
+                .collect::<Vec<_>>(),
+            vec!["users", "audit_entries"]
+        );
+        assert!(json.contains("\"name\": \"auth\""));
+        assert!(json.contains("\"name\": \"users\""));
     }
 
     #[test]

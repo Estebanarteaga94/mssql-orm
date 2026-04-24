@@ -2,6 +2,36 @@
 
 ## 2026-04-24
 
+### Sesión: exportación de snapshot desde `MigrationModelSource` vía binario consumidor
+
+- Se ejecutó la subtarea `Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde mssql-orm-cli para generar el ModelSnapshot actual directamente desde MigrationModelSource`.
+- La crate pública `mssql-orm` ahora expone `model_snapshot_from_source::<C>()` y `model_snapshot_json_from_source::<C>()`, ambos construidos sobre `MigrationModelSource`.
+- `mssql-orm-cli` ahora acepta `migration add <Name> --snapshot-bin <BinName> --manifest-path <Path>`.
+- Esa ruta hace que la CLI ejecute `cargo run --quiet --bin <BinName>` sobre el manifest indicado, capture `stdout`, deserialice el `ModelSnapshot` JSON y lo use como snapshot actual de la migración.
+- Se preservó el flujo previo `--model-snapshot <Path>` como fallback explícito y ambos modos quedaron marcados como mutuamente excluyentes.
+- La cobertura de la CLI ahora incluye una prueba real con un proyecto fixture temporal que depende de la crate pública, deriva `DbContext` y exporta el snapshot usando `model_snapshot_json_from_source::<AppDbContext>()`.
+- `docs/migrations.md` ahora documenta el flujo de exportador explícito desde binario consumidor.
+
+### Resultado
+
+- La CLI ya puede obtener el snapshot actual directamente desde código Rust del consumidor sin acoplarse a Tiberius ni cargar tipos dinámicamente dentro del propio proceso.
+- La selección concreta del `DbContext` sigue siendo responsabilidad explícita del binario exportador, lo cual mantiene el contrato simple y testeable.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-cli`
+- `cargo test -p mssql-orm --lib`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión no ejecutó todavía el diff contra la última migración local ni la generación automática de `up.sql`; esas piezas siguen como subtareas separadas del backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo`.
+
 ### Sesión: entrada explícita de snapshot actual en `migration add`
 
 - Se tomó la subtarea `Etapa 7+: Resolver en mssql-orm-cli el contexto objetivo del consumidor para migration add y obtener desde él el snapshot actual del modelo`.

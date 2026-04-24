@@ -1,10 +1,11 @@
 use mssql_orm_migrate::{
-    build_database_update_script, create_migration_scaffold,
+    ModelSnapshot, build_database_update_script, create_migration_scaffold,
     create_migration_scaffold_with_snapshot, list_migrations, read_model_snapshot,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 use std::env;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn main() {
     match run(env::args().collect(), Path::new(".")) {
@@ -18,21 +19,9 @@ fn main() {
 
 fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
     match parse_command(&args)? {
-        CliCommand::MigrationAdd {
-            name,
-            model_snapshot,
-        } => {
-            let scaffold = match model_snapshot {
-                Some(path) => {
-                    let snapshot_path = resolve_project_path(root, &path);
-                    let snapshot = read_model_snapshot(&snapshot_path).map_err(|error| {
-                        format!(
-                            "failed to load current model snapshot from {}: {error}",
-                            snapshot_path.display()
-                        )
-                    })?;
-                    create_migration_scaffold_with_snapshot(root, &name, &snapshot)
-                }
+        CliCommand::MigrationAdd { name, options } => {
+            let scaffold = match load_current_model_snapshot(root, &options)? {
+                Some(snapshot) => create_migration_scaffold_with_snapshot(root, &name, &snapshot),
                 None => create_migration_scaffold(root, &name),
             }
             .map_err(|error| error.to_string())?;
@@ -71,6 +60,66 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
     }
 }
 
+fn load_current_model_snapshot(
+    root: &Path,
+    options: &MigrationAddOptions,
+) -> Result<Option<ModelSnapshot>, String> {
+    if let Some(path) = &options.model_snapshot {
+        let snapshot_path = resolve_project_path(root, path);
+        let snapshot = read_model_snapshot(&snapshot_path).map_err(|error| {
+            format!(
+                "failed to load current model snapshot from {}: {error}",
+                snapshot_path.display()
+            )
+        })?;
+        return Ok(Some(snapshot));
+    }
+
+    if let Some(snapshot_bin) = &options.snapshot_bin {
+        let manifest_path = options
+            .manifest_path
+            .as_ref()
+            .map(|path| resolve_project_path(root, path));
+        let output = run_snapshot_exporter(snapshot_bin, manifest_path.as_deref())?;
+        let snapshot = ModelSnapshot::from_json(&output)
+            .map_err(|error| format!("failed to deserialize snapshot exporter output: {error}"))?;
+        return Ok(Some(snapshot));
+    }
+
+    Ok(None)
+}
+
+fn run_snapshot_exporter(
+    snapshot_bin: &str,
+    manifest_path: Option<&Path>,
+) -> Result<String, String> {
+    let mut command = Command::new("cargo");
+    command.arg("run").arg("--quiet");
+
+    if let Some(manifest_path) = manifest_path {
+        command.arg("--manifest-path").arg(manifest_path);
+    }
+
+    command.arg("--bin").arg(snapshot_bin);
+
+    let output = command
+        .output()
+        .map_err(|error| format!("failed to execute snapshot exporter binary: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr = stderr.trim();
+        return Err(if stderr.is_empty() {
+            format!("snapshot exporter binary `{snapshot_bin}` failed")
+        } else {
+            format!("snapshot exporter binary `{snapshot_bin}` failed: {stderr}")
+        });
+    }
+
+    String::from_utf8(output.stdout)
+        .map_err(|_| "snapshot exporter emitted non-utf8 output".to_string())
+}
+
 fn resolve_project_path(root: &Path, path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -83,7 +132,7 @@ fn resolve_project_path(root: &Path, path: &Path) -> PathBuf {
 enum CliCommand {
     MigrationAdd {
         name: String,
-        model_snapshot: Option<PathBuf>,
+        options: MigrationAddOptions,
     },
     MigrationList,
     DatabaseUpdate,
@@ -91,18 +140,10 @@ enum CliCommand {
 
 fn parse_command(args: &[String]) -> Result<CliCommand, String> {
     match args {
-        [_bin, group, action, name] if group == "migration" && action == "add" => {
+        [_bin, group, action, name, rest @ ..] if group == "migration" && action == "add" => {
             Ok(CliCommand::MigrationAdd {
                 name: name.clone(),
-                model_snapshot: None,
-            })
-        }
-        [_bin, group, action, name, flag, path]
-            if group == "migration" && action == "add" && flag == "--model-snapshot" =>
-        {
-            Ok(CliCommand::MigrationAdd {
-                name: name.clone(),
-                model_snapshot: Some(PathBuf::from(path)),
+                options: parse_migration_add_options(rest)?,
             })
         }
         [_bin, group, action] if group == "migration" && action == "list" => {
@@ -112,14 +153,65 @@ fn parse_command(args: &[String]) -> Result<CliCommand, String> {
             Ok(CliCommand::DatabaseUpdate)
         }
         _ => Err(
-            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
+            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>] [--snapshot-bin <BinName> [--manifest-path <Path>]]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
         ),
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+struct MigrationAddOptions {
+    model_snapshot: Option<PathBuf>,
+    snapshot_bin: Option<String>,
+    manifest_path: Option<PathBuf>,
+}
+
+fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, String> {
+    let mut options = MigrationAddOptions::default();
+    let mut index = 0;
+
+    while index < args.len() {
+        match args[index].as_str() {
+            "--model-snapshot" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--model-snapshot requires a path".to_string())?;
+                options.model_snapshot = Some(PathBuf::from(value));
+                index += 2;
+            }
+            "--snapshot-bin" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--snapshot-bin requires a binary name".to_string())?;
+                options.snapshot_bin = Some(value.clone());
+                index += 2;
+            }
+            "--manifest-path" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--manifest-path requires a path".to_string())?;
+                options.manifest_path = Some(PathBuf::from(value));
+                index += 2;
+            }
+            unknown => {
+                return Err(format!("unknown migration add option: {unknown}"));
+            }
+        }
+    }
+
+    if options.model_snapshot.is_some() && options.snapshot_bin.is_some() {
+        return Err("--model-snapshot and --snapshot-bin cannot be used together".to_string());
+    }
+
+    if options.snapshot_bin.is_none() && options.manifest_path.is_some() {
+        return Err("--manifest-path requires --snapshot-bin".to_string());
+    }
+
+    Ok(options)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{CliCommand, parse_command, run};
+    use super::{CliCommand, MigrationAddOptions, parse_command, run};
     use mssql_orm_migrate::read_model_snapshot;
     use std::fs;
     use std::path::PathBuf;
@@ -147,7 +239,7 @@ mod tests {
             .unwrap(),
             CliCommand::MigrationAdd {
                 name: "CreateCustomers".to_string(),
-                model_snapshot: None
+                options: MigrationAddOptions::default()
             }
         );
         assert_eq!(
@@ -162,7 +254,32 @@ mod tests {
             .unwrap(),
             CliCommand::MigrationAdd {
                 name: "CreateCustomers".to_string(),
-                model_snapshot: Some(PathBuf::from("target/current_model_snapshot.json"))
+                options: MigrationAddOptions {
+                    model_snapshot: Some(PathBuf::from("target/current_model_snapshot.json")),
+                    snapshot_bin: None,
+                    manifest_path: None,
+                }
+            }
+        );
+        assert_eq!(
+            parse_command(&[
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "CreateCustomers".to_string(),
+                "--snapshot-bin".to_string(),
+                "app-model-snapshot".to_string(),
+                "--manifest-path".to_string(),
+                "examples/todo-app/Cargo.toml".to_string(),
+            ])
+            .unwrap(),
+            CliCommand::MigrationAdd {
+                name: "CreateCustomers".to_string(),
+                options: MigrationAddOptions {
+                    model_snapshot: None,
+                    snapshot_bin: Some("app-model-snapshot".to_string()),
+                    manifest_path: Some(PathBuf::from("examples/todo-app/Cargo.toml")),
+                }
             }
         );
         assert_eq!(
@@ -235,6 +352,67 @@ mod tests {
         let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
 
         assert!(snapshot.schema("sales").is_some());
+    }
+
+    #[test]
+    fn run_migration_add_uses_snapshot_exporter_binary_when_provided() {
+        let root = temp_project_root();
+        let fixture = root.join("fixture_app");
+        let fixture_src = fixture.join("src");
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let orm_crate_root = repo_root.join("crates/mssql-orm");
+        let escaped_repo_root = orm_crate_root.display().to_string().replace('\\', "\\\\");
+
+        fs::create_dir_all(&fixture_src).unwrap();
+        fs::write(
+            fixture.join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"fixture-app\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[dependencies]\nmssql-orm = {{ path = \"{}\" }}\n",
+                escaped_repo_root
+            ),
+        )
+        .unwrap();
+        fs::write(
+            fixture_src.join("main.rs"),
+            "use mssql_orm::prelude::*;\n\n#[derive(Entity, Debug, Clone)]\n#[orm(schema = \"sales\", table = \"customers\")]\nstruct Customer {\n    #[orm(primary_key)]\n    id: i64,\n}\n\n#[derive(DbContext, Debug, Clone)]\nstruct AppDbContext {\n    customers: DbSet<Customer>,\n}\n\nfn main() {\n    print!(\"{}\", mssql_orm::model_snapshot_json_from_source::<AppDbContext>().unwrap());\n}\n",
+        )
+        .unwrap();
+
+        let output = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "CreateCustomers".to_string(),
+                "--snapshot-bin".to_string(),
+                "fixture-app".to_string(),
+                "--manifest-path".to_string(),
+                fixture.join("Cargo.toml").display().to_string(),
+            ],
+            &root,
+        );
+
+        let output = output.unwrap();
+        let migration_path = output
+            .lines()
+            .find_map(|line| line.strip_prefix("Path: "))
+            .map(PathBuf::from)
+            .unwrap();
+        let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
+
+        assert_eq!(snapshot.schemas.len(), 1);
+        assert!(
+            snapshot
+                .schema("sales")
+                .unwrap()
+                .table("customers")
+                .is_some()
+        );
     }
 
     #[test]

@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde `mssql-orm-cli` para generar el `ModelSnapshot` actual directamente desde `MigrationModelSource`
 - [ ] Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo
 - [ ] Etapa 7+: Integrar el pipeline completo `snapshot -> diff -> MigrationOperation -> DDL SQL Server` dentro de `migration add`
 - [ ] Etapa 7+: Generar `up.sql` automáticamente desde operaciones compiladas y versionar `model_snapshot.json` con el estado actual del modelo
@@ -18,6 +17,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 7+: Resolver carga/exportación del contexto Rust consumidor desde `mssql-orm-cli` para generar el `ModelSnapshot` actual directamente desde `MigrationModelSource`
 - [x] Etapa 7+: Permitir que `migration add` consuma un `ModelSnapshot` actual explícito con `--model-snapshot <Path>` y lo versione en `model_snapshot.json`
 - [x] Etapa 7+: Serializar y deserializar `ModelSnapshot` y artefactos relacionados para reemplazar el `model_snapshot.json` placeholder actual
 - [x] Etapa 7+: Exponer desde `#[derive(DbContext)]` una fuente estable de metadata de entidades para migraciones (`entity_metadata()` o equivalente) sin acoplar `core` a la CLI

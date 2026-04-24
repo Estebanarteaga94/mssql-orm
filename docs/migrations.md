@@ -49,6 +49,33 @@ cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- \
   migration add CreateCustomers --model-snapshot target/current_model_snapshot.json
 ```
 
+Tambien puedes hacer que la CLI lo exporte invocando un binario del proyecto consumidor:
+
+```bash
+cargo run --manifest-path crates/mssql-orm-cli/Cargo.toml -- \
+  migration add CreateCustomers \
+  --snapshot-bin app-model-snapshot \
+  --manifest-path examples/todo-app/Cargo.toml
+```
+
+Ese binario debe imprimir a `stdout` el JSON del snapshot actual. La crate publica ya expone helpers para eso:
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(DbContext, Debug, Clone)]
+struct AppDbContext {
+    users: DbSet<User>,
+}
+
+fn main() {
+    print!(
+        "{}",
+        mssql_orm::model_snapshot_json_from_source::<AppDbContext>().unwrap()
+    );
+}
+```
+
 Eso crea un directorio dentro de `./migrations/` con este shape:
 
 ```text
@@ -66,7 +93,8 @@ Detalles operativos relevantes:
 - `up.sql` y `down.sql` nacen como plantillas vacias con comentario
 - sin `--model-snapshot`, `model_snapshot.json` se scaffolda con un snapshot vacio valido
 - con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
-- la CLI actual todavia no carga automaticamente el tipo `DbContext` desde tu crate Rust; esa integracion queda como siguiente paso del pipeline code-first
+- con `--snapshot-bin`, la CLI ejecuta `cargo run --bin <bin>` sobre el manifest indicado, captura `stdout` y valida que sea un `ModelSnapshot` JSON valido
+- el exportador del consumidor sigue siendo explicito: la CLI no resuelve sola el nombre del `DbContext`, sino que delega esa seleccion al binario que uses para exportar el snapshot
 
 ## 3. Como nombrar bien una migracion
 
