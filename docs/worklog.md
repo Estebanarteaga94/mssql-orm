@@ -2,6 +2,77 @@
 
 ## 2026-04-23
 
+### Sesión: rehacer el `README` principal como landing pública
+
+- Se ejecutó la subtarea `Etapa 15: Consolidar documentación pública base del release (README, alcance actual, estado por etapas y límites explícitos)`.
+- El `README.md` principal se reescribió completo para reflejar el estado real del repositorio y funcionar como presentación pública de la librería, con tono más comercial/didáctico como pidió el usuario.
+- El nuevo `README` ahora prioriza propuesta de valor, capacidades ya implementadas, ejemplo corto de uso, arquitectura por crates, ejemplos incluidos, estado real del roadmap, límites explícitos y comandos de validación.
+- También se eliminaron afirmaciones viejas que ya no eran ciertas, como la idea de que el repo seguía en etapa de placeholders fundacionales.
+
+### Resultado
+
+- El repositorio ya tiene un `README` principal coherente con el código actual y orientado a “vender” la librería sin inventar capacidades no implementadas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- Revisión manual del contenido final de `README.md`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta subtarea no introdujo cambios de código, solo documentación pública principal.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar quickstart reproducible para conexión, CRUD base y query builder público`.
+
+### Sesión: registrar criterio editorial del `README` principal
+
+- El usuario dejó un criterio adicional para la Etapa 15: el `README.md` principal del repositorio debe ser llamativo y didáctico, con tono de presentación pública de la librería, no solo como referencia técnica interna.
+- Se registró esa preferencia en `docs/context.md` para que las próximas sesiones de release/documentación la tomen como requisito editorial explícito.
+
+### Resultado
+
+- El backlog de release mantiene el mismo scope técnico, pero ahora con una guía clara sobre el tono y objetivo del `README` principal.
+
+### Validación
+
+- Revisión manual de consistencia entre la preferencia del usuario y el foco actual de la Etapa 15.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión solo deja trazabilidad editorial; no introduce cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Consolidar documentación pública base del release (README, alcance actual, estado por etapas y límites explícitos)` aplicando ese enfoque más comercial y didáctico.
+
+### Sesión: descomponer la Etapa 15 de release
+
+- Se revisó el backlog tras cerrar Etapa 14 y la re-alineación de `FromRow`.
+- La tarea monolítica `Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog` se dividió en subtareas pequeñas y verificables dentro de `docs/tasks.md`.
+- La descomposición quedó separada en cinco entregables concretos: consolidación de documentación pública base, quickstart reproducible, consolidación de ejemplos ejecutables, changelog inicial y validación final de release.
+- También se añadió una tarea operativa explícita para reflejar que la propia descomposición de Etapa 15 ya quedó hecha y trazada en el backlog.
+
+### Resultado
+
+- La Etapa 15 ya no depende de una tarea amplia y ambigua; el backlog quedó listo para ejecutarse por partes sin mezclar documentación, ejemplos, changelog y validación final en una sola sesión.
+
+### Validación
+
+- Revisión manual de consistencia de `docs/tasks.md` contra el estado actual del repositorio y el objetivo de release.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión solo reorganizó backlog; no introdujo cambios de código.
+
+### Próximo paso recomendado
+
+- Empezar por `Etapa 15: Consolidar documentación pública base del release (README, alcance actual, estado por etapas y límites explícitos)`.
+
 ### Sesión: re-alinear `FromRow` con el plan maestro
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la tarea operativa pendiente: `Re-alinear el row mapping con el plan maestro generando FromRow automático desde derive y retirando boilerplate manual de ejemplos/tests`.

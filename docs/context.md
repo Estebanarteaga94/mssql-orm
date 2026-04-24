@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: además de la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool`), el ejemplo web async `todo_app` ya tiene dominio, queries públicas, endpoints mínimos, wiring real con `MssqlPool` y validación reproducible contra SQL Server real. El siguiente foco natural es la Etapa 15 de release y documentación pública.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: además de la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool`), el ejemplo web async `todo_app` ya tiene dominio, queries públicas, endpoints mínimos, wiring real con `MssqlPool` y validación reproducible contra SQL Server real. La Etapa 15 ya quedó descompuesta en subtareas de release/documentación pública y la primera de ellas también quedó cerrada: el `README.md` principal ya funciona como landing pública coherente con el estado real del proyecto. El siguiente foco natural es preparar el quickstart reproducible.
 
 ## Dirección Arquitectónica Vigente
 
@@ -26,6 +26,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - Tiberius debe quedar encapsulado como adaptador de infraestructura, no como núcleo del ORM.
 - El MVP debe enfocarse en metadata, macros de entidad, CRUD básico, query builder simple, `DbContext`, `DbSet` y migraciones básicas.
 - La crate pública `mssql-orm` centraliza la API expuesta y reexporta internals seleccionados.
+- Para la Etapa 15, el usuario quiere que el `README.md` principal sea llamativo, didáctico y orientado a “vender” la librería: debe priorizar propuesta de valor, claridad de uso, quick wins y ejemplos atractivos, no solo inventario técnico de módulos.
 - `mssql-orm-core` ya define `Entity`, `EntityMetadata`, `ColumnMetadata`, `IndexMetadata`, `ForeignKeyMetadata`, `SqlServerType` y tipos auxiliares.
 - `mssql-orm-core` ahora también expone helpers explícitos de metadata relacional sobre `ForeignKeyMetadata` y `EntityMetadata`, incluyendo búsqueda por nombre, por columna local y por tabla referenciada.
 - El plan maestro prevalece explícitamente sobre helpers o inferencias locales cuando se definan contratos, campos de metadata o responsabilidades entre crates.

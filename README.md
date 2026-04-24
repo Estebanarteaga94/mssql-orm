@@ -1,69 +1,193 @@
 # mssql-orm
 
-ORM `code-first` en Rust para SQL Server con Tiberius como driver de bajo nivel.
+ORM `code-first` para Rust y SQL Server, con `proc_macros`, query builder tipado, migraciones y ejecución sobre Tiberius.
 
-## Estado
+Si te gusta la ergonomía de `Entity Framework Core` o `Eloquent`, pero quieres mantener control explícito sobre tipos, ownership y límites arquitectónicos en Rust, este proyecto apunta exactamente a eso.
 
-El repositorio está en fase fundacional. La Etapa 0 deja preparado el workspace, la trazabilidad operativa y la automatización base antes de entrar en metadata, proc macros y ejecución real contra SQL Server.
+## Por Qué Existe
 
-La fuente de verdad del roadmap técnico es [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md).
+Trabajar con SQL Server desde Rust suele caer en uno de dos extremos:
 
-## Objetivo
+- acceso de muy bajo nivel, con mucho SQL manual y poco modelo de dominio
+- abstracciones demasiado genéricas, poco alineadas con SQL Server real
 
-Construir una librería reusable inspirada en `Entity Framework Core` y `Eloquent`, pero idiomática en Rust:
+`mssql-orm` toma una posición distinta:
 
-- modelos `code-first` definidos en Rust
-- metadata generada en compilación con `proc_macros`
-- query builder tipado con AST separada de la generación SQL
-- compilación específica para SQL Server
-- ejecución aislada en un adaptador sobre Tiberius
-- migraciones `code-first`
-- API pública concentrada en una crate principal
+- SQL Server es el objetivo principal, no un backend “más”
+- la metadata vive en entidades Rust
+- el query builder construye AST, no strings SQL
+- la compilación SQL está separada de la ejecución
+- Tiberius queda encapsulado como adaptador de infraestructura
 
-## Arquitectura del Workspace
+## Qué Ya Puedes Hacer
 
-El workspace está dividido en crates con responsabilidades explícitas:
+Hoy el repositorio ya tiene soporte funcional para:
 
-- `mssql-orm-core`: contratos, metadata, tipos compartidos y errores
-- `mssql-orm-macros`: derives y generación de metadata en compilación
-- `mssql-orm-query`: AST y primitivas del query builder, sin emitir SQL
-- `mssql-orm-sqlserver`: compilación de AST a SQL Server
-- `mssql-orm-tiberius`: conexión, ejecución, filas y transacciones sobre Tiberius
-- `mssql-orm-migrate`: snapshots, diffs y operaciones de migración
-- `mssql-orm-cli`: interfaz de línea de comandos para migraciones y soporte operativo
-- `mssql-orm`: crate pública que reexporta la API soportada
+- `#[derive(Entity)]` con metadata estática, columnas, foreign keys, índices compuestos, `rowversion`, columnas computed y hints de rename
+- materialización automática de filas vía `FromRow` derivado desde `Entity`
+- `DbContext` y `DbSet<T>` tipados
+- CRUD base: `find`, `insert`, `update`, `delete`
+- query builder público con `filter`, `order_by`, `limit`, `take`, `paginate`, `count`, `inner_join`, `left_join`
+- Active Record base: `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.save(&db)`, `entity.delete(&db)`
+- concurrencia optimista con `rowversion`
+- change tracking experimental con `Tracked<T>` y `save_changes()`
+- compilación de AST a SQL Server parametrizado
+- adaptador Tiberius para conexión, ejecución, transacciones, health checks, retry, tracing, slow query logs y pool opcional
+- migraciones `code-first` con snapshots, diff, DDL SQL Server y CLI mínima
+- validación real contra SQL Server en pruebas de integración y en el ejemplo `todo_app`
 
-Más detalle en [docs/architecture/overview.md](docs/architecture/overview.md).
+## Ejemplo Rápido
 
-## Restricciones Arquitectónicas
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "users", schema = "dbo")]
+struct User {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(length = 180)]
+    email: String,
+
+    active: bool,
+}
+
+#[derive(DbContext, Debug, Clone)]
+struct AppDb {
+    pub users: DbSet<User>,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), OrmError> {
+    let db = AppDb::connect(
+        "Server=localhost;Database=tempdb;User Id=SA;Password=secret;TrustServerCertificate=True;Encrypt=False;"
+    )
+    .await?;
+
+    let active_users = db
+        .users
+        .query()
+        .filter(User::active.eq(true))
+        .order_by(User::email.asc())
+        .take(10)
+        .all()
+        .await?;
+
+    println!("loaded {} users", active_users.len());
+    Ok(())
+}
+```
+
+## Arquitectura
+
+El workspace está dividido por responsabilidad:
+
+- `mssql-orm-core`
+  contratos, metadata, tipos, errores y mapping neutral
+- `mssql-orm-macros`
+  derives y generación en compile-time
+- `mssql-orm-query`
+  AST del query builder, sin generar SQL
+- `mssql-orm-sqlserver`
+  compilación del AST a SQL Server parametrizado
+- `mssql-orm-tiberius`
+  conexión, ejecución, filas, transacciones, retry, tracing y pool
+- `mssql-orm-migrate`
+  snapshots, diff y operaciones de migración
+- `mssql-orm-cli`
+  comandos de migración y soporte operativo
+- `mssql-orm`
+  crate pública que concentra la API
+
+La separación es deliberada:
 
 - `core` no depende de Tiberius
-- `query` no genera SQL directo
-- la generación SQL vive solo en `mssql-orm-sqlserver`
-- la ejecución vive solo en `mssql-orm-tiberius`
-- la API pública se concentra en `mssql-orm`
-- SQL Server es el único motor objetivo en esta fase
+- `query` no emite SQL
+- `sqlserver` no ejecuta
+- `tiberius` no define metadata del dominio
 
-## Estado Actual del Código
+## Ejemplos Incluidos
 
-- El workspace compila y tiene CI base en GitHub Actions.
-- Los crates exponen solo marcadores y límites de responsabilidad.
-- Los derives de `mssql-orm-macros` siguen siendo placeholders.
-- Aún no existe metadata real de entidades, AST funcional ni integración con SQL Server.
+### `basic-crud`
 
-## Validación Base
+Ejemplo mínimo para mostrar conexión, CRUD base y uso inicial de `DbSet`.
 
-El pipeline vigente ejecuta:
+```bash
+cargo run --manifest-path examples/basic-crud/Cargo.toml
+```
 
-- `cargo fmt --all --check`
-- `cargo check --workspace`
-- `cargo test --workspace`
-- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+### `todo-app`
 
-## Documentación Operativa
+Ejemplo web async más realista, con:
 
-- Instrucciones del agente: [docs/instructions.md](docs/instructions.md)
-- Backlog: [docs/tasks.md](docs/tasks.md)
-- Historial de sesiones: [docs/worklog.md](docs/worklog.md)
-- Contexto vigente: [docs/context.md](docs/context.md)
-- ADRs: [docs/adr](docs/adr)
+- `DbContext` derivado
+- dominio relacional (`users`, `todo_lists`, `todo_items`)
+- query builder público real
+- health check HTTP
+- endpoints mínimos de lectura
+- wiring con `MssqlPool`
+- smoke reproducible contra SQL Server real
+
+```bash
+cargo run --manifest-path examples/todo-app/Cargo.toml
+```
+
+Más detalle en [examples/todo-app/README.md](examples/todo-app/README.md).
+
+## Estado Real del Proyecto
+
+El proyecto ya no está en fase “placeholder”. Las etapas fundacionales y gran parte de la superficie pública principal están implementadas y validadas.
+
+Estado resumido:
+
+- Etapa 12 cerrada: change tracking experimental
+- Etapa 13 cerrada: migraciones avanzadas
+- Etapa 14 cerrada: surface operativa de producción y ejemplo web `todo_app`
+- Etapa 15 en curso: release, documentación pública, quickstart y changelog
+
+La fuente de verdad del roadmap técnico sigue siendo [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md).
+
+## Lo Que Aún No Promete
+
+Este repo todavía no pretende vender humo. Hay límites explícitos en esta fase:
+
+- SQL Server es el único backend objetivo
+- la API de change tracking sigue siendo experimental
+- no se está intentando soportar múltiples motores de base de datos
+- el release público todavía está en consolidación
+- algunas decisiones de UX todavía se están afinando alrededor de ejemplos, quickstart y documentación de entrada
+
+## Validación
+
+Validación base del workspace:
+
+```bash
+cargo fmt --all --check
+cargo check --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
+El ejemplo `todo_app` también quedó validado contra SQL Server real con fixture reproducible.
+
+## Documentación del Repositorio
+
+- plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md)
+- arquitectura: [docs/architecture/overview.md](docs/architecture/overview.md)
+- backlog: [docs/tasks.md](docs/tasks.md)
+- contexto operativo: [docs/context.md](docs/context.md)
+- historial de sesiones: [docs/worklog.md](docs/worklog.md)
+
+## Dirección del Proyecto
+
+La meta no es solo “tener un ORM”.
+
+La meta es ofrecer una librería que haga que trabajar con SQL Server desde Rust se sienta:
+
+- tipado
+- explícito
+- productivo
+- portable dentro del propio ecosistema del proyecto
+- útil en aplicaciones reales, no solo en demos de metadata
