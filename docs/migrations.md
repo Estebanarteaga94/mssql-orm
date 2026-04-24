@@ -236,7 +236,48 @@ El script generado hoy ya trae varias protecciones utiles:
 
 La implicacion practica es muy importante: no edites una migracion ya aplicada esperando que el sistema la "reaplique". El checksum lo tratara como drift y el script fallara a proposito.
 
-## 9. Como trabajar bien en equipo
+## 9. Flujo rapido con `examples/todo-app`
+
+Si borraste `examples/todo-app/migrations/` y quieres recrear la migracion inicial desde el modelo actual del ejemplo, usa este flujo desde la raiz del repositorio:
+
+```bash
+cargo build -p mssql-orm-cli
+```
+
+```bash
+cd examples/todo-app
+```
+
+```bash
+../../target/debug/mssql-orm-cli migration add CreateTodoSchema \
+  --snapshot-bin model_snapshot \
+  --manifest-path Cargo.toml
+```
+
+Para revisar el orden local:
+
+```bash
+../../target/debug/mssql-orm-cli migration list
+```
+
+Para inspeccionar el SQL acumulado sin ejecutar:
+
+```bash
+../../target/debug/mssql-orm-cli database update
+```
+
+Para aplicar contra SQL Server desde la CLI:
+
+```bash
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+  ../../target/debug/mssql-orm-cli database update --execute
+```
+
+Puedes repetir el ultimo comando para validar que el historial `dbo.__mssql_orm_migrations` evita reaplicar migraciones ya registradas.
+
+Importante: la migracion inicial espera una base limpia para los objetos que va a crear, o un historial ya alineado. Si existen tablas como `todo.todo_items` pero no existe la fila correspondiente en `dbo.__mssql_orm_migrations`, SQL Server rechazara el `CREATE TABLE` por objeto existente.
+
+## 10. Como trabajar bien en equipo
 
 Reglas recomendadas para no romper historial:
 
@@ -246,13 +287,15 @@ Reglas recomendadas para no romper historial:
 - si una migracion cambia columnas computadas, foreign keys o renames, valida el SQL con mas cuidado
 - prueba primero en una base desechable como `tempdb`
 
-## 10. Limitaciones explicitas actuales
+## 11. Limitaciones explicitas actuales
 
 Conviene asumir estos limites hoy:
 
 - la CLI actual ya genera `up.sql` desde el diff del snapshot actual contra la ultima migracion local cuando le proporcionas un snapshot actual real
 - la CLI bloquea por defecto cambios destructivos detectados en `migration add`; el bypass explicito es `--allow-destructive`
-- la CLI actual no aplica el script directamente a SQL Server; solo lo imprime
+- por defecto, `database update` solo imprime el script; la ejecucion directa requiere `database update --execute`
+- `database update --execute` no toma la conexion desde el `DbContext`; usa `--connection-string`, `DATABASE_URL` o `MSSQL_ORM_TEST_CONNECTION_STRING`
+- no hay baselining automatico para objetos existentes sin historial de migracion
 - la CLI actual no expone `database downgrade`
 - `down.sql` no se consume automaticamente
 - `down.sql` no se genera como inversion completa del diff; queda como rollback manual revisable hasta que las operaciones conserven payload suficiente para invertir cambios de forma segura
@@ -260,7 +303,7 @@ Conviene asumir estos limites hoy:
 - `model_snapshot.json` se scaffolda, pero no se mantiene solo
 - la separacion por sentencias del `up.sql` es deliberadamente simple; conviene escribir migraciones SQL Server limpias y bien delimitadas
 
-## 11. Flujo recomendado para cambios reales
+## 12. Flujo recomendado para cambios reales
 
 Para cambios pequenos y seguros:
 
