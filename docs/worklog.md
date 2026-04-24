@@ -2,6 +2,36 @@
 
 ## 2026-04-23
 
+### Sesión: slow query logs configurables sobre la instrumentación existente
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; esta ruta difiere de la entrada original en raíz y queda registrada aquí para trazabilidad.
+- Se movió en `docs/tasks.md` la subtarea `Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de tracing` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/src/telemetry.rs` ahora reutiliza `trace_query(...)` para emitir `orm.query.slow` con `tracing::warn!` cuando la duración observada alcanza `MssqlSlowQueryOptions::threshold`, sin crear un pipeline paralelo de observabilidad.
+- El evento de slow query publica campos estables `server_addr`, `operation`, `timeout_ms`, `threshold_ms`, `duration_ms`, `param_count`, `sql`, `params_mode` y `params`, manteniendo por defecto la política de redacción sin exponer valores sensibles.
+- La misma capa ahora soporta `slow_query.enabled` incluso cuando `tracing.enabled` está apagado: los eventos `orm.query.start/finish/error` siguen dependiendo de `MssqlTracingOptions`, pero `orm.query.slow` puede activarse independientemente sobre el mismo punto de medición.
+- `crates/mssql-orm-tiberius/src/connection.rs`, `src/executor.rs` y `src/transaction.rs` ahora propagan `MssqlSlowQueryOptions` junto con el contexto de tracing existente, cubriendo queries ejecutadas tanto en conexión directa como dentro de transacciones.
+- Se añadió cobertura unitaria específica en `telemetry.rs` para fijar el umbral efectivo del slow log y una aserción adicional en `executor.rs` para preservar el shape operativo de `MssqlSlowQueryOptions`.
+
+### Resultado
+
+- La Etapa 14 ya registra slow queries configurables en la capa correcta (`mssql-orm-tiberius`), reutilizando la instrumentación y la medición de duración existentes sin mover ejecución fuera del adaptador ni exponer parámetros por defecto.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales del cambio.
+- Durante la validación hubo esperas breves por file locks de `cargo` en el entorno local, pero las corridas terminaron correctamente.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius`.
+
 ### Sesión: instrumentación con `tracing` en conexión, queries y transacciones
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; para esta subtarea se siguieron explícitamente las secciones `17.3. Logs sin datos sensibles` y `18. Observabilidad`, que exigen `tracing`, eventos `orm.query.start/finish/error`, eventos transaccionales y no exponer parámetros por defecto.

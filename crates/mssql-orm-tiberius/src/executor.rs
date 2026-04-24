@@ -1,4 +1,4 @@
-use crate::config::MssqlTracingOptions;
+use crate::config::{MssqlSlowQueryOptions, MssqlTracingOptions};
 use crate::connection::{MssqlConnection, run_with_timeout};
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use crate::parameter::PreparedQuery;
@@ -96,6 +96,7 @@ where
 {
     pub async fn execute(&mut self, query: CompiledQuery) -> Result<ExecuteResult, OrmError> {
         let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
@@ -103,6 +104,7 @@ where
                 self.client_mut(),
                 query,
                 tracing_options,
+                slow_query_options,
                 &server_addr,
                 query_timeout,
             )
@@ -116,6 +118,7 @@ where
         query: CompiledQuery,
     ) -> Result<QueryStream<'a>, OrmError> {
         let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(query_timeout, "SQL Server query timed out", async {
@@ -123,6 +126,7 @@ where
                 self.client_mut(),
                 query,
                 tracing_options,
+                slow_query_options,
                 &server_addr,
                 query_timeout,
             )
@@ -136,6 +140,7 @@ where
         T: FromRow + Send,
     {
         let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
@@ -143,6 +148,7 @@ where
                 self.client_mut(),
                 query,
                 tracing_options,
+                slow_query_options,
                 &server_addr,
                 query_timeout,
             )
@@ -156,6 +162,7 @@ where
         T: FromRow + Send,
     {
         let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
@@ -163,6 +170,7 @@ where
                 self.client_mut(),
                 query,
                 tracing_options,
+                slow_query_options,
                 &server_addr,
                 query_timeout,
             )
@@ -176,6 +184,7 @@ pub(crate) async fn execute_compiled<S>(
     client: &mut Client<S>,
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
+    slow_query_options: MssqlSlowQueryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<ExecuteResult, OrmError>
@@ -184,7 +193,7 @@ where
 {
     let prepared = PreparedQuery::from_compiled(query);
     let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
-    let result = trace_query(tracing_options, trace, async {
+    let result = trace_query(tracing_options, slow_query_options, trace, async {
         prepared.validate_parameter_count()?;
         prepared.execute(client).await
     })
@@ -197,6 +206,7 @@ pub(crate) async fn query_raw_compiled<'a, S>(
     client: &'a mut Client<S>,
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
+    slow_query_options: MssqlSlowQueryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<QueryStream<'a>, OrmError>
@@ -205,7 +215,7 @@ where
 {
     let prepared = PreparedQuery::from_compiled(query);
     let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
-    trace_query(tracing_options, trace, async {
+    trace_query(tracing_options, slow_query_options, trace, async {
         prepared.validate_parameter_count()?;
         prepared.query(client).await
     })
@@ -216,6 +226,7 @@ pub(crate) async fn fetch_one_compiled<S, T>(
     client: &mut Client<S>,
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
+    slow_query_options: MssqlSlowQueryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<Option<T>, OrmError>
@@ -223,11 +234,18 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let row = query_raw_compiled(client, query, tracing_options, server_addr, query_timeout)
-        .await?
-        .into_row()
-        .await
-        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+    let row = query_raw_compiled(
+        client,
+        query,
+        tracing_options,
+        slow_query_options,
+        server_addr,
+        query_timeout,
+    )
+    .await?
+    .into_row()
+    .await
+    .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
 
     row.as_ref()
         .map(|row| T::from_row(&MssqlRow::new(row)))
@@ -238,6 +256,7 @@ pub(crate) async fn fetch_all_compiled<S, T>(
     client: &mut Client<S>,
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
+    slow_query_options: MssqlSlowQueryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<Vec<T>, OrmError>
@@ -245,11 +264,18 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let rows = query_raw_compiled(client, query, tracing_options, server_addr, query_timeout)
-        .await?
-        .into_first_result()
-        .await
-        .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+    let rows = query_raw_compiled(
+        client,
+        query,
+        tracing_options,
+        slow_query_options,
+        server_addr,
+        query_timeout,
+    )
+    .await?
+    .into_first_result()
+    .await
+    .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
 
     rows.iter()
         .map(|row| T::from_row(&MssqlRow::new(row)))
@@ -259,7 +285,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ExecuteResult, fetch_all_compiled, fetch_one_compiled, query_raw_compiled};
-    use crate::config::MssqlTracingOptions;
+    use crate::config::{MssqlSlowQueryOptions, MssqlTracingOptions};
     use mssql_orm_core::{FromRow, OrmError, Row};
 
     struct TestRowModel;
@@ -292,7 +318,9 @@ mod tests {
     #[test]
     fn compiled_query_helpers_accept_tracing_context_shape() {
         let tracing = MssqlTracingOptions::enabled();
+        let slow_query = MssqlSlowQueryOptions::enabled(std::time::Duration::from_millis(250));
 
         assert!(tracing.enabled);
+        assert!(slow_query.enabled);
     }
 }

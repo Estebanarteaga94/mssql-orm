@@ -1,4 +1,4 @@
-use crate::config::MssqlTracingOptions;
+use crate::config::{MssqlSlowQueryOptions, MssqlTracingOptions};
 use crate::connection::run_with_timeout;
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use crate::executor::{
@@ -19,6 +19,7 @@ pub struct MssqlTransaction<'a, S: AsyncRead + AsyncWrite + Unpin + Send> {
     client: &'a mut Client<S>,
     query_timeout: Option<Duration>,
     tracing_options: MssqlTracingOptions,
+    slow_query_options: MssqlSlowQueryOptions,
     server_addr: String,
     completed: bool,
 }
@@ -31,6 +32,7 @@ where
         client: &'a mut Client<S>,
         query_timeout: Option<Duration>,
         tracing_options: MssqlTracingOptions,
+        slow_query_options: MssqlSlowQueryOptions,
         server_addr: String,
     ) -> Result<Self, OrmError> {
         begin_transaction_scope(client, query_timeout, tracing_options, &server_addr).await?;
@@ -39,6 +41,7 @@ where
             client,
             query_timeout,
             tracing_options,
+            slow_query_options,
             server_addr,
             completed: false,
         })
@@ -62,6 +65,7 @@ where
                 self.client,
                 query,
                 self.tracing_options,
+                self.slow_query_options,
                 &self.server_addr,
                 self.query_timeout,
             )
@@ -79,6 +83,7 @@ where
                 self.client,
                 query,
                 self.tracing_options,
+                self.slow_query_options,
                 &self.server_addr,
                 self.query_timeout,
             )
@@ -96,6 +101,7 @@ where
                 self.client,
                 query,
                 self.tracing_options,
+                self.slow_query_options,
                 &self.server_addr,
                 self.query_timeout,
             )
@@ -113,6 +119,7 @@ where
                 self.client,
                 query,
                 self.tracing_options,
+                self.slow_query_options,
                 &self.server_addr,
                 self.query_timeout,
             )

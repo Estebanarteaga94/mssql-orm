@@ -80,6 +80,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
         self.config.options().tracing
     }
 
+    pub(crate) fn slow_query_options(&self) -> crate::config::MssqlSlowQueryOptions {
+        self.config.options().slow_query
+    }
+
     pub(crate) fn server_addr(&self) -> String {
         self.config.addr()
     }
@@ -87,11 +91,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
     pub async fn begin_transaction<'a>(&'a mut self) -> Result<MssqlTransaction<'a, S>, OrmError> {
         let query_timeout = self.query_timeout();
         let tracing_options = self.tracing_options();
+        let slow_query_options = self.slow_query_options();
         let server_addr = self.server_addr();
         MssqlTransaction::begin(
             self.client_mut(),
             query_timeout,
             tracing_options,
+            slow_query_options,
             server_addr,
         )
         .await
