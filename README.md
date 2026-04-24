@@ -80,6 +80,8 @@ async fn main() -> Result<(), OrmError> {
 }
 ```
 
+Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
+
 ## Arquitectura
 
 El workspace está dividido por responsabilidad:
@@ -108,15 +110,19 @@ La separación es deliberada:
 - `sqlserver` no ejecuta
 - `tiberius` no define metadata del dominio
 
-## Ejemplos Incluidos
+## Quickstart y Ejemplos
 
-### `basic-crud`
+### Quickstart público
 
-Ejemplo mínimo para mostrar conexión, CRUD base y uso inicial de `DbSet`.
+Guía reproducible para:
 
-```bash
-cargo run --manifest-path examples/basic-crud/Cargo.toml
-```
+- conectar `DbContext`
+- modelar una entidad
+- usar `Insertable` y `Changeset`
+- ejecutar `find`, `insert`, `update`, `delete`
+- usar `filter`, `order_by` y `take`
+
+Documento: [docs/quickstart.md](docs/quickstart.md)
 
 ### `todo-app`
 

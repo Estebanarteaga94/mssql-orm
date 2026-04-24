@@ -2,6 +2,37 @@
 
 ## 2026-04-23
 
+### Sesión: quickstart reproducible para la API pública
+
+- Se ejecutó la subtarea `Etapa 15: Preparar quickstart reproducible para conexión, CRUD base y query builder público`.
+- Se añadió [docs/quickstart.md](/home/esteban94/Proyectos/Rust/mssql-orm/docs/quickstart.md) con una guía paso a paso para:
+  preparar una tabla SQL Server,
+  crear un proyecto Rust,
+  declarar `Entity`, `Insertable`, `Changeset` y `DbContext`,
+  conectar con `DbContext::connect(...)`,
+  usar `insert`, `find`, `query().filter().order_by().take().all()`, `update` y `delete`.
+- El `README.md` principal ahora enlaza ese quickstart y ya no presenta `basic-crud` como ejemplo ejecutable existente en el árbol actual.
+- Para mantener la guía honesta respecto a la API real, se añadió `crates/mssql-orm/tests/ui/quickstart_public_valid.rs` y se registró en `crates/mssql-orm/tests/trybuild.rs`; así el snippet público del quickstart queda cubierto por compilación.
+- Durante la revisión apareció una inconsistencia documental relevante: `docs/` todavía menciona `examples/basic-crud/`, pero ese ejemplo ya no existe en el árbol actual. Esa corrección queda explicitada como parte de la siguiente subtarea de consolidación de ejemplos.
+
+### Resultado
+
+- El repositorio ya tiene un quickstart reproducible y validado por `trybuild`, alineado con la surface pública actual.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Quedó detectada una inconsistencia documental sobre `basic-crud`; no bloquea el quickstart, pero sí debe resolverse en la subtarea siguiente de ejemplos y guías operativas.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Consolidar ejemplos ejecutables y guías de uso (todo_app, variables de entorno y smoke local, y resolver la inconsistencia documental de basic-crud)`.
+
 ### Sesión: rehacer el `README` principal como landing pública
 
 - Se ejecutó la subtarea `Etapa 15: Consolidar documentación pública base del release (README, alcance actual, estado por etapas y límites explícitos)`.
