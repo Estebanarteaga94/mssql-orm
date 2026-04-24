@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool), pero el ejemplo web async quedó reabierto y descompuesto en subtareas más pequeñas para priorizar mayor cobertura antes de volver a introducir un ejemplo completo. El backlog ahora orienta ese ejemplo hacia un `todo_app` que también sirva para validar relaciones entre tablas y la API pública de consultas/paginación.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool), pero el ejemplo web async quedó reabierto y descompuesto en subtareas más pequeñas para priorizar mayor cobertura antes de volver a introducir un ejemplo completo. `todo_app` queda ahora definido como ejemplo end-to-end futuro, mientras las pruebas de relaciones y consultas públicas se tratan como entregables técnicos separados.
 
 ## Dirección Arquitectónica Vigente
 
@@ -206,7 +206,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `SharedConnection` ya no es un alias a `Arc<Mutex<MssqlConnection>>`; ahora es un wrapper público que puede representar conexión directa o pool, conservando el nombre/rol existente y permitiendo que `DbContext::from_shared_connection(...)` siga siendo el punto de entrada común para ambos casos.
 - `#[derive(DbContext)]` ya expone `from_pool(pool)` bajo `pool-bb8`, mientras mantiene `from_connection(...)` y `connect*` para la ruta directa; la diferencia de ownership queda encapsulada en `SharedConnection`.
 - La futura integración web async conviene construirla en varias subtareas testeables; el intento monolítico previo se revirtió para evitar dejar un ejemplo grande con cobertura insuficiente.
-- El backlog operativo ya fija que ese ejemplo futuro no debe limitarse a wiring HTTP: debe cubrir un dominio `todo_app`, relaciones reales entre tablas y consultas públicas con `joins`, `limit`, `take`, `paginate` y `count`.
+- `todo_app` debe reservarse como ejemplo funcional futuro; las pruebas de relaciones entre tablas y de consultas públicas no deben acoplarse nominalmente a ese ejemplo y se ejecutarán como cobertura independiente antes de construirlo.
 - La metadata relacional ya se genera automáticamente desde `#[orm(foreign_key = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`, pero la validación compile-time actual de la variante estructurada depende del error nativo de símbolo inexistente cuando la columna referenciada no existe.
 - La Etapa 9 quedó cubierta en metadata, DDL, joins y cobertura observable básica; la Etapa 10 también quedó cerrada con la surface completa de Active Record prevista para esta fase.
 - La Etapa 11 quedó cerrada completamente: la infraestructura actual incorpora `rowversion` en update/delete/save y expresa los conflictos con un error público estable, sin mover compilación SQL fuera de `mssql-orm-sqlserver` ni ejecución fuera de `mssql-orm-tiberius`.
@@ -245,7 +245,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 ## Próximo Enfoque Recomendado
 
 1. Ejecutar `Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real`.
-2. Después definir el dominio `todo_app` y cubrir metadata/relaciones, seguido de cobertura de queries públicas (`filter`, joins, `limit`, `take`, `paginate`, `count`) como subtareas separadas antes de escribir el ejemplo completo.
-3. Luego avanzar en endpoint de health check, endpoints CRUD mínimos, wiring con pool y validación real contra SQL Server.
-4. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
-5. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
+2. Después ejecutar cobertura dedicada de relaciones entre tablas y de queries públicas (`filter`, joins, `limit`, `take`, `paginate`, `count`) como subtareas separadas.
+3. Luego avanzar en endpoint de health check, endpoints CRUD mínimos, wiring con pool y validación real contra SQL Server del ejemplo web async.
+4. Más adelante construir `todo_app` como ejemplo end-to-end, ya apoyado en esas capacidades y coberturas previas.
+5. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
+6. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

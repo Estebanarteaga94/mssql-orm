@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: aclarar que `todo_app` es ejemplo, no suite de tests
+
+- El usuario aclaró que `todo_app` debe usarse como ejemplo futuro y no como nombre/vehículo de la suite de pruebas.
+- Se descartaron los cambios no confirmados que intentaban modelar `todo_app` como tests (`stage14_todo_app_relationship_metadata.rs`, fixture `trybuild` asociado y su registro en `tests/trybuild.rs`).
+- `docs/tasks.md` quedó corregido para separar responsabilidades: las pruebas de relaciones entre tablas y de consultas públicas permanecen como tareas técnicas independientes, mientras `todo_app` pasa a ser un entregable posterior de ejemplo end-to-end.
+
+### Resultado
+
+- El backlog ya no mezcla el ejemplo `todo_app` con la estrategia de testing; ahora el ejemplo queda como referencia funcional futura y la cobertura de relaciones/queries se planifica por separado.
+
+### Validación
+
+- Revisión de consistencia del árbol de cambios y de `docs/tasks.md` tras descartar los tests no confirmados.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión corrige dirección de trabajo; no introduce todavía nueva cobertura ni el ejemplo.
+
+### Próximo paso recomendado
+
+- Retomar por `Etapa 14: Agregar pruebas dedicadas de relaciones entre tablas con coverage unitaria y trybuild, independientes del ejemplo final`.
+
 ### Sesión: ampliar backlog hacia `todo_app` con relaciones y queries
 
 - A petición del usuario se amplió el backlog pendiente del ejemplo web async para que no sea solo wiring HTTP/pool, sino también una referencia útil de dominio y cobertura.
