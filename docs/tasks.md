@@ -11,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Sincronizar fixture `trybuild` de Active Record con el diagnóstico actual de `DbContext`
 - [x] Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de `tracing`
 - [x] Etapa 14: Instrumentar conexión, ejecución y transacciones con `tracing` estructurado y campos estables
 - [x] Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de `sqlserver` ni ejecución fuera de `tiberius`

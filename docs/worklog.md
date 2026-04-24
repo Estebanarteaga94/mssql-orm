@@ -2,6 +2,31 @@
 
 ## 2026-04-23
 
+### Sesión: corrección de fixtures `trybuild` para Active Record en CI
+
+- Se revisó el fallo reportado por GitHub Actions en `cargo test -p mssql-orm --test active_record_trybuild` y se confirmó que no provenía de la lógica productiva de Active Record, sino de drift en fixtures UI frente al diagnóstico actual del compilador y del derive `DbContext`.
+- Se creó y movió en `docs/tasks.md` la subtarea operativa `Sincronizar fixture trybuild de Active Record con el diagnóstico actual de DbContext` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm/tests/ui/active_record_delete_public_valid.rs` ahora implementa `FromRow` para `User`, alineando el fixture con el contrato actual de `#[derive(DbContext)]`, que exige entidades materializables para campos `DbSet<T>`.
+- `crates/mssql-orm/tests/ui/active_record_missing_entity_set.rs` ahora implementa `FromRow` para `Order`, de modo que el caso compile-fail vuelva a aislar el error objetivo (`DbContextEntitySet<User>` ausente) y no falle por una precondición secundaria del contexto.
+- `crates/mssql-orm/tests/ui/active_record_missing_entity_set.stderr` se sincronizó con la salida real actual del compilador, incluyendo los nuevos números de línea del fixture y el shape efectivo del diagnóstico emitido en esta toolchain.
+
+### Resultado
+
+- La batería `active_record_trybuild` vuelve a pasar localmente y el fallo observado en GitHub Actions queda corregido como desalineación de fixtures, no como regresión funcional del crate.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test active_record_trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+
+### Próximo paso recomendado
+
+- Reejecutar CI y, si queda limpia, continuar con `Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius`.
+
 ### Sesión: slow query logs configurables sobre la instrumentación existente
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; esta ruta difiere de la entrada original en raíz y queda registrada aquí para trazabilidad.

@@ -24,6 +24,14 @@ struct Order {
     id: i64,
 }
 
+impl FromRow for Order {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            id: row.get_required_typed::<i64>("id")?,
+        })
+    }
+}
+
 #[derive(DbContext, Debug, Clone)]
 struct AppDbContext {
     pub orders: DbSet<Order>,

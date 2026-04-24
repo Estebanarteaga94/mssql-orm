@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `AppDbContext: DbContextEntitySet<User>` is not satisfied
-  --> tests/ui/active_record_missing_entity_set.rs:34:29
+  --> tests/ui/active_record_missing_entity_set.rs:42:29
    |
-34 |         let _ = User::query(db);
+42 |         let _ = User::query(db);
    |                 ----------- ^^ unsatisfied trait bound
    |                 |
    |                 required by a bound introduced by this call
