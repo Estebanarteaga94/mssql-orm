@@ -2,6 +2,8 @@
 
 ## Pendientes
 - [ ] Etapa 14: Definir shape mínima del ejemplo web async y cubrirla con pruebas unitarias de configuración/arranque sin depender todavía de servidor HTTP real
+- [ ] Etapa 14: Definir el dominio del ejemplo `todo_app` (`users`, `todo_lists`, `todo_items`) y cubrir metadata/relaciones entre tablas con pruebas unitarias y `trybuild`
+- [ ] Etapa 14: Cubrir consultas públicas del futuro `todo_app` con pruebas para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`
 - [ ] Etapa 14: Implementar endpoint mínimo de health check sobre framework web async reutilizando `DbContext::health_check()` y cubrirlo con pruebas de handler
 - [ ] Etapa 14: Integrar listado/inserción mínima usando `DbSet` en el ejemplo web async y cubrir la lógica HTTP con pruebas unitarias o de servicio local
 - [ ] Etapa 14: Integrar `MssqlPool` y `DbContext::from_pool(...)` en el ejemplo web async con coverage feature-gated del wiring del consumidor
@@ -11,6 +13,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Ampliar backlog del ejemplo web async hacia un `todo_app` con relaciones y cobertura explícita de queries/paginación
 - [x] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
 - [x] Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership
 - [x] Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes

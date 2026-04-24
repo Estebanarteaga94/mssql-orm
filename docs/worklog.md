@@ -2,6 +2,29 @@
 
 ## 2026-04-23
 
+### Sesión: ampliar backlog hacia `todo_app` con relaciones y queries
+
+- A petición del usuario se amplió el backlog pendiente del ejemplo web async para que no sea solo wiring HTTP/pool, sino también una referencia útil de dominio y cobertura.
+- `docs/tasks.md` ahora registra explícitamente un futuro ejemplo `todo_app` y separa dos entregables previos al código del ejemplo: modelado de relaciones entre tablas (`users`, `todo_lists`, `todo_items`) y cobertura de consultas públicas para `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`.
+- Esta ampliación deja claro que el ejemplo futuro debe servir también como vehículo de pruebas para relaciones, queries y paginación, no solo como demo superficial de `axum` + pool.
+
+### Resultado
+
+- El backlog de Etapa 14 ya incorpora explícitamente el objetivo de un `todo_app` como ejemplo futuro y fija que antes de implementarlo debe existir cobertura dedicada para relaciones entre tablas y para la API pública de consultas/paginación.
+
+### Validación
+
+- Revisión manual de consistencia de `docs/tasks.md` y alineación con el foco actual de Etapa 14.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión solo reordena backlog; no introduce todavía pruebas ni código del ejemplo.
+
+### Próximo paso recomendado
+
+- Completar la tarea operativa actual moviendo el backlog nuevo a estado cerrado y luego arrancar por `Etapa 14: Definir el dominio del ejemplo todo_app (users, todo_lists, todo_items) y cubrir metadata/relaciones entre tablas con pruebas unitarias y trybuild`.
+
 ### Sesión: revertir ejemplo web async monolítico y descomponerlo
 
 - A petición explícita del usuario se revirtió la última tarea `Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real`, porque el resultado no dejó el nivel de granularidad ni de testeo deseado.
