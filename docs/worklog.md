@@ -2,6 +2,33 @@
 
 ## 2026-04-23
 
+### Sesión: wiring con `MssqlPool` en el ejemplo `todo_app`
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Integrar MssqlPool y DbContext::from_pool(...) en el ejemplo web async todo_app con coverage feature-gated del wiring del consumidor`.
+- `examples/todo-app/src/lib.rs` ahora expone helpers explícitos feature-gated para el consumidor del ejemplo: `pool_builder_from_settings(...)`, `connect_pool(...)` y `state_from_pool(...)`.
+- Ese wiring reutiliza exactamente la surface pública ya existente: `MssqlPool::builder().with_pool_options(...)`, `MssqlPoolBuilder::connect_with_config(...)` y `TodoAppDbContext::from_pool(...)`; no se introdujeron atajos nuevos fuera del ejemplo.
+- `examples/todo-app/src/main.rs` ahora usa `connect_pool(&settings).await?` y `state_from_pool(pool, settings.clone())` cuando `pool-bb8` está activo, dejando el fallback a `PendingTodoAppDbContext` solo para builds sin ese feature.
+- La cobertura del ejemplo ahora fija dos puntos importantes del wiring del consumidor bajo `pool-bb8`: que el builder hereda exactamente `settings.operational_options.pool` y que el ejemplo expone `TodoAppDbContext::from_pool`, `state_from_pool` y `connect_pool` como entrada pública coherente.
+
+### Resultado
+
+- El ejemplo `todo_app` ya usa la ruta real de pooling del ORM en su `main.rs` y dejó de depender de wiring ficticio para el caso normal con `pool-bb8`.
+
+### Validación
+
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Todavía no se ejecutó el ejemplo contra SQL Server real en esta subtarea; eso queda como el siguiente paso explícito del backlog.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Validar el ejemplo web async todo_app contra SQL Server real con smoke test/documentación operativa reproducible`.
+
 ### Sesión: endpoints mínimos de lectura para `todo_app`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Implementar endpoints mínimos del todo_app usando DbSet y cubrir la lógica HTTP con pruebas unitarias o de servicio local`.

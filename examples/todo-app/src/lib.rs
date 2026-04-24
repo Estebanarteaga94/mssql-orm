@@ -7,6 +7,8 @@ use mssql_orm::prelude::{
     MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolOptions, MssqlRetryOptions,
     MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, OrmError,
 };
+#[cfg(feature = "pool-bb8")]
+use mssql_orm::{MssqlPool, MssqlPoolBuilder};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -153,6 +155,26 @@ pub fn default_operational_options() -> MssqlOperationalOptions {
                 .with_idle_timeout(Duration::from_secs(300))
                 .with_max_lifetime(Duration::from_secs(1800)),
         )
+}
+
+#[cfg(feature = "pool-bb8")]
+pub fn pool_builder_from_settings(settings: &TodoAppSettings) -> MssqlPoolBuilder {
+    MssqlPool::builder().with_pool_options(settings.operational_options.pool)
+}
+
+#[cfg(feature = "pool-bb8")]
+pub async fn connect_pool(settings: &TodoAppSettings) -> Result<MssqlPool, OrmError> {
+    pool_builder_from_settings(settings)
+        .connect_with_config(settings.connection_config()?)
+        .await
+}
+
+#[cfg(feature = "pool-bb8")]
+pub fn state_from_pool(
+    pool: MssqlPool,
+    settings: TodoAppSettings,
+) -> TodoAppState<TodoAppDbContext> {
+    TodoAppState::new(TodoAppDbContext::from_pool(pool), settings)
 }
 
 #[derive(Debug, Clone)]
@@ -618,5 +640,22 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(String::from_utf8(body.to_vec()).unwrap(), r#"{"count":2}"#);
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn settings_build_pool_builder_from_operational_profile() {
+        let settings = TodoAppSettings::from_map(&env_with_database_url()).unwrap();
+        let builder = super::pool_builder_from_settings(&settings);
+
+        assert_eq!(builder.options(), settings.operational_options.pool);
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn example_exposes_dbcontext_from_pool_wiring() {
+        let _from_pool = crate::TodoAppDbContext::from_pool;
+        let _state_from_pool = super::state_from_pool;
+        let _connect_pool = super::connect_pool;
     }
 }

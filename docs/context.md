@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene la base real del ejemplo web async `todo_app`, su dominio inicial, sus consultas públicas base, un endpoint HTTP real de health check y endpoints mínimos de lectura. Quedan pendientes el wiring real con pool y la validación contra SQL Server.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene la base real del ejemplo web async `todo_app`, su dominio inicial, sus consultas públicas base, endpoints mínimos de lectura y wiring real con `MssqlPool`. Queda pendiente validar ese ejemplo completo contra SQL Server real.
 
 ## Dirección Arquitectónica Vigente
 
@@ -48,7 +48,8 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - `examples/todo-app/src/lib.rs` ya monta `GET /health` en `build_app(...)` y delega su ejecución a `DbContext::health_check()`, con respuestas HTTP mínimas `200 ok` y `503 database unavailable`.
 - `examples/todo-app/src/http.rs` ya concentra los endpoints mínimos del ejemplo y su contrato de lectura (`TodoAppApi`), incluyendo DTOs serializables y handlers de lectura para listas e ítems.
 - Esos handlers ya muestran uso real de `DbSet::find`, `DbSetQuery::all()` y `DbSetQuery::count()` desde el consumidor web del ejemplo.
-- `examples/todo-app/src/main.rs` sigue usando `PendingTodoAppDbContext` para no adelantar todavía la integración con pool; eso deja el ejemplo compilable y el endpoint visible, pero sin conectividad real hasta la siguiente subtarea.
+- `examples/todo-app/src/lib.rs` ya expone `pool_builder_from_settings(...)`, `connect_pool(...)` y `state_from_pool(...)` como helpers explícitos del ejemplo para construir el contexto desde `MssqlPool`.
+- `examples/todo-app/src/main.rs` ya usa `connect_pool(&settings).await?` y `TodoAppDbContext::from_pool(...)` cuando `pool-bb8` está activo; el fallback a `PendingTodoAppDbContext` quedó solo para builds sin ese feature.
 - El dominio del ejemplo ya implementa `FromRow` para `User`, `TodoList` y `TodoItem`, requisito práctico para derivar `TodoAppDbContext` y base del siguiente paso de endpoints CRUD.
 - La crate pública `mssql-orm` ahora también incluye un fixture `trybuild` específico del dominio `todo_app` que valida el uso público de `DbSetQuery` con `filter`, `order_by`, joins, `limit`, `take`, `paginate` y `count`.
 - La validación del dominio dejó fijada una convención observable del macro: cuando se usa `#[orm(foreign_key(entity = Tipo, column = id))]`, el nombre generado del foreign key usa el nombre de tabla derivado del tipo Rust referenciado para el sufijo del constraint, aunque la tabla efectiva pueda estar sobrescrita con `#[orm(table = ...)]`.
@@ -257,7 +258,6 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 14: Integrar MssqlPool y DbContext::from_pool(...) en el ejemplo web async todo_app con coverage feature-gated del wiring del consumidor`.
-2. Después avanzar en la validación real contra SQL Server.
-3. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
-4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
+1. Ejecutar `Etapa 14: Validar el ejemplo web async todo_app contra SQL Server real con smoke test/documentación operativa reproducible`.
+2. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
+3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
