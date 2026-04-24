@@ -52,19 +52,24 @@ impl PreparedQuery {
     where
         S: futures_io::AsyncRead + futures_io::AsyncWrite + Unpin + Send,
     {
-        let mut query = Query::new(self.sql.as_str());
-
-        for param in &self.params {
-            bind_sql_value(&mut query, param);
-        }
-
-        query
-            .execute(client)
+        self.execute_driver(client)
             .await
             .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))
     }
 
     pub async fn query<'a, S>(self, client: &'a mut Client<S>) -> Result<QueryStream<'a>, OrmError>
+    where
+        S: futures_io::AsyncRead + futures_io::AsyncWrite + Unpin + Send,
+    {
+        self.query_driver(client)
+            .await
+            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))
+    }
+
+    pub async fn execute_driver<S>(
+        self,
+        client: &mut Client<S>,
+    ) -> Result<tiberius::ExecuteResult, tiberius::error::Error>
     where
         S: futures_io::AsyncRead + futures_io::AsyncWrite + Unpin + Send,
     {
@@ -74,10 +79,23 @@ impl PreparedQuery {
             bind_sql_value(&mut query, param);
         }
 
-        query
-            .query(client)
-            .await
-            .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))
+        query.execute(client).await
+    }
+
+    pub async fn query_driver<'a, S>(
+        self,
+        client: &'a mut Client<S>,
+    ) -> Result<QueryStream<'a>, tiberius::error::Error>
+    where
+        S: futures_io::AsyncRead + futures_io::AsyncWrite + Unpin + Send,
+    {
+        let mut query = Query::new(self.sql.as_str());
+
+        for param in &self.params {
+            bind_sql_value(&mut query, param);
+        }
+
+        query.query(client).await
     }
 }
 

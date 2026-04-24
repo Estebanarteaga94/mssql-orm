@@ -102,6 +102,7 @@ where
                 query,
                 self.tracing_options,
                 self.slow_query_options,
+                crate::config::MssqlRetryOptions::disabled(),
                 &self.server_addr,
                 self.query_timeout,
             )
@@ -120,6 +121,7 @@ where
                 query,
                 self.tracing_options,
                 self.slow_query_options,
+                crate::config::MssqlRetryOptions::disabled(),
                 &self.server_addr,
                 self.query_timeout,
             )

@@ -86,6 +86,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
         self.config.options().slow_query
     }
 
+    pub(crate) fn retry_options(&self) -> crate::config::MssqlRetryOptions {
+        self.config.options().retry
+    }
+
     pub(crate) fn health_options(&self) -> crate::config::MssqlHealthCheckOptions {
         self.config.options().health
     }
@@ -151,6 +155,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
     pub async fn health_check(&mut self) -> Result<(), OrmError> {
         let tracing_options = self.tracing_options();
         let slow_query_options = self.slow_query_options();
+        let retry_options = self.retry_options();
         let server_addr = self.server_addr();
         let health_options = self.health_options();
         let health_timeout = resolve_health_timeout(health_options, self.query_timeout());
@@ -162,6 +167,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> MssqlConnection<S> {
                 query,
                 tracing_options,
                 slow_query_options,
+                retry_options,
                 &server_addr,
                 health_timeout,
             )

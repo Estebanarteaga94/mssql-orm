@@ -1,5 +1,6 @@
 use crate::config::{MssqlParameterLogMode, MssqlSlowQueryOptions, MssqlTracingOptions};
 use crate::parameter::PreparedQuery;
+use core::fmt::Display;
 use mssql_orm_core::OrmError;
 use std::time::{Duration, Instant};
 use tracing::Instrument;
@@ -56,14 +57,15 @@ where
     result
 }
 
-pub(crate) async fn trace_query<F, T>(
+pub(crate) async fn trace_query<F, T, E>(
     tracing_options: MssqlTracingOptions,
     slow_query_options: MssqlSlowQueryOptions,
     trace: QueryTrace,
     future: F,
-) -> Result<T, OrmError>
+) -> Result<T, E>
 where
-    F: core::future::Future<Output = Result<T, OrmError>>,
+    F: core::future::Future<Output = Result<T, E>>,
+    E: Display,
 {
     if !tracing_options.enabled && !slow_query_options.enabled {
         return future.await;
@@ -274,7 +276,7 @@ fn should_emit_slow_query(duration: Duration, slow_query_options: MssqlSlowQuery
     slow_query_options.enabled && duration >= slow_query_options.threshold
 }
 
-fn classify_sql(sql: &str) -> &'static str {
+pub(crate) fn classify_sql(sql: &str) -> &'static str {
     sql.split_whitespace()
         .next()
         .map(|token| token.to_ascii_uppercase())

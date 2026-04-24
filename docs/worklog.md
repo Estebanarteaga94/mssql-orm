@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: retry policy mínima para operaciones idempotentes
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- `crates/mssql-orm-tiberius/src/error.rs` ahora expone clasificación interna de errores transitorios reutilizable por el adaptador, limitada a deadlocks, timeouts/abortos/reset de I/O y a un conjunto acotado de códigos SQL Server/Azure SQL típicamente transitorios (`1222`, `40197`, `40501`, `40613`, `49918`, `49919`, `49920`).
+- `crates/mssql-orm-tiberius/src/parameter.rs` ahora separa la ejecución nativa del driver (`execute_driver`, `query_driver`) del mapeo a `OrmError`, permitiendo decidir retries cuando todavía se conserva el `tiberius::error::Error` real.
+- `crates/mssql-orm-tiberius/src/executor.rs` ahora aplica retry opcional solo a lecturas materializadas clasificadas como `select`, es decir, a las rutas internas que soportan `fetch_one` y `fetch_all`; `execute`, `query_raw` y las rutas transaccionales siguen sin retry automático por seguridad.
+- La política queda deliberadamente acotada: solo reintenta si `MssqlRetryOptions.enabled` está activo, `max_retries > 0`, el SQL compilado se clasifica como `select` y el error detectado es transitorio.
+- El delay entre intentos usa backoff exponencial simple basado en `base_delay`, con tope en `max_delay`, y emite un `warn` estructurado `orm.query.retry` con `server_addr`, `operation`, `attempt`, `max_retries`, `delay_ms` y `error_code`.
+- `MssqlConnection::fetch_one`, `fetch_all` y, por transitividad, `health_check()` ya usan esta política cuando la configuración la habilita; `MssqlTransaction` fuerza `MssqlRetryOptions::disabled()` para no reintentar automáticamente dentro de una transacción activa.
+- Se añadió cobertura unitaria para clasificación de errores transitorios, selección de queries retryables y cálculo/cap del backoff.
+
+### Resultado
+
+- La Etapa 14 ya soporta retry opcional y acotado para fallos transitorios en operaciones idempotentes de lectura, sin reintentar escrituras ni queries con stream abierto y sin mover ejecución fuera de `mssql-orm-tiberius`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-tiberius --lib`
+- `cargo test -p mssql-orm --lib`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales.
+- No se ejecutó validación real dedicada contra SQL Server para esta subtarea porque la política se acopló solo a rutas de lectura ya cubiertas por tests unitarios y no se introdujo nueva surface de integración fuera del adaptador.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership`.
+
 ### Sesión: health checks mínimos para SQL Server/Tiberius
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la siguiente subtarea prioritaria de Etapa 14: `Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius`.

@@ -1,14 +1,15 @@
-use crate::config::{MssqlSlowQueryOptions, MssqlTracingOptions};
+use crate::config::{MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTracingOptions};
 use crate::connection::{MssqlConnection, run_with_timeout};
-use crate::error::{TiberiusErrorContext, map_tiberius_error};
+use crate::error::{TiberiusErrorContext, is_transient_tiberius_error, map_tiberius_error};
 use crate::parameter::PreparedQuery;
 use crate::row::MssqlRow;
-use crate::telemetry::{QueryTrace, trace_query};
+use crate::telemetry::{QueryTrace, classify_sql, trace_query};
 use crate::transaction::MssqlTransaction;
 use async_trait::async_trait;
 use futures_io::{AsyncRead, AsyncWrite};
 use mssql_orm_core::{FromRow, OrmError};
 use mssql_orm_query::CompiledQuery;
+use std::time::Duration;
 use tiberius::Client;
 use tiberius::QueryStream;
 
@@ -141,6 +142,7 @@ where
     {
         let tracing_options = self.tracing_options();
         let slow_query_options = self.slow_query_options();
+        let retry_options = self.retry_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
@@ -149,6 +151,7 @@ where
                 query,
                 tracing_options,
                 slow_query_options,
+                retry_options,
                 &server_addr,
                 query_timeout,
             )
@@ -163,6 +166,7 @@ where
     {
         let tracing_options = self.tracing_options();
         let slow_query_options = self.slow_query_options();
+        let retry_options = self.retry_options();
         let server_addr = self.server_addr();
         let query_timeout = self.query_timeout();
         run_with_timeout(self.query_timeout(), "SQL Server query timed out", async {
@@ -171,6 +175,7 @@ where
                 query,
                 tracing_options,
                 slow_query_options,
+                retry_options,
                 &server_addr,
                 query_timeout,
             )
@@ -227,6 +232,7 @@ pub(crate) async fn fetch_one_compiled<S, T>(
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
     slow_query_options: MssqlSlowQueryOptions,
+    retry_options: MssqlRetryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<Option<T>, OrmError>
@@ -234,18 +240,49 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let row = query_raw_compiled(
-        client,
-        query,
-        tracing_options,
-        slow_query_options,
-        server_addr,
-        query_timeout,
-    )
-    .await?
-    .into_row()
-    .await
-    .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+    let retryable_query = is_retryable_read_query(&query, retry_options);
+    let mut attempt = 0;
+
+    let row = loop {
+        let prepared = PreparedQuery::from_compiled(query.clone());
+        prepared.validate_parameter_count()?;
+        let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
+
+        match trace_query(tracing_options, slow_query_options, trace, async {
+            prepared.query_driver(client).await?.into_row().await
+        })
+        .await
+        {
+            Ok(row) => break row,
+            Err(error)
+                if retryable_query
+                    && attempt < retry_options.max_retries
+                    && is_transient_tiberius_error(&error) =>
+            {
+                attempt += 1;
+                let delay = retry_delay(retry_options, attempt);
+
+                tracing::warn!(
+                    target: "orm.query.retry",
+                    server_addr = %server_addr,
+                    operation = %classify_sql(&query.sql),
+                    attempt,
+                    max_retries = retry_options.max_retries,
+                    delay_ms = delay.as_millis(),
+                    error_code = ?error.code(),
+                    error = %error,
+                );
+
+                tokio::time::sleep(delay).await;
+            }
+            Err(error) => {
+                return Err(map_tiberius_error(
+                    &error,
+                    TiberiusErrorContext::ExecuteQuery,
+                ));
+            }
+        }
+    };
 
     row.as_ref()
         .map(|row| T::from_row(&MssqlRow::new(row)))
@@ -257,6 +294,7 @@ pub(crate) async fn fetch_all_compiled<S, T>(
     query: CompiledQuery,
     tracing_options: MssqlTracingOptions,
     slow_query_options: MssqlSlowQueryOptions,
+    retry_options: MssqlRetryOptions,
     server_addr: &str,
     query_timeout: Option<std::time::Duration>,
 ) -> Result<Vec<T>, OrmError>
@@ -264,29 +302,84 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
     T: FromRow + Send,
 {
-    let rows = query_raw_compiled(
-        client,
-        query,
-        tracing_options,
-        slow_query_options,
-        server_addr,
-        query_timeout,
-    )
-    .await?
-    .into_first_result()
-    .await
-    .map_err(|error| map_tiberius_error(&error, TiberiusErrorContext::ExecuteQuery))?;
+    let retryable_query = is_retryable_read_query(&query, retry_options);
+    let mut attempt = 0;
+
+    let rows = loop {
+        let prepared = PreparedQuery::from_compiled(query.clone());
+        prepared.validate_parameter_count()?;
+        let trace = QueryTrace::new(server_addr, query_timeout, tracing_options, &prepared);
+
+        match trace_query(tracing_options, slow_query_options, trace, async {
+            prepared
+                .query_driver(client)
+                .await?
+                .into_first_result()
+                .await
+        })
+        .await
+        {
+            Ok(rows) => break rows,
+            Err(error)
+                if retryable_query
+                    && attempt < retry_options.max_retries
+                    && is_transient_tiberius_error(&error) =>
+            {
+                attempt += 1;
+                let delay = retry_delay(retry_options, attempt);
+
+                tracing::warn!(
+                    target: "orm.query.retry",
+                    server_addr = %server_addr,
+                    operation = %classify_sql(&query.sql),
+                    attempt,
+                    max_retries = retry_options.max_retries,
+                    delay_ms = delay.as_millis(),
+                    error_code = ?error.code(),
+                    error = %error,
+                );
+
+                tokio::time::sleep(delay).await;
+            }
+            Err(error) => {
+                return Err(map_tiberius_error(
+                    &error,
+                    TiberiusErrorContext::ExecuteQuery,
+                ));
+            }
+        }
+    };
 
     rows.iter()
         .map(|row| T::from_row(&MssqlRow::new(row)))
         .collect()
 }
 
+fn is_retryable_read_query(query: &CompiledQuery, retry_options: MssqlRetryOptions) -> bool {
+    retry_options.enabled && retry_options.max_retries > 0 && classify_sql(&query.sql) == "select"
+}
+
+fn retry_delay(retry_options: MssqlRetryOptions, attempt: u32) -> Duration {
+    let multiplier = 1u32
+        .checked_shl(attempt.saturating_sub(1))
+        .unwrap_or(u32::MAX);
+    let base_millis = retry_options.base_delay.as_millis();
+    let max_millis = retry_options.max_delay.as_millis();
+    let scaled = base_millis.saturating_mul(u128::from(multiplier));
+
+    Duration::from_millis(scaled.min(max_millis) as u64)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ExecuteResult, fetch_all_compiled, fetch_one_compiled, query_raw_compiled};
+    use super::{
+        ExecuteResult, fetch_all_compiled, fetch_one_compiled, is_retryable_read_query,
+        query_raw_compiled, retry_delay,
+    };
     use crate::config::{MssqlSlowQueryOptions, MssqlTracingOptions};
     use mssql_orm_core::{FromRow, OrmError, Row};
+    use mssql_orm_query::CompiledQuery;
+    use std::time::Duration;
 
     struct TestRowModel;
 
@@ -322,5 +415,36 @@ mod tests {
 
         assert!(tracing.enabled);
         assert!(slow_query.enabled);
+    }
+
+    #[test]
+    fn retry_policy_only_targets_select_queries() {
+        let retry = crate::config::MssqlRetryOptions::enabled(
+            2,
+            Duration::from_millis(50),
+            Duration::from_secs(1),
+        );
+
+        assert!(is_retryable_read_query(
+            &CompiledQuery::new("SELECT 1", vec![]),
+            retry
+        ));
+        assert!(!is_retryable_read_query(
+            &CompiledQuery::new("INSERT INTO [dbo].[users] DEFAULT VALUES", vec![]),
+            retry
+        ));
+    }
+
+    #[test]
+    fn retry_delay_caps_at_max_delay() {
+        let retry = crate::config::MssqlRetryOptions::enabled(
+            4,
+            Duration::from_millis(100),
+            Duration::from_millis(250),
+        );
+
+        assert_eq!(retry_delay(retry, 1), Duration::from_millis(100));
+        assert_eq!(retry_delay(retry, 2), Duration::from_millis(200));
+        assert_eq!(retry_delay(retry, 3), Duration::from_millis(250));
     }
 }
