@@ -1,13 +1,22 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 14: Implementar pooling opcional, timeouts, `tracing`, slow query logs y health checks
-- [ ] Etapa 14: Crear ejemplo de integración con framework web async
+- [ ] Operativo: Descomponer la Etapa 14 de producción en subtareas verificables y ordenadas
+- [ ] Etapa 14: Definir surface y configuración operativa de producción para `mssql-orm-tiberius` y la crate pública (`timeouts`, `retry`, `tracing`, slow query, health, pool)
+- [ ] Etapa 14: Implementar timeouts configurables de conexión y ejecución sin mover SQL fuera de `sqlserver` ni ejecución fuera de `tiberius`
+- [ ] Etapa 14: Instrumentar conexión, ejecución y transacciones con `tracing` estructurado y campos estables
+- [ ] Etapa 14: Agregar slow query logs configurables reutilizando la instrumentación de `tracing`
+- [ ] Etapa 14: Exponer health checks mínimos de conectividad y ejecución simple para SQL Server/Tiberius
+- [ ] Etapa 14: Implementar retry policy opcional y acotada para fallos transitorios en operaciones idempotentes
+- [ ] Etapa 14: Implementar pooling opcional de conexiones con feature gate y límites explícitos de ownership
+- [ ] Etapa 14: Exponer wiring público `DbContext` desde pool sin romper `connect`, `from_connection` ni `SharedConnection`
+- [ ] Etapa 14: Crear ejemplo de integración con framework web async usando pool, health check y configuración operativa real
 - [ ] Etapa 15: Preparar release con documentación pública, quickstart, ejemplos completos y changelog
 
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Descomponer la Etapa 14 de producción en subtareas verificables y ordenadas
 - [x] Etapa 13: Soportar `RenameTable` explícito en snapshots, diff y DDL SQL Server
 - [x] Operativo: Ampliar validación real de Etapa 13 con verificación de comportamiento de foreign keys en SQL Server
 - [x] Operativo: Validar Etapa 13 contra SQL Server real y ajustar `database update` para índices sobre computed columns

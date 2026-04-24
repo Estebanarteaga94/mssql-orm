@@ -2,6 +2,30 @@
 
 ## 2026-04-23
 
+### Sesión: descomposición de la Etapa 14 de producción
+
+- Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la Etapa 14 del plan define explícitamente como entregables `pool opcional`, `timeouts`, `retry policy opcional`, `logging con tracing`, `slow query logs` y `health checks`, con `Definition of Done` ligada a uso en una API web async y ejemplo con Axum o Actix.
+- Al contrastar ese alcance con `docs/tasks.md` se confirmó que la tarea única existente era demasiado grande y además omitía de forma explícita la `retry policy`, que sí aparece en el plan maestro.
+- Se reemplazó esa entrada monolítica por subtareas ordenadas y verificables: definición de surface/configuración, timeouts, instrumentación con `tracing`, slow query logs, health checks, retry policy opcional, pooling opcional, wiring público de `DbContext` sobre pool y ejemplo web async final.
+- La descomposición preserva dependencias técnicas: primero contratos y configuración, luego observabilidad y control de tiempo, después resiliencia/pooling y por último integración pública y ejemplo end-to-end.
+
+### Resultado
+
+- La Etapa 14 quedó preparada para ejecución incremental sin mezclar concerns de configuración, observabilidad, resiliencia, pooling y ejemplo web en una sola sesión.
+
+### Validación
+
+- No aplicó validación con `cargo`: en esta sesión solo se actualizó backlog y documentación operativa; no hubo cambios de código.
+
+### Bloqueos
+
+- No hubo bloqueos persistentes.
+- La elección concreta de backend de pool y del framework web del ejemplo sigue pendiente para la subtarea correspondiente; esta sesión solo fijó el orden y el shape verificable del backlog.
+
+### Próximo paso recomendado
+
+- Tomar `Etapa 14: Definir surface y configuración operativa de producción para mssql-orm-tiberius y la crate pública`.
+
 ### Sesión: `RenameTable` explícito en snapshots, diff y DDL SQL Server
 
 - Se volvió a tomar como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; la ruta pedida en la consigna original no existe en la raíz del repositorio.

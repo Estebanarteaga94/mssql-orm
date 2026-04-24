@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. El siguiente foco natural pasa a la Etapa 14, empezando por infraestructura operativa sobre conexiones y observabilidad.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 ya quedó descompuesta operativamente y el siguiente foco natural pasa a definir la surface/configuración de producción antes de tocar pooling, retries o integración web.
 
 ## Dirección Arquitectónica Vigente
 
@@ -228,7 +228,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Empezar la Etapa 14 con `pooling` opcional, timeouts, `tracing`, slow query logs y health checks.
-2. Después evaluar `migration script --from --to` si sigue siendo prioritario para flujos de revisión de producción.
-3. Reutilizar la semántica de conflicto ya cerrada en Etapa 11 para que el futuro tracking no reintroduzca overwrites silenciosos.
+1. Tomar `Etapa 14: Definir surface y configuración operativa de producción para mssql-orm-tiberius y la crate pública`.
+2. Después implementar `timeouts` e instrumentación con `tracing`, porque preparan el terreno para slow query logs, health checks y retry policy sin rehacer contratos.
+3. Dejar pooling opcional y wiring público sobre pool después de cerrar configuración, observabilidad y resiliencia básica.
 4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
