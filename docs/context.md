@@ -16,7 +16,7 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 ## Objetivo Técnico Actual
 
-La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene la base real del ejemplo web async `todo_app`: configuración, state y arranque compilables y cubiertos unitariamente. Quedan pendientes el dominio, las queries del ejemplo, health check HTTP, endpoints mínimos, wiring real con pool y validación contra SQL Server.
+La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 mantiene cerrada la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool) y ahora ya tiene tanto la base real del ejemplo web async `todo_app` como su dominio inicial (`users`, `todo_lists`, `todo_items`) con metadata relacional validada. Quedan pendientes las queries públicas del ejemplo, health check HTTP, endpoints mínimos, wiring real con pool y validación contra SQL Server.
 
 ## Dirección Arquitectónica Vigente
 
@@ -39,7 +39,10 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 - El derive también cubre soporte directo para `column`, `sql_type`, `precision`, `scale`, `computed_sql` y `rowversion`, en línea con el shape de metadata ya definido en `core`.
 - El derive también acepta ahora `#[orm(renamed_from = "...")]` sobre campos, dejando ese hint explícito disponible para el diff de migraciones sin inferencia automática de renombres.
 - El derive también acepta ahora `#[orm(renamed_from = "...")]` a nivel de entidad, dejando un hint explícito para renombres de tabla dentro del mismo schema sin introducir inferencia automática de `RenameTable`.
-- `examples/todo-app/` ya existe como crate aislada fuera del workspace principal; por ahora solo fija `TodoAppSettings`, `TodoAppState<Db>`, `build_app(...)`, `main.rs` y un perfil operativo base, sin endpoints ni dominio todavía.
+- `examples/todo-app/` ya existe como crate aislada fuera del workspace principal; además de `TodoAppSettings`, `TodoAppState<Db>`, `build_app(...)`, `main.rs` y el perfil operativo base, ahora también define el dominio inicial del ejemplo en `src/domain.rs`.
+- Ese dominio base del ejemplo ya cubre `todo.users`, `todo.todo_lists` y `todo.todo_items`, con relaciones `User -> TodoList`, `TodoList -> TodoItem` y referencias de auditoría `TodoItem -> User`.
+- La crate del ejemplo reexporta `domain::User` como `TodoUser`, preservando nombres claros hacia el consumidor sin alterar la convención actual del derive para metadata.
+- La validación del dominio dejó fijada una convención observable del macro: cuando se usa `#[orm(foreign_key(entity = Tipo, column = id))]`, el nombre generado del foreign key usa el nombre de tabla derivado del tipo Rust referenciado para el sufijo del constraint, aunque la tabla efectiva pueda estar sobrescrita con `#[orm(table = ...)]`.
 - `mssql-orm-core` ya define `EntityColumn<E>` como símbolo estático de columna, y `#[derive(Entity)]` genera asociados como `Customer::email` para el query builder futuro.
 - La crate pública `mssql-orm` ya contiene pruebas `trybuild` que cubren casos válidos de entidades con `foreign_key`, schema por defecto `dbo` para referencias abreviadas, la sintaxis estructurada y errores de compilación esperados para ausencia de PK, `identity` inválido, `rowversion` inválido, segmentos vacíos/formato inválido en `foreign_key` y columnas de destino inexistentes en el formato estructurado.
 - La crate pública `mssql-orm` ahora también incluye una batería dedicada `stage9_relationship_metadata.rs` para fijar la metadata relacional generada por `#[derive(Entity)]`, incluyendo múltiples foreign keys, nombres generados y helpers de lookup sobre metadata.
@@ -245,8 +248,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 14: Definir el dominio todo_app (users, todo_lists, todo_items) y cubrir metadata/relaciones entre tablas con coverage unitaria y trybuild`.
-2. Después cubrir las consultas públicas usadas por `todo_app` (`filter`, joins, `limit`, `take`, `paginate`, `count`).
-3. Luego avanzar en endpoint de health check, endpoints mínimos del `todo_app`, wiring con pool y validación real contra SQL Server.
-4. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
-5. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
+1. Ejecutar `Etapa 14: Cubrir consultas públicas usadas por todo_app (filter, order_by, joins, limit, take, paginate y count)`.
+2. Después avanzar en endpoint de health check, endpoints mínimos del `todo_app`, wiring con pool y validación real contra SQL Server.
+3. Solo después preparar la `Etapa 15` de release con documentación pública, quickstart, ejemplos completos y changelog.
+4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

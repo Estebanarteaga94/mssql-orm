@@ -2,6 +2,39 @@
 
 ## 2026-04-23
 
+### Sesión: dominio base de `todo_app` con metadata relacional
+
+- Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea prioritaria de Etapa 14: `Definir el dominio todo_app (users, todo_lists, todo_items) y cubrir metadata/relaciones entre tablas con coverage unitaria y trybuild`.
+- Se movió en `docs/tasks.md` la subtarea a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se añadió `examples/todo-app/src/domain.rs` con el dominio base del ejemplo: `User`, `TodoList` y `TodoItem`, modelados con `#[derive(Entity)]`, índices, `rowversion`, defaults SQL y relaciones uno-a-muchos entre usuarios, listas e ítems.
+- `examples/todo-app/src/lib.rs` ahora expone ese dominio desde la crate del ejemplo, reexportando `User` como `TodoUser` para mantener una surface semántica clara hacia consumidores del ejemplo.
+- La cobertura unitaria del ejemplo ahora verifica schema, tabla, primary key, defaults, `rowversion`, índices y foreign keys del dominio, incluyendo `CASCADE` para `owner_user_id`/`list_id` y `SET NULL` para `completed_by_user_id`.
+- Se añadió el fixture `crates/mssql-orm/tests/ui/entity_todo_app_domain_valid.rs` y su registro en `crates/mssql-orm/tests/trybuild.rs` para fijar en compile-time la forma válida del dominio y de sus relaciones estructuradas.
+- Durante la validación apareció una regla operativa relevante del derive: en `foreign_key(entity = ..., column = ...)`, el nombre generado del constraint usa el nombre de tabla derivado del tipo Rust referenciado. Se ajustó el dominio para respetar esa convención y se dejó cubierta por tests.
+- `examples/todo-app/README.md` quedó actualizado para reflejar que el ejemplo ya tiene dominio base definido y que la siguiente subtarea pasa a ser la cobertura de consultas públicas.
+
+### Resultado
+
+- La Etapa 14 ya tiene el dominio base real del ejemplo `todo_app`, con metadata relacional observable y validada tanto por pruebas unitarias del ejemplo como por `trybuild` en la crate pública.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo fmt --all --check` en `examples/todo-app/`
+- `cargo check --workspace`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test -p mssql-orm --test trybuild`
+
+### Bloqueos
+
+- No hubo bloqueos funcionales persistentes.
+- Durante la validación hubo esperas breves por file locks de `cargo` al ejecutar varias verificaciones en paralelo.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 14: Cubrir consultas públicas usadas por todo_app para filter, order_by, joins, limit, take, paginate y count`.
+
 ### Sesión: base del ejemplo web async realista `todo_app`
 
 - Se retomó como fuente de verdad el plan maestro en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md` y se ejecutó la subtarea siguiente de Etapa 14: `Definir el ejemplo web async realista (todo_app) y cubrir su configuración/arranque con pruebas unitarias sin depender todavía de servidor HTTP real`.

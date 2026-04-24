@@ -8,6 +8,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/entity_composite_index_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_default_schema_valid.rs");
     tests.pass("tests/ui/entity_foreign_key_structured_valid.rs");
+    tests.pass("tests/ui/entity_todo_app_domain_valid.rs");
     tests.pass("tests/ui/insertable_changeset_valid.rs");
     tests.pass("tests/ui/dbcontext_valid.rs");
     tests.pass("tests/ui/query_builder_public_valid.rs");

@@ -6,16 +6,16 @@ Estado actual:
 
 1. Define configuración de arranque desde variables de entorno.
 2. Fija la configuración operativa de SQL Server/Tiberius (`timeouts`, `retry`, `tracing`, `slow_query`, `health`, `pool`).
-3. Expone la shape de `AppState` y del `Router` sin endpoints todavía.
+3. Define el dominio base `todo_app` con entidades `users`, `todo_lists` y `todo_items`, incluyendo relaciones y metadata estática.
+4. Expone la shape de `AppState` y del `Router` sin endpoints todavía.
 
 Las siguientes subtareas extenderán este ejemplo con:
 
-1. dominio `todo_app`,
-2. consultas públicas,
-3. health check HTTP,
-4. endpoints mínimos,
-5. wiring real con `MssqlPool` y `DbContext::from_pool(...)`,
-6. validación contra SQL Server real.
+1. consultas públicas,
+2. health check HTTP,
+3. endpoints mínimos,
+4. wiring real con `MssqlPool` y `DbContext::from_pool(...)`,
+5. validación contra SQL Server real.
 
 ## Variables de entorno
 
@@ -28,4 +28,3 @@ Las siguientes subtareas extenderán este ejemplo con:
 ```bash
 cargo run --manifest-path examples/todo-app/Cargo.toml
 ```
-

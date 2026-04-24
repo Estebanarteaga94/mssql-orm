@@ -8,6 +8,10 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 
+pub mod domain;
+
+pub use domain::{TodoItem, TodoList, User as TodoUser};
+
 const DEFAULT_APP_ADDR: &str = "127.0.0.1:3000";
 const DEFAULT_RUST_LOG: &str = "info,todo_app=debug,mssql_orm=debug";
 
