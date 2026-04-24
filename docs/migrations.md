@@ -17,9 +17,9 @@ Hoy el flujo de migraciones del repo es `code-first` en intencion arquitectonica
 - el modelo y la metadata viven en Rust
 - el workspace ya tiene snapshots, diff y DDL SQL Server en crates internas
 - la CLI publica actual scaffolda migraciones y genera un script SQL acumulado
-- el SQL de cada migracion sigue siendo editado manualmente en `up.sql`
+- `up.sql` se autogenera cuando entregas un snapshot actual real; sigue siendo un artefacto revisable y editable antes de aplicar la migracion
 
-Lo importante es no trabajar como si la CLI ya generara automaticamente cada migracion desde entidades. Hoy no es asi.
+Lo importante es no trabajar como si la CLI ya resolviera todo el ciclo de vida por ti: aun debes exportar el snapshot actual, revisar el SQL generado y aplicar el script conscientemente.
 
 ## 1. Flujo recomendado de trabajo
 
@@ -27,7 +27,7 @@ El flujo mas seguro hoy es este:
 
 1. Cambia primero tus entidades y metadata Rust.
 2. Crea una migracion con nombre pequeno y concreto.
-3. Escribe y revisa `up.sql` manualmente.
+3. Genera y revisa `up.sql`; editalo si el cambio requiere ajustes manuales.
 4. Escribe `down.sql` aunque hoy no exista un comando publico que lo ejecute.
 5. Genera el script acumulado de `database update`.
 6. Revisalo antes de aplicarlo en SQL Server.
@@ -97,6 +97,15 @@ Detalles operativos relevantes:
 - el exportador del consumidor sigue siendo explicito: la CLI no resuelve sola el nombre del `DbContext`, sino que delega esa seleccion al binario que uses para exportar el snapshot
 - cuando existe una migracion local previa y `migration add` recibe un snapshot actual real, la CLI carga el `model_snapshot.json` de la ultima migracion y reporta ambos lados (`Previous snapshot` y `Current snapshot`) como base del siguiente paso de diff
 - en ese mismo caso, la CLI ejecuta internamente `snapshot -> diff -> MigrationOperation -> DDL SQL Server`, reporta `Planned operations` y `Compiled SQL statements`, y escribe ese SQL compilado en `up.sql`
+- si el diff detecta un cambio destructivo, `migration add` falla por defecto antes de crear la nueva migracion; usa `--allow-destructive` solo cuando hayas revisado el impacto y quieras generar igualmente el artefacto editable
+
+Actualmente se consideran destructivos estos cambios:
+
+- `DropTable`
+- `DropColumn`
+- reduccion de longitud de columna
+- cambio de tipo de columna
+- conversion de nullable a non-nullable sin `default_sql`
 
 ## 3. Como nombrar bien una migracion
 
@@ -222,6 +231,7 @@ Reglas recomendadas para no romper historial:
 Conviene asumir estos limites hoy:
 
 - la CLI actual ya genera `up.sql` desde el diff del snapshot actual contra la ultima migracion local cuando le proporcionas un snapshot actual real
+- la CLI bloquea por defecto cambios destructivos detectados en `migration add`; el bypass explicito es `--allow-destructive`
 - la CLI actual no aplica el script directamente a SQL Server; solo lo imprime
 - la CLI actual no expone `database downgrade`
 - `down.sql` no se consume automaticamente
@@ -234,7 +244,7 @@ Para cambios pequenos y seguros:
 
 1. Cambia la entidad Rust.
 2. Crea migracion: `migration add AddPhoneToCustomers`.
-3. Escribe `up.sql` y `down.sql`.
+3. Revisa `up.sql` generado o escribelo manualmente si no usaste snapshot actual real; completa `down.sql`.
 4. Genera script con `database update`.
 5. Revisa el SQL generado.
 6. Aplícalo en `tempdb`.
@@ -244,7 +254,7 @@ Para cambios pequenos y seguros:
 Para cambios delicados:
 
 - si hay renombres, prefiere operaciones explicitas y revisables
-- si hay cambios destructivos, no los escondas dentro de una migracion grande
+- si hay cambios destructivos, no los escondas dentro de una migracion grande; usa `--allow-destructive` solo para generar el artefacto tras revisar el riesgo
 - si el cambio mezcla schema y data migration, deja ambas partes claramente separadas dentro del SQL
 
 ## Referencias relacionadas

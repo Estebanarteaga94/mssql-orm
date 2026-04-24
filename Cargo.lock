@@ -557,6 +557,7 @@ dependencies = [
 name = "mssql-orm-cli"
 version = "0.1.0"
 dependencies = [
+ "mssql-orm-core",
  "mssql-orm-migrate",
  "mssql-orm-sqlserver",
 ]

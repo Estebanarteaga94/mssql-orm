@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7+: Detectar cambios destructivos en `migration add` y bloquear por defecto salvo confirmación/flag explícita alineada con el plan
 - [ ] Etapa 7+: Generar artefacto editable de migración real (manteniendo `up.sql`, `down.sql` y snapshot; decidir si `migration.rs` entra en alcance MVP o queda diferido con límite explícito)
 - [ ] Etapa 7+: Validar end-to-end la generación automática con un consumidor real (`examples/todo-app`) creando base desde cero y migración incremental reproducible
 - [ ] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
@@ -14,6 +13,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 7+: Detectar cambios destructivos en `migration add` y bloquear por defecto salvo confirmación/flag explícita alineada con el plan
 - [x] Etapa 7+: Generar `up.sql` automáticamente desde operaciones compiladas y versionar `model_snapshot.json` con el estado actual del modelo
 - [x] Etapa 7+: Integrar el pipeline completo `snapshot -> diff -> MigrationOperation -> DDL SQL Server` dentro de `migration add`
 - [x] Etapa 7+: Cargar el snapshot previo de la última migración local y generar el snapshot actual desde metadata derivada del modelo

@@ -2,6 +2,38 @@
 
 ## 2026-04-24
 
+### Sesión: bloquear cambios destructivos en `migration add`
+
+- Se ejecutó la subtarea `Etapa 7+: Detectar cambios destructivos en migration add y bloquear por defecto salvo confirmación/flag explícita alineada con el plan`.
+- El plan maestro se confirmó en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz del repositorio.
+- `mssql-orm-cli migration add` ahora evalúa el `MigrationPlan` generado antes de crear el scaffold de la nueva migración.
+- Si el plan contiene un cambio destructivo, la CLI aborta por defecto con un mensaje explícito e indica usar `--allow-destructive` o editar la migración manualmente.
+- Se añadió el flag explícito `--allow-destructive` para permitir generar el artefacto editable cuando el usuario ya revisó el impacto.
+- La detección cubre `DropTable`, `DropColumn`, reducción de longitud, cambio de tipo y conversión de nullable a non-nullable sin `default_sql`, alineado con la sección de cambios destructivos del plan.
+- Se actualizó `docs/migrations.md` para documentar el nuevo bloqueo por defecto y el bypass explícito.
+
+### Resultado
+
+- `migration add` ya no materializa automáticamente `up.sql` con drops o alteraciones peligrosas salvo confirmación explícita por flag.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-cli`
+- `cargo check --workspace`
+- `cargo clippy -p mssql-orm-cli --all-targets`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy -p mssql-orm-cli --all-targets` terminó con código 0, pero volvió a reportar warnings preexistentes `collapsible_if` en `crates/mssql-orm-migrate/src/diff.rs`; no se corrigieron por estar fuera del alcance de esta subtarea.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 7+: Generar artefacto editable de migración real (manteniendo up.sql, down.sql y snapshot; decidir si migration.rs entra en alcance MVP o queda diferido con límite explícito)`.
+
 ### Sesión: generar `up.sql` automático desde el plan compilado
 
 - Se ejecutó la subtarea `Etapa 7+: Generar up.sql automáticamente desde operaciones compiladas y versionar model_snapshot.json con el estado actual del modelo`.

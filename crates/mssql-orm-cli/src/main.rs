@@ -32,6 +32,14 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                 current_snapshot.as_ref(),
             )
             .map_err(|error| format!("failed to build migration plan: {error}"))?;
+            if let Some(plan) = migration_plan.as_ref()
+                && !options.allow_destructive
+                && let Some(operation) = first_destructive_migration_operation(&plan.operations)
+            {
+                return Err(format!(
+                    "Error: destructive migration detected.\nOperation: {operation}\nUse --allow-destructive or edit migration manually."
+                ));
+            }
             let scaffold = match current_snapshot.as_ref() {
                 Some(snapshot) => create_migration_scaffold_with_snapshot(root, &name, snapshot),
                 None => create_migration_scaffold(root, &name),
@@ -167,6 +175,63 @@ fn build_migration_plan(
     }))
 }
 
+fn first_destructive_migration_operation(operations: &[MigrationOperation]) -> Option<String> {
+    operations.iter().find_map(destructive_operation_label)
+}
+
+fn destructive_operation_label(operation: &MigrationOperation) -> Option<String> {
+    match operation {
+        MigrationOperation::DropTable(operation) => Some(format!(
+            "DropTable {}.{}",
+            operation.schema_name, operation.table_name
+        )),
+        MigrationOperation::DropColumn(operation) => Some(format!(
+            "DropColumn {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.column_name
+        )),
+        MigrationOperation::AlterColumn(operation) => {
+            if operation.previous.sql_type != operation.next.sql_type {
+                return Some(format!(
+                    "AlterColumn {}.{}.{} changes type",
+                    operation.schema_name, operation.table_name, operation.next.name
+                ));
+            }
+
+            if let (Some(previous_length), Some(next_length)) =
+                (operation.previous.max_length, operation.next.max_length)
+                && next_length < previous_length
+            {
+                return Some(format!(
+                    "AlterColumn {}.{}.{} reduces length",
+                    operation.schema_name, operation.table_name, operation.next.name
+                ));
+            }
+
+            if operation.previous.nullable
+                && !operation.next.nullable
+                && operation.next.default_sql.is_none()
+            {
+                return Some(format!(
+                    "AlterColumn {}.{}.{} changes nullable to non-nullable without default",
+                    operation.schema_name, operation.table_name, operation.next.name
+                ));
+            }
+
+            None
+        }
+        MigrationOperation::CreateSchema(_)
+        | MigrationOperation::DropSchema(_)
+        | MigrationOperation::CreateTable(_)
+        | MigrationOperation::RenameTable(_)
+        | MigrationOperation::RenameColumn(_)
+        | MigrationOperation::AddColumn(_)
+        | MigrationOperation::CreateIndex(_)
+        | MigrationOperation::DropIndex(_)
+        | MigrationOperation::AddForeignKey(_)
+        | MigrationOperation::DropForeignKey(_) => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MigrationPlan {
     operations: Vec<MigrationOperation>,
@@ -237,7 +302,7 @@ fn parse_command(args: &[String]) -> Result<CliCommand, String> {
             Ok(CliCommand::DatabaseUpdate)
         }
         _ => Err(
-            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>] [--snapshot-bin <BinName> [--manifest-path <Path>]]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
+            "Usage:\n  mssql-orm-cli migration add <Name> [--model-snapshot <Path>] [--snapshot-bin <BinName> [--manifest-path <Path>]] [--allow-destructive]\n  mssql-orm-cli migration list\n  mssql-orm-cli database update".to_string(),
         ),
     }
 }
@@ -247,6 +312,7 @@ struct MigrationAddOptions {
     model_snapshot: Option<PathBuf>,
     snapshot_bin: Option<String>,
     manifest_path: Option<PathBuf>,
+    allow_destructive: bool,
 }
 
 fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, String> {
@@ -276,6 +342,10 @@ fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, S
                 options.manifest_path = Some(PathBuf::from(value));
                 index += 2;
             }
+            "--allow-destructive" => {
+                options.allow_destructive = true;
+                index += 1;
+            }
             unknown => {
                 return Err(format!("unknown migration add option: {unknown}"));
             }
@@ -295,8 +365,15 @@ fn parse_migration_add_options(args: &[String]) -> Result<MigrationAddOptions, S
 
 #[cfg(test)]
 mod tests {
-    use super::{CliCommand, MigrationAddOptions, build_migration_plan, parse_command, run};
-    use mssql_orm_migrate::{ModelSnapshot, read_model_snapshot};
+    use super::{
+        CliCommand, MigrationAddOptions, build_migration_plan,
+        first_destructive_migration_operation, parse_command, run,
+    };
+    use mssql_orm_core::SqlServerType;
+    use mssql_orm_migrate::{
+        AlterColumn, ColumnSnapshot, DropColumn, DropTable, MigrationOperation, ModelSnapshot,
+        SchemaSnapshot, TableSnapshot, read_model_snapshot,
+    };
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -309,6 +386,70 @@ mod tests {
         let path = std::env::temp_dir().join(format!("mssql_orm_cli_{unique}"));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    fn test_column(
+        name: &str,
+        sql_type: SqlServerType,
+        nullable: bool,
+        default_sql: Option<&str>,
+        max_length: Option<u32>,
+    ) -> ColumnSnapshot {
+        ColumnSnapshot::new(
+            name,
+            sql_type,
+            nullable,
+            false,
+            None,
+            default_sql.map(str::to_string),
+            None,
+            false,
+            true,
+            true,
+            max_length,
+            None,
+            None,
+        )
+    }
+
+    fn customer_snapshot(include_phone: bool) -> ModelSnapshot {
+        let mut columns = vec![ColumnSnapshot::new(
+            "id",
+            SqlServerType::BigInt,
+            false,
+            true,
+            None,
+            None,
+            None,
+            false,
+            true,
+            true,
+            None,
+            None,
+            None,
+        )];
+
+        if include_phone {
+            columns.push(test_column(
+                "phone",
+                SqlServerType::NVarChar,
+                true,
+                None,
+                Some(30),
+            ));
+        }
+
+        ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "sales",
+            vec![TableSnapshot::new(
+                "customers",
+                columns,
+                None,
+                vec!["id".to_string()],
+                Vec::new(),
+                Vec::new(),
+            )],
+        )])
     }
 
     #[test]
@@ -342,6 +483,7 @@ mod tests {
                     model_snapshot: Some(PathBuf::from("target/current_model_snapshot.json")),
                     snapshot_bin: None,
                     manifest_path: None,
+                    allow_destructive: false,
                 }
             }
         );
@@ -363,6 +505,28 @@ mod tests {
                     model_snapshot: None,
                     snapshot_bin: Some("app-model-snapshot".to_string()),
                     manifest_path: Some(PathBuf::from("examples/todo-app/Cargo.toml")),
+                    allow_destructive: false,
+                }
+            }
+        );
+        assert_eq!(
+            parse_command(&[
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "DropCustomerPhone".to_string(),
+                "--model-snapshot".to_string(),
+                "target/current_model_snapshot.json".to_string(),
+                "--allow-destructive".to_string(),
+            ])
+            .unwrap(),
+            CliCommand::MigrationAdd {
+                name: "DropCustomerPhone".to_string(),
+                options: MigrationAddOptions {
+                    model_snapshot: Some(PathBuf::from("target/current_model_snapshot.json")),
+                    snapshot_bin: None,
+                    manifest_path: None,
+                    allow_destructive: true,
                 }
             }
         );
@@ -556,6 +720,166 @@ mod tests {
         assert!(output.contains("Planned operations: 2"));
         assert!(output.contains("Compiled SQL statements: 2"));
         assert!(output.contains("up.sql: generated"));
+    }
+
+    #[test]
+    fn run_migration_add_blocks_destructive_changes_by_default() {
+        let root = temp_project_root();
+        let previous_dir = root.join("migrations/100_create_customers");
+        let current_snapshot_path = root.join("current_model_snapshot.json");
+
+        fs::create_dir_all(&previous_dir).unwrap();
+        fs::write(previous_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(previous_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            previous_dir.join("model_snapshot.json"),
+            customer_snapshot(true).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &current_snapshot_path,
+            customer_snapshot(false).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+
+        let error = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "DropCustomerPhone".to_string(),
+                "--model-snapshot".to_string(),
+                "current_model_snapshot.json".to_string(),
+            ],
+            &root,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Error: destructive migration detected."));
+        assert!(error.contains("Operation: DropColumn sales.customers.phone"));
+        assert!(error.contains("Use --allow-destructive or edit migration manually."));
+        assert!(!root.join("migrations").read_dir().unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("dropcustomerphone")
+        }));
+    }
+
+    #[test]
+    fn run_migration_add_allows_destructive_changes_with_explicit_flag() {
+        let root = temp_project_root();
+        let previous_dir = root.join("migrations/100_create_customers");
+        let current_snapshot_path = root.join("current_model_snapshot.json");
+
+        fs::create_dir_all(&previous_dir).unwrap();
+        fs::write(previous_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(previous_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            previous_dir.join("model_snapshot.json"),
+            customer_snapshot(true).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &current_snapshot_path,
+            customer_snapshot(false).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+
+        let output = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "DropCustomerPhone".to_string(),
+                "--model-snapshot".to_string(),
+                "current_model_snapshot.json".to_string(),
+                "--allow-destructive".to_string(),
+            ],
+            &root,
+        )
+        .unwrap();
+
+        assert!(output.contains("Planned operations: 1"));
+        assert!(output.contains("up.sql: generated"));
+
+        let migration_path = output
+            .lines()
+            .find_map(|line| line.strip_prefix("Path: "))
+            .map(PathBuf::from)
+            .unwrap();
+        let up_sql = fs::read_to_string(migration_path.join("up.sql")).unwrap();
+        assert!(up_sql.contains("ALTER TABLE [sales].[customers] DROP COLUMN [phone]"));
+    }
+
+    #[test]
+    fn destructive_operation_detection_covers_drop_and_unsafe_alter_column() {
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::DropTable(
+                DropTable::new("sales", "customers")
+            )]),
+            Some("DropTable sales.customers".to_string())
+        );
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::DropColumn(
+                DropColumn::new("sales", "customers", "phone")
+            )]),
+            Some("DropColumn sales.customers.phone".to_string())
+        );
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::AlterColumn(
+                AlterColumn::new(
+                    "sales",
+                    "customers",
+                    test_column("email", SqlServerType::NVarChar, false, None, Some(160)),
+                    test_column("email", SqlServerType::NVarChar, false, None, Some(120)),
+                )
+            )]),
+            Some("AlterColumn sales.customers.email reduces length".to_string())
+        );
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::AlterColumn(
+                AlterColumn::new(
+                    "sales",
+                    "customers",
+                    test_column("email", SqlServerType::NVarChar, false, None, Some(160)),
+                    test_column("email", SqlServerType::Int, false, None, None),
+                )
+            )]),
+            Some("AlterColumn sales.customers.email changes type".to_string())
+        );
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::AlterColumn(
+                AlterColumn::new(
+                    "sales",
+                    "customers",
+                    test_column("email", SqlServerType::NVarChar, true, None, Some(160)),
+                    test_column("email", SqlServerType::NVarChar, false, None, Some(160)),
+                )
+            )]),
+            Some(
+                "AlterColumn sales.customers.email changes nullable to non-nullable without default"
+                    .to_string()
+            )
+        );
+        assert_eq!(
+            first_destructive_migration_operation(&[MigrationOperation::AlterColumn(
+                AlterColumn::new(
+                    "sales",
+                    "customers",
+                    test_column("email", SqlServerType::NVarChar, true, None, Some(160)),
+                    test_column(
+                        "email",
+                        SqlServerType::NVarChar,
+                        false,
+                        Some("''"),
+                        Some(160)
+                    ),
+                )
+            )]),
+            None
+        );
     }
 
     #[test]
