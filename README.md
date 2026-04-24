@@ -136,6 +136,16 @@ Guía conceptual y práctica para:
 
 Documento: [docs/code-first.md](docs/code-first.md)
 
+### Guía de migraciones
+
+Guía operativa para:
+
+- usar `migration add`, `migration list` y `database update`
+- entender que hoy `database update` genera script y no ejecuta contra la base
+- trabajar con checksums, historial e idempotencia sin reescribir migraciones aplicadas
+
+Documento: [docs/migrations.md](docs/migrations.md)
+
 ### `todo-app`
 
 Ejemplo web async más realista, con:

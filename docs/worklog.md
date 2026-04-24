@@ -2,6 +2,31 @@
 
 ## 2026-04-23
 
+### Sesión: preparar guía pública de migraciones
+
+- Se ejecutó la subtarea `Etapa 15: Preparar guía de migraciones (migration add, migration list, database update) y límites explícitos`.
+- Se añadió `docs/migrations.md` con una guía centrada en cómo trabajar bien con la CLI actual de migraciones.
+- La guía explica el flujo recomendado real: cambiar entidades, crear scaffold con `migration add`, editar `up.sql` y `down.sql`, generar el script con `database update`, revisarlo y aplicarlo externamente con una herramienta como `sqlcmd`.
+- También deja explícitos los límites de la surface actual: la CLI no ejecuta el SQL directamente, no consume `down.sql`, no expone downgrade público y todavía no genera `up.sql` automáticamente desde las entidades.
+- `README.md` ahora enlaza la nueva guía de migraciones como parte del surface documental público del release.
+
+### Resultado
+
+- El repositorio ya tiene una guía de migraciones práctica y honesta, enfocada en disciplina operativa real y no en promesas futuras del roadmap.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-cli`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar guía del query builder público (filter, order_by, joins, take, paginate, count)`.
+
 ### Sesión: preparar guía `code-first` pública
 
 - Se ejecutó la subtarea `Etapa 15: Preparar guía code-first alineada con derives, DbContext, DbSet y límites actuales`.

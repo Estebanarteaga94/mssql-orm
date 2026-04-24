@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 15: Preparar guía de migraciones (`migration add`, `migration list`, `database update`) y límites explícitos
 - [ ] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
 - [ ] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
 - [ ] Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas
@@ -12,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 15: Preparar guía de migraciones (`migration add`, `migration list`, `database update`) y límites explícitos
 - [x] Etapa 15: Preparar guía code-first alineada con derives, `DbContext`, `DbSet` y límites actuales
 - [x] Operativo: Descomponer la Etapa 15 de release en subtareas verificables y ordenadas
 - [x] Etapa 15: Consolidar ejemplos ejecutables y guías de uso (`todo_app`, variables de entorno y smoke local, y resolver la inconsistencia documental de `basic-crud`)
