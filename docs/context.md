@@ -103,6 +103,28 @@ El MVP de auditoría queda explícitamente sin autollenado runtime. `crates/mssq
 
 `docs/code-first.md` ya documenta la sintaxis pública `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`, incluyendo límites del MVP y referencia al fixture compilable `crates/mssql-orm/tests/ui/entity_audit_public_valid.rs`.
 
+### Cierre operativo de Etapa 16
+
+La decision real de Etapa 16 queda fijada asi: `Entity Policies` existe como evolucion `code-first` para declarar columnas transversales reutilizables en compile-time, pero el unico caso implementado en el MVP es `audit = Audit` como metadata/schema. La policy se define con `#[derive(AuditFields)]`, se consume desde `#[orm(audit = Audit)]` y sus columnas se anexan a `EntityMetadata.columns` como `ColumnMetadata` ordinarias. No se agrego un pipeline paralelo para snapshots, diff, DDL ni migraciones.
+
+El tradeoff publico aceptado es deliberado: las columnas auditables no son campos Rust visibles de la entidad y no generan simbolos asociados como `Todo::created_at`. Esto mantiene el derive simple y evita mezclar metadata de esquema con estado Rust, query DSL y persistencia runtime antes de tener un contrato estable. `FromRow` materializa solo campos reales del struct; `Insertable`, `Changeset`, Active Record y `save_changes()` tampoco autollenan ni persisten columnas auditables generadas por policy.
+
+Las validaciones ejecutadas durante la etapa cubrieron:
+
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml domain::tests::audit_event_metadata_expands_reusable_audit_policy_columns`
+- `cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot`
+- `examples/todo-app/scripts/migration_e2e.sh`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+Tambien se ejecutaron validaciones enfocadas del ejemplo `todo-app` (`cargo fmt --manifest-path examples/todo-app/Cargo.toml --all --check`, `cargo check --manifest-path examples/todo-app/Cargo.toml` y `cargo clippy --manifest-path examples/todo-app/Cargo.toml --all-targets --all-features`). El script `migration_e2e.sh` valido artefactos locales y omitio aplicacion real con `sqlcmd` cuando no estaban configuradas las variables `MSSQL_ORM_SQLCMD_*`.
+
+La API publica queda concentrada en la crate raiz mediante `mssql_orm::prelude::*`, que reexporta `AuditFields`, `EntityPolicy` y los contratos necesarios para el caso valido. Las extensiones `AuditProvider`, `timestamps`, `concurrency = RowVersion`, `soft_delete` y `tenant` quedan como `Etapa 16+`; no deben implementarse sin diseno especifico porque cambian rutas de escritura, borrado, consulta, tracking, transacciones o seguridad.
+
 Para `soft_delete`, el comportamiento esperado futuro debe quedar claro desde el diseño: si una entidad declara `#[orm(soft_delete = SoftDelete)]`, entonces `DbSet::delete(...)`, `entity.delete(&db)`, `DbSet::remove_tracked(...)` y `save_changes()` no deberían compilar ni ejecutar un `DELETE FROM ...` normal para esa entidad. En su lugar deben construir un `UPDATE` que marque la fila como eliminada lógicamente, por ejemplo asignando `deleted_at`, `deleted_by` o los campos definidos por el struct `SoftDelete`. Esta ruta debe seguir respetando primary key simple/compuesta según soporte vigente, `rowversion`, `ConcurrencyConflict`, transacciones y el pipeline existente de compilación SQL Server. También debe existir una decisión explícita sobre queries: por defecto las entidades con `soft_delete` deberían excluir filas con borrado lógico, y cualquier acceso a eliminadas debe requerir una API visible como `with_deleted()` o `only_deleted()`, no un bypass accidental.
 
 Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodidad. Si una entidad declara `#[orm(tenant = TenantScope)]`, toda ruta pública que lea o modifique esa entidad debe aplicar el tenant activo: `query().all()`, `first`, `count`, `find`, `update`, `delete`, Active Record y `save_changes()`. En ausencia de tenant activo, la política debe fallar cerrado por defecto para entidades tenant-scoped, en vez de ejecutar una consulta sin filtro. Los inserts deben recibir `tenant_id` desde el contexto o rechazar la operación si el usuario intenta insertar con un tenant distinto. Esta policy necesita pruebas dedicadas para asegurar que joins, query builder manual, tracking y helpers internos no puedan omitir el filtro por accidente.
@@ -375,6 +397,6 @@ Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodi
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 16: Actualizar README.md y/o documentación de roadmap para presentar Entity Policies como evolución code-first, aclarando qué está implementado y qué queda diferido`.
-2. Continuar después con la actualización final de `docs/context.md` al cerrar la etapa.
+1. Ejecutar `Etapa 16: Ejecutar validación local mínima antes de cerrar: cargo fmt --all --check, cargo check --workspace, tests trybuild afectados y pruebas unitarias de core, macros, migrate y sqlserver relacionadas`.
+2. Mantener `AuditProvider`, `timestamps`, `concurrency = RowVersion`, `soft_delete` y `tenant` como backlog `Etapa 16+` hasta diseñar contratos separados.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

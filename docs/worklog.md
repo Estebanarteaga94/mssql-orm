@@ -2,6 +2,36 @@
 
 ## 2026-04-25
 
+### Sesión: cierre de contexto de Etapa 16
+
+- Se ejecutó la subtarea `Etapa 16: Actualizar docs/context.md al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública`.
+- Se confirmó nuevamente que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md`, `docs/entity-policies.md`, `README.md` y el plan maestro.
+- Se agregó en `docs/context.md` un cierre operativo explícito para Etapa 16.
+- El cierre fija la decisión real: `Entity Policies` queda disponible como evolución `code-first`, pero el único MVP implementado es `audit = Audit` como metadata/schema mediante `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`.
+- Se documentó el tradeoff público: las columnas auditables no son campos Rust visibles, no generan símbolos asociados como `Todo::created_at`, no se materializan en `FromRow` y no se autollenan en `Insertable`, `Changeset`, Active Record ni `save_changes()`.
+- Se registraron en contexto las validaciones relevantes ya ejecutadas durante la etapa: `trybuild`, `stage16_entity_policies`, `stage16_audit_migrations`, validaciones del ejemplo `todo-app`, exportador `model_snapshot`, `migration_e2e.sh`, `cargo fmt --all --check` y `cargo check --workspace`.
+- Se actualizó el próximo enfoque recomendado hacia la validación local mínima de cierre de Etapa 16.
+- Se actualizó `docs/tasks.md` moviendo la tarea a `Completadas`.
+
+### Resultado
+
+- `docs/context.md` ya refleja el estado operativo de cierre de Etapa 16, con decisiones, límites, validaciones y extensiones diferidas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental; la validación amplia queda como subtarea pendiente explícita de cierre.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Ejecutar validación local mínima antes de cerrar: cargo fmt --all --check, cargo check --workspace, tests trybuild afectados y pruebas unitarias de core, macros, migrate y sqlserver relacionadas`.
+
 ### Sesión: README y roadmap de Entity Policies
 
 - Se ejecutó la subtarea `Etapa 16: Actualizar README.md y/o documentación de roadmap para presentar Entity Policies como evolución code-first, aclarando qué está implementado y qué queda diferido`.
