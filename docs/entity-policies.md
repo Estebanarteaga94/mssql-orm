@@ -228,6 +228,86 @@ Reglas iniciales esperadas:
 - los campos de `Audit` no generan filtros ni hooks runtime
 - defaults SQL como `SYSUTCDATETIME()` son metadata de esquema, no valores calculados por Rust
 
+## Shape de `AuditFields`
+
+El struct de auditoria del usuario debe ser un struct Rust con campos nombrados y `#[derive(AuditFields)]`.
+
+Ejemplo objetivo:
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(AuditFields)]
+struct Audit {
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(updatable = false)]
+    created_at: chrono::NaiveDateTime,
+
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    created_by: Option<String>,
+
+    #[orm(nullable)]
+    updated_at: Option<chrono::NaiveDateTime>,
+
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    updated_by: Option<String>,
+}
+```
+
+Cada campo de `Audit` se convierte en un `ColumnMetadata` normal. El nombre Rust del campo se usa como `rust_field` y, por defecto, tambien como `column_name`. El atributo `#[orm(column = "...")]` puede cambiar el nombre de columna sin cambiar el nombre Rust del campo.
+
+Tipos soportados:
+
+- cualquier tipo que implemente `SqlTypeMapping`
+- `Option<T>` cuando `T: SqlTypeMapping`, marcando la columna como nullable
+- los tipos ya soportados por `core`: `bool`, enteros soportados, `f64`, `String`, `Vec<u8>`, `uuid::Uuid`, `rust_decimal::Decimal`, `chrono::NaiveDate` y `chrono::NaiveDateTime`
+
+Reglas de nullability:
+
+- `Option<T>` implica `nullable = true`
+- `#[orm(nullable)]` tambien marca la columna como nullable
+- un campo no `Option<T>` sin `#[orm(nullable)]` queda como `nullable = false`
+- `#[orm(nullable)]` sobre `Option<T>` es redundante pero aceptable si el derive base ya lo acepta de forma consistente
+
+Atributos permitidos en campos de auditoria:
+
+- `column`
+- `length`
+- `nullable`
+- `default_sql`
+- `sql_type`
+- `precision`
+- `scale`
+- `renamed_from`
+- `insertable`
+- `updatable`
+
+Atributos rechazados en campos de auditoria:
+
+- `primary_key`
+- `identity`
+- `computed_sql`
+- `rowversion`
+- `index`
+- `unique`
+- `foreign_key`
+- `on_delete`
+
+La razon es que `AuditFields` solo debe aportar columnas reutilizables. Primary keys, identity, computed columns, rowversion, indices y relaciones siguen perteneciendo al entity o a tareas futuras con contrato propio.
+
+Reglas de escritura:
+
+- por defecto, una columna auditable es `insertable = true`
+- por defecto, una columna auditable es `updatable = true`
+- `#[orm(insertable = false)]` permite excluir una columna del contrato de insercion
+- `#[orm(updatable = false)]` permite excluir una columna del contrato de update
+- `created_at` y `created_by` deberian declararse normalmente con `updatable = false`
+- `updated_at` y `updated_by` pueden quedar `updatable = true`
+
+Estas flags son solo metadata de columna. En el MVP no hacen que `DbSet::insert`, `DbSet::update`, Active Record ni `save_changes` rellenen valores automaticamente.
+
 ## Alcance de `timestamps = Timestamps`
 
 `timestamps = Timestamps` queda reservado como policy candidata para aportar solo columnas temporales, normalmente `created_at` y `updated_at`.

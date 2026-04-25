@@ -8,7 +8,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables
 - [ ] Etapa 16: Implementar `#[derive(AuditFields)]` o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable
 - [ ] Etapa 16: Agregar validaciones compile-time para `AuditFields`: solo structs con campos nombrados, tipos con `SqlTypeMapping`, atributos `#[orm(...)]` permitidos, nombres de columnas no vacíos y errores claros en casos inválidos
 - [ ] Etapa 16: Extender `#[derive(Entity)]` para aceptar `#[orm(audit = Audit)]` a nivel de entidad sin afectar entidades existentes que no declaran auditoría
@@ -49,6 +48,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables
 - [x] Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando `#[orm(audit = Audit)]` sobre alternativas implícitas o runtime
 - [x] Etapa 16: Definir el contrato de metadata para políticas reutilizables en `mssql-orm-core`, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (`ColumnMetadata`) sin crear un segundo pipeline de esquema
 - [x] Etapa 16: Documentar explícitamente el alcance inicial de `Entity Policies`: `audit` y `timestamps` como columnas generadas; `soft_delete`, `tenant` y comportamiento automático quedan diferidos hasta tener contrato estable

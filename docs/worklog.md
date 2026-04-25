@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: definir shape de struct de auditoría
+
+- Se ejecutó la subtarea `Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables`.
+- Se amplió `docs/entity-policies.md` con la sección `Shape de AuditFields`.
+- Quedó definido que el struct de auditoría debe usar `#[derive(AuditFields)]` sobre un struct con campos nombrados.
+- Cada campo del struct de auditoría debe generar `ColumnMetadata` normal, usando el nombre del campo como `rust_field` y `column_name` por defecto, con `#[orm(column = "...")]` como override explícito.
+- Se documentaron tipos soportados mediante `SqlTypeMapping`, incluyendo `Option<T>` para nullability.
+- Se definieron atributos permitidos para campos auditables: `column`, `length`, `nullable`, `default_sql`, `sql_type`, `precision`, `scale`, `renamed_from`, `insertable` y `updatable`.
+- Se definieron atributos rechazados para campos auditables: `primary_key`, `identity`, `computed_sql`, `rowversion`, `index`, `unique`, `foreign_key` y `on_delete`.
+- Se fijó que `insertable` y `updatable` son flags de metadata; no implican autollenado runtime en el MVP.
+- Se actualizó `docs/context.md` con el shape objetivo de `AuditFields`.
+
+### Resultado
+
+- El contrato esperado para structs de auditoría de usuario quedó listo para guiar la implementación del derive `AuditFields` y sus validaciones compile-time.
+
+### Validación
+
+- `cargo fmt --all --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión fue documental; no se ejecutaron pruebas Rust porque no hubo cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Implementar #[derive(AuditFields)] o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable`.
+
 ### Sesión: decidir sintaxis MVP de auditoría
 
 - Se ejecutó la subtarea `Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando #[orm(audit = Audit)] sobre alternativas implícitas o runtime`.
