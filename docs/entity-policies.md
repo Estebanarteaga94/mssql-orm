@@ -261,6 +261,106 @@ Decision de evaluacion:
 
 En otras palabras: `soft_delete` es razonable como feature futura, pero solo despues de redisenar explicitamente el contrato de borrado y lectura. No debe entrar como una policy “pequeña” solo porque comparta el mecanismo de metadata.
 
+## Diseno de `soft_delete = SoftDelete`
+
+El diseno vigente para `soft_delete = SoftDelete` debe respetar la arquitectura actual: `mssql-orm-query` sigue describiendo ASTs neutrales, `mssql-orm-sqlserver` sigue compilando esos ASTs a SQL Server y el branching semantico ocurre en la crate publica `mssql-orm`, dentro de `DbSet`, Active Record y el tracking experimental.
+
+Forma publica objetivo:
+
+```rust
+#[derive(Entity)]
+#[orm(table = "todos", schema = "todo", soft_delete = SoftDelete)]
+struct Todo {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    title: String,
+}
+```
+
+La policy sigue siendo explicita y declarativa. No se activa por detectar columnas llamadas `deleted_at`, `deleted_by` o `is_deleted`.
+
+### Regla central de escritura
+
+Para entidades **sin** `soft_delete`, `DbSet::delete(...)` y las rutas relacionadas conservan exactamente el comportamiento actual basado en `DeleteQuery`.
+
+Para entidades **con** `soft_delete`, `delete` deja de significar borrado fisico y pasa a significar **update de borrado logico**:
+
+- `DbSet::delete(...)`
+- `DbSet::delete_by_sql_value(...)`
+- `DbSet::delete_tracked_by_sql_value(...)`
+- `entity.delete(&db)`
+- `DbSet::remove_tracked(...)` + `save_changes()`
+
+todas esas rutas deben converger en una unica implementacion que construya un `UpdateQuery` con:
+
+- predicate por primary key
+- predicate por `rowversion` cuando exista token de concurrencia
+- assignments para columnas de `SoftDelete`
+
+La API publica no debe duplicar pipelines: `ActiveRecord::delete(&db)` debe seguir delegando a `DbSet`, y `save_tracked_deleted()` debe seguir pasando por la misma ruta de borrado que `delete`.
+
+### `DeleteQuery` sigue siendo borrado fisico
+
+`DeleteQuery` no debe reinterpretarse como “delete fisico o logico segun entidad”. Su significado debe permanecer estable:
+
+- `DeleteQuery` = `DELETE FROM ...`
+- `SqlServerCompiler::compile_delete(...)` = compilacion de borrado fisico
+
+El soporte de `soft_delete` debe resolverse antes, en la capa publica que hoy ya decide entre `insert`, `update` y `delete`.
+
+Esto evita contaminar el AST con reglas dependientes de metadata runtime y preserva la restriccion de que `query` no genera SQL directo ni contiene semantica especifica de SQL Server.
+
+### Semantica observable de `delete`
+
+Para entidades con `soft_delete`:
+
+- `delete` devuelve `true` cuando el `UPDATE` de borrado logico afecta al menos una fila
+- devuelve `false` cuando no existe fila activa para esa primary key
+- mantiene `OrmError::ConcurrencyConflict` cuando la fila existe pero el `rowversion` ya no coincide
+
+La semantica de conflicto debe seguir la regla actual de Etapa 11: si el `UPDATE` no afecta filas y habia token de concurrencia, el ORM debe comprobar si la fila sigue existiendo por primary key para distinguir “no existe” de “conflicto”.
+
+Punto importante de diseno: esa comprobacion de existencia no puede apoyarse en la futura query por defecto filtrada por `soft_delete`, porque una fila ya borrada logicamente seguiria existiendo fisicamente. La comprobacion interna debe usar una ruta sin filtros implicitos de `soft_delete`.
+
+### Integracion con change tracking
+
+`DbSet::remove_tracked(&mut tracked)` no debe resolver el borrado logico por si mismo. Su responsabilidad sigue siendo transicionar el wrapper a estado `Deleted`.
+
+La semantica real se aplica en `save_tracked_deleted()`:
+
+- si el wrapper estaba en `Added`, `remove_tracked(...)` sigue cancelando el insert pendiente y no emite SQL
+- si el wrapper estaba cargado o modificado, `save_changes()` debe pasar por la misma ruta de `soft_delete` que usa `DbSet::delete(...)`
+- si el borrado logico tiene exito, el wrapper se desregistra igual que hoy
+- si falla por `rowversion`, `save_changes()` debe seguir propagando `OrmError::ConcurrencyConflict`
+
+Esto preserva la unidad de trabajo experimental ya documentada y evita una segunda semantica de borrado exclusiva para tracking.
+
+### Campos y metadata de `SoftDelete`
+
+`SoftDelete` debe seguir el mismo principio estructural de `audit`: las columnas que aporte la policy deben terminar como `ColumnMetadata` normales dentro de `EntityMetadata.columns`, para que snapshots, diff y DDL sigan funcionando sin pipeline especial.
+
+La diferencia es que `soft_delete` necesita ademas una semantica runtime. Eso obliga a separar dos responsabilidades:
+
+- metadata/schema: que columnas existen y con que shape
+- valores/runtime: que assignments se escriben cuando se ejecuta un borrado logico
+
+Por esa razon, el diseno de `soft_delete` no queda completo solo con metadata. Se necesita una tarea separada para definir como se obtienen valores como `deleted_at`, `deleted_by` o `is_deleted = true` sin acoplar `core` a contexto por request ni meter literales SQL ad hoc en el query builder.
+
+### Hard delete
+
+`delete()` debe significar borrado logico para entidades con la policy. Si mas adelante se necesita borrado fisico explicito, debe exponerse mediante una API distinta, por ejemplo `hard_delete(...)`, nunca como flag oculto ni como comportamiento ambiguo del mismo metodo.
+
+### Limites de esta decision
+
+Este diseno cierra solo la parte de escritura y persistencia. Quedan pendientes y separadas:
+
+- queries por defecto que excluyan filas borradas logicamente
+- APIs explicitas `with_deleted()` y `only_deleted()` o equivalente
+- origen de valores runtime para columnas de `SoftDelete`
+- cobertura de pruebas y SQL compilado para garantizar que ninguna ruta siga haciendo `DELETE FROM` por accidente
+
 ## Que Significa Columnas Generadas
 
 Una policy de columnas generadas aporta metadata de columnas como si esas columnas hubieran sido declaradas manualmente en la entidad.

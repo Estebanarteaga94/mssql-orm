@@ -5324,3 +5324,29 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Diseñar soft_delete = SoftDelete para que DbSet::delete(...), entity.delete(&db), remove_tracked(...) y save_changes() no emitan DELETE físico cuando la entidad tenga esa política; deben emitir UPDATE sobre columnas como deleted_at/deleted_by y respetar rowversion/ConcurrencyConflict`.
+
+### Sesión: Diseño de `soft_delete = SoftDelete` sobre rutas de borrado existentes
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+- Se movió en `docs/tasks.md` la tarea `Etapa 16+: Diseñar soft_delete = SoftDelete para que DbSet::delete(...), entity.delete(&db), remove_tracked(...) y save_changes() no emitan DELETE físico cuando la entidad tenga esa política; deben emitir UPDATE sobre columnas como deleted_at/deleted_by y respetar rowversion/ConcurrencyConflict` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se revisaron las rutas reales de persistencia en `crates/mssql-orm/src/context.rs`, `crates/mssql-orm/src/active_record.rs`, `crates/mssql-orm/src/dbset_query.rs` y `crates/mssql-orm/src/tracking.rs` para diseñar `soft_delete` sobre el comportamiento existente, no sobre supuestos.
+- La decisión principal quedó documentada en `docs/entity-policies.md`: `DeleteQuery` y `SqlServerCompiler::compile_delete(...)` conservan semántica de borrado físico, y el cambio a borrado lógico debe resolverse en `DbSet`, Active Record y tracking mediante `UpdateQuery`.
+- Para entidades con `soft_delete`, `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` deben converger en una única ruta de `UPDATE` lógico con predicate por primary key y `rowversion` cuando exista.
+- También quedó fijado que la detección de `OrmError::ConcurrencyConflict` no puede depender de futuras queries filtradas por `soft_delete`; las comprobaciones internas de existencia deben usar una ruta sin filtros implícitos para distinguir correctamente entre “no existe” y “token stale”.
+- Se dejó explícito que `remove_tracked(...)` no resuelve por sí mismo el borrado lógico: solo marca `Deleted`, mientras la semántica real permanece centralizada en `save_changes()`.
+- Se agregó una subtarea nueva en `docs/tasks.md` para definir cómo `soft_delete` obtiene valores runtime para columnas como `deleted_at`, `deleted_by` o `is_deleted`, porque ese contrato no puede resolverse solo con metadata.
+- Se actualizó `docs/context.md` para reflejar el diseño ya decidido y mover el siguiente foco a la semántica de consultas (`with_deleted`/`only_deleted`) y al contrato runtime de valores de borrado lógico.
+- La validación ejecutada para cerrar esta sesión fue `cargo fmt --all --check` y `cargo check --workspace`.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión solo cerró decisiones de diseño y trazabilidad documental; no hubo cambios en código ejecutable.
+
+### Resultado
+
+- El repositorio ya documenta cómo debe encajar `soft_delete` en las rutas actuales de `DbSet`, Active Record y change tracking sin romper `DeleteQuery`, `rowversion` ni `ConcurrencyConflict`.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Definir cómo consultar entidades con soft_delete: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran soft_delete`.
