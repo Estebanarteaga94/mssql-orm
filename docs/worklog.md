@@ -5401,3 +5401,24 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Cubrir soft_delete con pruebas de SQL compilado, CRUD público, Active Record, change tracking y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente`.
+
+### Sesión: descomposición operativa de `soft_delete`
+
+- Se detectó una inconsistencia en `docs/tasks.md`: el diseño conceptual de `soft_delete` ya estaba cerrado, pero el siguiente pendiente visible era una tarea amplia de cobertura, sin subtareas explícitas de implementación para macros, runtime, `DbSet`, `DbSetQuery` y migraciones.
+- Para no forzar una sesión futura a saltar directamente a pruebas sin código intermedio, se reemplazó esa tarea amplia por subtareas ejecutables y ordenadas: soporte en `#[derive(Entity)]`, contrato runtime de `Vec<ColumnValue>`, rutas de borrado en `DbSet`/Active Record/tracking, visibilidad de lectura en `DbSetQuery`, helpers internos sin filtro implícito, integración con snapshots/diff/DDL y cobertura final.
+- La tarea operativa `Descomponer la implementación de soft_delete en subtareas ejecutables antes de intentar cobertura integral` quedó registrada como completada en `docs/tasks.md`.
+- Se actualizó `docs/context.md` para reflejar que el siguiente paso correcto ya es implementación concreta de `soft_delete` desde macros y runtime, no más diseño general.
+- La validación ejecutada para cerrar esta sesión fue `cargo fmt --all --check` y `cargo check --workspace`.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión solo reordenó backlog y trazabilidad documental; no hubo cambios en código ejecutable.
+
+### Resultado
+
+- El backlog de `soft_delete` quedó alineado con el estado real del proyecto y ahora permite avanzar por implementación incremental en vez de saltar desde diseño a una tarea de pruebas demasiado amplia.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Extender #[derive(Entity)] para aceptar #[orm(soft_delete = SoftDelete)], generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time`.
