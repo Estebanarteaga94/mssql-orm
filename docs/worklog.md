@@ -5350,3 +5350,29 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Definir cómo consultar entidades con soft_delete: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran soft_delete`.
+
+### Sesión: Diseño de consultas para `soft_delete = SoftDelete`
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+- Se movió en `docs/tasks.md` la tarea `Etapa 16+: Definir cómo consultar entidades con soft_delete: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran soft_delete` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se revisó la surface real de `DbSet::query()`, `DbSet::query_with(...)`, `DbSet::find(...)` y `DbSetQuery` en `crates/mssql-orm/src/context.rs` y `crates/mssql-orm/src/dbset_query.rs` para fijar el diseño sobre la implementación existente.
+- La decisión principal quedó documentada en `docs/entity-policies.md`: para entidades con `soft_delete`, `query()` y `find()` deben excluir por defecto filas borradas lógicamente de la entidad raíz, y `DbSetQuery<E>` debe exponer APIs explícitas `with_deleted()` y `only_deleted()`.
+- También quedó fijado que el estado de visibilidad no debe vivir en `SelectQuery`; debe vivir en `DbSetQuery<E>` y materializarse al construir la consulta final, preservando que `mssql-orm-query` siga siendo un AST neutral.
+- Se dejó explícito que `query_with(select_query)` tampoco debe saltarse la política: aun con un `SelectQuery` custom, la entidad raíz soft-deleted nace en modo `ActiveOnly` salvo que el usuario llame una API visible para cambiarlo.
+- `find(...)` queda alineado con esa semántica pública: una fila soft-deleted se comporta como ausente y retorna `None`; las rutas internas que necesiten existencia física real para resolver `ConcurrencyConflict` o verificaciones post-write deben usar helpers sin filtro implícito.
+- Para joins, se fijó el límite conservador de esta fase: el filtro automático de `soft_delete` aplica solo a la entidad raíz `E` de `DbSetQuery<E>`, no a todas las entidades unidas manualmente. Cualquier filtrado adicional sobre joins deberá ser explícito hasta que exista un diseño más fuerte para aliases y múltiples tablas.
+- Se actualizó `docs/context.md` para reflejar esta decisión y mover el siguiente foco al contrato runtime que poblará `deleted_at`, `deleted_by` o `is_deleted`.
+- La validación ejecutada para cerrar esta sesión fue `cargo fmt --all --check` y `cargo check --workspace`.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión solo cerró decisiones de diseño y trazabilidad documental; no hubo cambios en código ejecutable.
+
+### Resultado
+
+- El repositorio ya documenta cómo debe funcionar la visibilidad de lectura para `soft_delete`, incluyendo filtros por defecto, escapes públicos y el límite actual sobre joins explícitos.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Definir cómo soft_delete obtiene valores runtime para columnas como deleted_at, deleted_by o is_deleted sin acoplar core a contexto por request ni duplicar la lógica actual de update`.

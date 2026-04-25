@@ -361,6 +361,113 @@ Este diseno cierra solo la parte de escritura y persistencia. Quedan pendientes 
 - origen de valores runtime para columnas de `SoftDelete`
 - cobertura de pruebas y SQL compilado para garantizar que ninguna ruta siga haciendo `DELETE FROM` por accidente
 
+## Diseno de consultas para `soft_delete = SoftDelete`
+
+La semantica de lectura debe montarse sobre la surface publica existente:
+
+- `DbSet::query()`
+- `DbSet::query_with(...)`
+- `DbSet::find(...)`
+- `DbSetQuery::all()`
+- `DbSetQuery::first()`
+- `DbSetQuery::count()`
+
+No debe abrirse un query builder paralelo ni una API separada solo para entidades con `soft_delete`.
+
+### Regla por defecto
+
+Si una entidad declara `#[orm(soft_delete = SoftDelete)]`, entonces `DbSet::query()` debe partir de un `SelectQuery::from_entity::<E>()` mas un predicate implicito que excluya filas borradas logicamente.
+
+Ese filtro por defecto debe propagarse a:
+
+- `all()`
+- `first()`
+- `count()`
+- `find(...)`, porque internamente ya reutiliza una `SelectQuery`
+- `find_tracked(...)`, porque delega a `find(...)`
+- cualquier query armada desde `DbSet::query()` y luego extendida con `filter`, `join`, `order_by`, `take` o `paginate`
+
+Para entidades **sin** `soft_delete`, `query()` y `find()` deben conservar exactamente la semantica actual.
+
+### Formas explicitas de lectura
+
+La API publica debe exponer dos escapes visibles sobre `DbSetQuery<E>`:
+
+- `with_deleted()`: incluye filas activas y filas borradas logicamente
+- `only_deleted()`: devuelve solo filas borradas logicamente
+
+La regla de composicion debe ser simple y estable:
+
+- `query()` crea el query en modo `ActiveOnly` para entidades con `soft_delete`
+- `with_deleted()` reemplaza ese modo por `WithDeleted`
+- `only_deleted()` reemplaza ese modo por `OnlyDeleted`
+
+No debe haber combinaciones acumulativas ni flags ambiguos. La ultima seleccion de visibilidad gana.
+
+### Donde vive el estado de visibilidad
+
+El estado de visibilidad de `soft_delete` debe vivir en `DbSetQuery<E>`, no en `SelectQuery`.
+
+Razon:
+
+- `SelectQuery` sigue siendo AST neutral y no debe cargar politica runtime dependiente de metadata de una entidad
+- `DbSetQuery<E>` ya es la capa publica que sabe que entidad concreta esta consultando y que crate compila/ejecuta la query
+- el filtro implicito puede materializarse en el `SelectQuery` final antes de compilar a SQL Server, sin contaminar el AST base
+
+En otras palabras: el AST sigue representando filtros SQL ordinarios; la decision de agregar el filtro por borrado logico pertenece a la capa publica que hoy ya encapsula `SelectQuery`.
+
+### `query_with(...)` y queries custom
+
+`DbSet::query_with(select_query)` no debe saltarse la politica por defecto. Si la entidad tiene `soft_delete`, el `DbSetQuery` resultante debe seguir nacer en modo `ActiveOnly`, aun cuando el `SelectQuery` haya sido construido externamente.
+
+Eso evita una via accidental para leer entidades borradas logicamente solo por haber usado un `SelectQuery` custom.
+
+Las APIs explicitas `with_deleted()` y `only_deleted()` siguen siendo la unica forma publica de cambiar esa visibilidad.
+
+### Semantica de `find(...)`
+
+`DbSet::find(...)` debe respetar la politica por defecto:
+
+- si la fila existe y esta activa, la retorna
+- si la fila existe pero esta borrada logicamente, retorna `None`
+- si se necesita encontrar una fila borrada logicamente, debe existir una ruta explicita basada en `query().with_deleted()` u otra API publica igual de visible, nunca un bypass silencioso
+
+Esto alinea `find()` con la expectativa del usuario: una entidad soft-deleted se comporta como ausente en las consultas normales.
+
+### Rutas internas sin filtro implicito
+
+El ORM igualmente necesita una forma interna de consultar por primary key **sin** filtro de `soft_delete` para preservar semanticas ya fijadas:
+
+- deteccion de `ConcurrencyConflict`
+- comprobacion de existencia despues de un `UPDATE` o `DELETE`
+- posibles rutas futuras de `hard_delete`
+
+Esa ruta no debe exponerse como API publica general. Debe quedar interna a `DbSet` o a helpers equivalentes y usarse solo cuando el contrato publico lo exija.
+
+Esto evita mezclar dos problemas distintos:
+
+- semantica publica de lectura para usuarios del ORM
+- chequeos internos necesarios para resolver conflictos y existencia fisica real
+
+### `count()` y joins
+
+`DbSetQuery::count()` debe aplicar la misma visibilidad que `all()` y `first()`. Si la query esta en modo `ActiveOnly`, el conteo no debe incluir filas borradas logicamente.
+
+Para joins, la regla conservadora inicial debe ser:
+
+- la visibilidad `soft_delete` afecta solo a la entidad raiz `E` de `DbSetQuery<E>`
+- entidades joined manualmente no reciben filtros implicitos automaticos en esta subtarea
+
+Motivo: hoy el query builder publico ya soporta joins explicitos pero no tiene aliases, reglas de multiples tablas ni una capa de politicas por entidad joined. Intentar inferir filtros sobre cada join en esta etapa mezclaria demasiadas decisiones.
+
+Si el usuario necesita filtrar joined entities soft-deleted, en esta fase debe hacerlo explicitamente con predicados normales. El soporte automatico sobre joins queda como refinamiento futuro y no debe colarse implicitamente.
+
+### Consecuencia publica aceptada
+
+En esta etapa de diseno, `soft_delete` afecta por defecto la entidad raiz de `DbSet` y sus lecturas directas (`query`, `find`, `count`, tracking load). No garantiza todavia filtrado automatico de todas las entidades que aparezcan en joins explicitos.
+
+Ese limite debe quedar documentado cuando se implemente para no prometer una semantica de joins mas fuerte de la que el query builder actual puede sostener sin aliases y sin metadata adicional por tabla unida.
+
 ## Que Significa Columnas Generadas
 
 Una policy de columnas generadas aporta metadata de columnas como si esas columnas hubieran sido declaradas manualmente en la entidad.
