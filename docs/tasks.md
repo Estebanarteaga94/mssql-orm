@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 15+: Corregir o bloquear `db.transaction(...)` sobre `SharedConnection::Pool` hasta pinnear una conexión física durante todo el closure transaccional
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
 - [ ] Etapa 16: Actualizar el ejemplo `todo-app` o agregar fixture dedicado para mostrar al menos una entidad con `#[orm(audit = Audit)]` sin degradar el smoke existente
 - [ ] Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que `migration add --snapshot-bin ...` capture columnas auditables en `model_snapshot.json`
@@ -27,6 +26,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 15+: Bloquear `db.transaction(...)` sobre `SharedConnection::Pool` hasta pinnear una conexión física durante todo el closure transaccional
 - [x] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [x] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [x] Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas

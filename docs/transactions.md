@@ -157,7 +157,7 @@ Las lecturas ejecutadas dentro de `MssqlTransaction` no aplican retry automatico
 - Si `COMMIT TRANSACTION` falla, el error se propaga. La API actual no ejecuta un rollback compensatorio despues de un fallo de commit.
 - La transaccion es de alcance SQL Server sobre una conexion. No es una transaccion distribuida ni coordina recursos externos.
 - Durante el closure, trata la conexion compartida como de uso logico exclusivo. No ejecutes operaciones concurrentes sobre clones del mismo contexto esperando aislamiento adicional.
-- Con `pool-bb8`, `db.transaction(...)` aun no pinnea una conexion fisica del pool durante todo el closure. Hasta corregir ese punto, usa transacciones publicas sobre contextos creados desde conexion directa (`connect`, `connect_with_config`, `from_connection`) y no sobre `from_pool(...)`.
+- Con `pool-bb8`, `db.transaction(...)` esta bloqueado explicitamente cuando el contexto fue creado desde `from_pool(...)` o `connect_shared_from_pool(...)`. La API devuelve `OrmError` antes de emitir `BEGIN TRANSACTION`, hasta que exista soporte para pinnear una conexion fisica del pool durante todo el closure. Usa transacciones publicas sobre contextos creados desde conexion directa (`connect`, `connect_with_config`, `from_connection`).
 
 ## Relacion con migraciones
 

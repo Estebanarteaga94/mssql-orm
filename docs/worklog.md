@@ -2,6 +2,43 @@
 
 ## 2026-04-25
 
+### Sesión: bloqueo de transacciones sobre pool
+
+- Se ejecutó la subtarea `Etapa 15+: Bloquear db.transaction(...) sobre SharedConnection::Pool hasta pinnear una conexión física durante todo el closure transaccional`.
+- Se confirmó que el plan maestro está en `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó la implementación de `SharedConnection`, `DbContext::transaction(...)`, `MssqlPool` y la guía pública de transacciones.
+- Se agregó una clasificación interna de `SharedConnection` para distinguir conexión directa y pool.
+- `DbContext::transaction(...)` ahora valida esa clasificación antes de emitir `BEGIN TRANSACTION`.
+- Cuando el contexto usa `SharedConnection::Pool`, la API devuelve `OrmError` con un mensaje accionable y no inicia una transacción parcial.
+- Se agregaron pruebas unitarias para fijar que la ruta directa sigue aceptando transacciones y que la ruta pooled queda rechazada bajo `pool-bb8`.
+- Se actualizó `docs/transactions.md`, `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La combinación insegura `db.transaction(...)` sobre contextos creados desde pool queda bloqueada explícitamente hasta que exista pinning de conexión física durante todo el closure.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm direct_shared_connections_support_transactions`
+- `cargo test -p mssql-orm --features pool-bb8 pooled_shared_connections_reject_transactions_until_pinned`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo check --workspace --all-features`
+- `cargo test -p mssql-orm context::tests::direct_shared_connections_support_transactions`
+- `cargo test -p mssql-orm --features pool-bb8 context::tests::pooled_shared_connections_reject_transactions_until_pinned`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` completo porque el cambio fue acotado a la guardia de transacciones y se validó con compilación completa más pruebas enfocadas, incluyendo el feature `pool-bb8`.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados`.
+
 ### Sesión: changelog inicial del release
 
 - Se ejecutó la subtarea `Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas`.

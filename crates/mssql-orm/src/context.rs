@@ -29,6 +29,13 @@ enum SharedConnectionInner {
     Pool(MssqlPool),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SharedConnectionKind {
+    Direct,
+    #[cfg(feature = "pool-bb8")]
+    Pool,
+}
+
 pub enum SharedConnectionGuard<'a> {
     Direct(tokio::sync::MutexGuard<'a, MssqlConnection<TokioConnectionStream>>),
     #[cfg(feature = "pool-bb8")]
@@ -61,6 +68,24 @@ impl SharedConnection {
                 Ok(SharedConnectionGuard::Pool(pool.acquire().await?))
             }
         }
+    }
+
+    fn kind(&self) -> SharedConnectionKind {
+        match self.inner.as_ref() {
+            SharedConnectionInner::Direct(_) => SharedConnectionKind::Direct,
+            #[cfg(feature = "pool-bb8")]
+            SharedConnectionInner::Pool(_) => SharedConnectionKind::Pool,
+        }
+    }
+}
+
+fn ensure_transactions_supported(kind: SharedConnectionKind) -> Result<(), OrmError> {
+    match kind {
+        SharedConnectionKind::Direct => Ok(()),
+        #[cfg(feature = "pool-bb8")]
+        SharedConnectionKind::Pool => Err(OrmError::new(
+            "db.transaction is not supported for pooled connections yet; create the DbContext from a direct connection until pooled transactions pin one physical SQL Server connection for the entire closure",
+        )),
     }
 }
 
@@ -112,6 +137,8 @@ pub trait DbContext: Sized {
     {
         let shared_connection = self.shared_connection();
         async move {
+            ensure_transactions_supported(shared_connection.kind())?;
+
             {
                 let mut connection = shared_connection.lock().await?;
                 connection.begin_transaction_scope().await?;
@@ -681,7 +708,9 @@ pub fn connect_shared_from_pool(pool: MssqlPool) -> SharedConnection {
 
 #[cfg(test)]
 mod tests {
-    use super::{DbContext, DbContextEntitySet, DbSet};
+    #[cfg(feature = "pool-bb8")]
+    use super::ensure_transactions_supported;
+    use super::{DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::Tracked;
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
@@ -987,6 +1016,27 @@ mod tests {
         fn concurrency_token(&self) -> Result<Option<SqlValue>, mssql_orm_core::OrmError> {
             Ok(self.version.clone().map(SqlValue::Bytes))
         }
+    }
+
+    #[test]
+    fn direct_shared_connections_support_transactions() {
+        assert_eq!(
+            super::ensure_transactions_supported(SharedConnectionKind::Direct),
+            Ok(())
+        );
+    }
+
+    #[cfg(feature = "pool-bb8")]
+    #[test]
+    fn pooled_shared_connections_reject_transactions_until_pinned() {
+        let error = ensure_transactions_supported(SharedConnectionKind::Pool).unwrap_err();
+
+        assert!(error.message().contains("pooled connections"));
+        assert!(
+            error
+                .message()
+                .contains("pin one physical SQL Server connection")
+        );
     }
 
     #[test]

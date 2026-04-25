@@ -318,7 +318,7 @@ Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodi
 
 - `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional frente a operaciones concurrentes sobre clones del mismo contexto.
-- `db.transaction(...)` sobre `SharedConnection::Pool` no debe considerarse soportado todavía: el closure no pinnea una conexión física del pool y cada operación puede adquirir una conexión distinta. Quedó registrada una tarea para corregir o bloquear esa combinación antes de prometer transacciones públicas sobre `from_pool(...)`.
+- `db.transaction(...)` sobre `SharedConnection::Pool` queda bloqueado explícitamente en la crate pública: antes de emitir `BEGIN TRANSACTION`, `DbContext::transaction(...)` detecta la conexión pooled y devuelve `OrmError`. La corrección futura, si se quiere soportar esta combinación, debe pinnear una conexión física del pool durante todo el closure transaccional.
 - La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing`, `slow_query`, `health_check`, `retry`, `pool` y el wiring de `DbContext` desde pool ya alteran runtime del adaptador Tiberius y de la crate pública.
 - `MssqlSlowQueryOptions` ya reutiliza exactamente la medición de duración de `trace_query(...)`: puede emitir `orm.query.slow` con `threshold_ms` y redacción configurable de parámetros, incluso si `MssqlTracingOptions.enabled` está apagado.
 - `MssqlConnection::health_check()` y `DbContext::health_check()` ya ejecutan `SELECT 1 AS [health_check]` sobre la conexión activa, usando `health.timeout` cuando existe y fallback a `query_timeout` en caso contrario.
@@ -368,5 +368,5 @@ Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodi
 ## Próximo Enfoque Recomendado
 
 1. Ejecutar `Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados`.
-2. Revisar después si conviene corregir o bloquear `db.transaction(...)` sobre `SharedConnection::Pool` antes de seguir con documentación pública adicional.
+2. Continuar después con las tareas pendientes de Etapa 16 para ejemplo/documentación de `#[orm(audit = Audit)]`.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
