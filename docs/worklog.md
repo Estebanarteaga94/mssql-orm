@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: materialización `FromRow` de entidades auditadas
+
+- Se ejecutó la subtarea `Etapa 16: Asegurar que FromRow generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa`.
+- Se amplió `crates/mssql-orm/tests/stage16_entity_policies.rs` con un `TestRow` neutral y dos casos de materialización.
+- Una entidad con `#[orm(audit = Audit)]` ahora queda cubierta al materializarse desde una fila que solo trae columnas propias reales (`id`, `name`).
+- También queda cubierta la fila que trae columnas auditables extra (`created_at`, `updated_by`); el `FromRow` generado las ignora porque no existen campos Rust visibles donde asignarlas.
+- Se documentó en `docs/entity-policies.md` y `docs/context.md` que las columnas auditables son metadata/schema en este MVP y no estado Rust visible.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- El contrato MVP de auditoría queda probado para `FromRow`: las entidades auditadas se materializan correctamente usando solo sus campos propios, con o sin columnas auditables presentes en la fila.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Materializar columnas auditables como campos Rust visibles queda diferido porque requiere rediseñar el shape del entity, símbolos de columna y persistencia/autollenado.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Cubrir #[orm(audit = Audit)] con tests trybuild válidos en la crate pública usando únicamente la API reexportada por mssql-orm::prelude`.
+
 ### Sesión: documentar símbolos de columnas auditables en el MVP
 
 - Se ejecutó la subtarea `Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como Todo::created_at`.

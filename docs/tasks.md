@@ -7,7 +7,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Asegurar que `FromRow` generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa
 - [ ] Etapa 16: Cubrir `#[orm(audit = Audit)]` con tests `trybuild` válidos en la crate pública usando únicamente la API reexportada por `mssql-orm::prelude`
 - [ ] Etapa 16: Cubrir errores `trybuild` para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado
 - [ ] Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable
@@ -40,6 +39,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Asegurar que `FromRow` generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa
 - [x] Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como `Todo::created_at`
 - [x] Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de `audit` + `timestamps`
 - [x] Etapa 7+: Evaluar generación reversible de `down.sql` cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura

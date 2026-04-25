@@ -243,6 +243,14 @@ Esta limitacion es intencional en el MVP: el macro de entidad solo recibe el pat
 
 Mientras tanto, las columnas auditables participan en snapshots, diff y DDL como metadata ordinaria, pero no forman parte del DSL tipado de columnas del entity.
 
+### Materializacion con `FromRow`
+
+`#[derive(Entity)]` sigue generando `FromRow` solo para los campos Rust declarados directamente en la entidad.
+
+Si una entidad declara `#[orm(audit = Audit)]`, las columnas auditables expandidas en `EntityMetadata.columns` no se leen ni se asignan durante `FromRow` porque no existen campos Rust donde materializarlas. Una fila puede incluir columnas como `created_at` o `updated_by`, pero el entity resultante solo contiene sus campos propios.
+
+Tambien es valido materializar una entidad auditada desde una fila que no traiga columnas auditables, siempre que incluya las columnas propias requeridas por el struct. Esto preserva el contrato MVP: auditoria como metadata/schema, no como estado Rust visible.
+
 ## Shape de `AuditFields`
 
 El struct de auditoria del usuario debe ser un struct Rust con campos nombrados y `#[derive(AuditFields)]`.

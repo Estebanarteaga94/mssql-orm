@@ -1,4 +1,5 @@
 use mssql_orm::prelude::*;
+use std::collections::BTreeMap;
 
 #[derive(AuditFields)]
 #[allow(dead_code)]
@@ -13,7 +14,7 @@ struct Audit {
     updated_by: Option<String>,
 }
 
-#[derive(Entity, Debug, Clone)]
+#[derive(Entity, Debug, Clone, PartialEq)]
 #[orm(table = "audited_entities", schema = "audit", audit = Audit)]
 struct AuditedEntity {
     #[orm(primary_key)]
@@ -22,6 +23,16 @@ struct AuditedEntity {
 
     #[orm(length = 120)]
     name: String,
+}
+
+struct TestRow {
+    values: BTreeMap<&'static str, SqlValue>,
+}
+
+impl Row for TestRow {
+    fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError> {
+        Ok(self.values.get(column).cloned())
+    }
 }
 
 #[test]
@@ -48,4 +59,49 @@ fn audit_policy_columns_are_expanded_into_entity_metadata() {
         .expect("audit column should be present");
     assert!(updated_by.nullable);
     assert_eq!(updated_by.max_length, Some(120));
+}
+
+#[test]
+fn audited_entity_from_row_materializes_only_real_entity_fields() {
+    let row = TestRow {
+        values: BTreeMap::from([
+            ("id", SqlValue::I64(7)),
+            ("name", SqlValue::String("sample".to_string())),
+        ]),
+    };
+
+    let entity = AuditedEntity::from_row(&row).expect("audited entity should materialize");
+
+    assert_eq!(
+        entity,
+        AuditedEntity {
+            id: 7,
+            name: "sample".to_string(),
+        }
+    );
+}
+
+#[test]
+fn audited_entity_from_row_ignores_audit_metadata_columns_when_present() {
+    let row = TestRow {
+        values: BTreeMap::from([
+            ("id", SqlValue::I64(9)),
+            ("name", SqlValue::String("with audit columns".to_string())),
+            (
+                "created_at",
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+            ),
+            ("updated_by", SqlValue::String("system".to_string())),
+        ]),
+    };
+
+    let entity = AuditedEntity::from_row(&row).expect("audited entity should materialize");
+
+    assert_eq!(
+        entity,
+        AuditedEntity {
+            id: 9,
+            name: "with audit columns".to_string(),
+        }
+    );
 }
