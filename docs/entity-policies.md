@@ -79,6 +79,8 @@ Las siguientes tareas deben definir como se validan colisiones entre columnas pr
 
 Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable, ademas de `COLUMN_NAMES` para validacion compile-time. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]`, rechaza una segunda declaracion `audit`, valida colisiones entre columnas propias y columnas auditables mediante aserciones constantes y expande esas columnas dentro de `EntityMetadata.columns`.
 
+La surface publica necesaria para el caso valido esta reexportada desde `mssql_orm::prelude::*`. Existe cobertura `trybuild` desde la perspectiva de un consumidor para derivar `AuditFields`, declarar `#[orm(audit = Audit)]`, consultar metadata, acceder al contrato `EntityPolicy` y compilar `FromRow` sin importar rutas internas.
+
 ## Forma Publica Esperada
 
 El concepto publico se expresa en atributos sobre la entidad. Para el MVP de auditoria, la sintaxis canónica soportada sera:

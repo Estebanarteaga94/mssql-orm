@@ -2,6 +2,34 @@
 
 ## 2026-04-25
 
+### Sesión: fixture público válido para `#[orm(audit = Audit)]`
+
+- Se ejecutó la subtarea `Etapa 16: Cubrir #[orm(audit = Audit)] con tests trybuild válidos en la crate pública usando únicamente la API reexportada por mssql-orm::prelude`.
+- Se agregó el fixture `crates/mssql-orm/tests/ui/entity_audit_public_valid.rs`.
+- El fixture usa solo `use mssql_orm::prelude::*` para la API del ORM y cubre `AuditFields`, `Entity`, `EntityPolicy`, `Row`, `SqlValue`, `OrmError` y `FromRow` desde el punto de vista de un consumidor.
+- El fixture valida en compilación una entidad con `#[orm(audit = Audit)]`, metadata expandida, `COLUMN_NAMES` y materialización desde una fila que incluye columnas auditables extra.
+- Se registró el fixture en `crates/mssql-orm/tests/trybuild.rs`.
+- Se actualizó `docs/entity-policies.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- El camino público válido de auditoría ya tiene cobertura `trybuild` explícita usando únicamente la `prelude` de la crate pública.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Cubrir errores trybuild para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado`.
+
 ### Sesión: materialización `FromRow` de entidades auditadas
 
 - Se ejecutó la subtarea `Etapa 16: Asegurar que FromRow generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa`.
