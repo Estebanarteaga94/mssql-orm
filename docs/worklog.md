@@ -2,6 +2,37 @@
 
 ## 2026-04-25
 
+### Sesión: guía pública del query builder
+
+- Se ejecutó la subtarea `Etapa 15: Preparar guía del query builder público (filter, order_by, joins, take, paginate, count)`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta real usada fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se agregó `docs/query-builder.md` como guía pública de la surface actual de `DbSetQuery<T>`.
+- La guía cubre entrada por `DbSet::query()`, filtros tipados, composición lógica, ordenamiento, `limit`/`take`, `PageRequest`, joins explícitos, `all`, `first`, `count` e inspección del AST.
+- Se documentó explícitamente que el query builder público construye AST y no SQL directo, preservando que la compilación pertenece a `mssql-orm-sqlserver` y la ejecución a Tiberius.
+- Se dejó registrado el límite actual de `count()`: conserva `from` y filtros de la entidad base, pero no traslada joins, ordenamiento ni paginación al `CountQuery` interno.
+- Se enlazó la nueva guía desde `README.md` y desde `docs/code-first.md`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La guía pública del query builder queda disponible y alineada con la API real validada por los fixtures `stage6` y `trybuild`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test stage6_public_query_builder`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y se validó con compilación completa del workspace más pruebas enfocadas del query builder público.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar guía de transacciones y límites operativos de db.transaction(...)`.
+
 ### Sesión: snapshot DDL SQL Server para columnas auditables
 
 - Se ejecutó la subtarea `Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como SYSUTCDATETIME(), longitudes nvarchar, nullability y tipos fecha compatibles`.

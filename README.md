@@ -82,6 +82,7 @@ async fn main() -> Result<(), OrmError> {
 
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
+Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
 
 ## Arquitectura
 
@@ -135,6 +136,19 @@ Guía conceptual y práctica para:
 - fijar límites reales de la estrategia `code-first` actual
 
 Documento: [docs/code-first.md](docs/code-first.md)
+
+### Guía del query builder
+
+Guía práctica para:
+
+- construir filtros con predicados tipados
+- ordenar por columnas generadas
+- usar `take`, `limit` y `paginate`
+- declarar joins explícitos
+- ejecutar `all`, `first` y `count`
+- entender límites actuales como aliases, proyección parcial y conteos con joins
+
+Documento: [docs/query-builder.md](docs/query-builder.md)
 
 ### Guía de migraciones
 
