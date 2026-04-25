@@ -1,11 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Diseñar `TimestampFields` como derive dedicado para `timestamps = Timestamps`, reutilizando `EntityPolicy` sin introducir alias implícito de `audit`
-- [ ] Etapa 16+: Implementar parser de `#[orm(timestamps = Timestamps)]` en `#[derive(Entity)]` sin cambiar el comportamiento de entidades que no declaran `timestamps`
-- [ ] Etapa 16+: Implementar `#[derive(TimestampFields)]` con validaciones equivalentes a columnas generadas, limitado a metadata/schema y sin autollenado runtime
-- [ ] Etapa 16+: Validar colisiones entre columnas propias, `audit = Audit` y `timestamps = Timestamps`, con diagnóstico compile-time que nombre la columna duplicada
-- [ ] Etapa 16+: Cubrir `timestamps = Timestamps` en metadata, snapshots, diff, DDL SQL Server, `trybuild`, documentación pública y límites de no materialización/no autollenado
 - [ ] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
 - [ ] Etapa 16+: Evaluar `soft_delete = SoftDelete` como cambio semántico explícito de `delete`, `entity.delete(&db)`, queries por defecto y migraciones, documentando sus riesgos antes de implementarlo
 - [ ] Etapa 16+: Diseñar `soft_delete = SoftDelete` para que `DbSet::delete(...)`, `entity.delete(&db)`, `remove_tracked(...)` y `save_changes()` no emitan `DELETE` físico cuando la entidad tenga esa política; deben emitir `UPDATE` sobre columnas como `deleted_at`/`deleted_by` y respetar `rowversion`/`ConcurrencyConflict`
@@ -20,7 +15,6 @@
 ## En Progreso
 
 ## Completadas
-- [x] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
 - [x] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
 - [x] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [x] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas
@@ -47,7 +41,7 @@
 - [x] Etapa 16: Cubrir `#[orm(audit = Audit)]` con tests `trybuild` válidos en la crate pública usando únicamente la API reexportada por `mssql-orm::prelude`
 - [x] Etapa 16: Asegurar que `FromRow` generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa
 - [x] Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como `Todo::created_at`
-- [x] Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de `audit` + `timestamps`
+- [x] Etapa 16: Validar que una entidad no pueda declarar dos políticas de auditoría que generen la misma columna
 - [x] Etapa 7+: Evaluar generación reversible de `down.sql` cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura
 - [x] Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable
 - [x] Etapa 16: Hacer que `#[orm(audit = Audit)]` expanda las columnas auditables dentro de `EntityMetadata.columns` en orden estable y documentado
@@ -57,7 +51,7 @@
 - [x] Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables
 - [x] Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando `#[orm(audit = Audit)]` sobre alternativas implícitas o runtime
 - [x] Etapa 16: Definir el contrato de metadata para políticas reutilizables en `mssql-orm-core`, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (`ColumnMetadata`) sin crear un segundo pipeline de esquema
-- [x] Etapa 16: Documentar explícitamente el alcance inicial de `Entity Policies`: `audit` y `timestamps` como columnas generadas; `soft_delete`, `tenant` y comportamiento automático quedan diferidos hasta tener contrato estable
+- [x] Etapa 16: Documentar explícitamente el alcance inicial de `Entity Policies`: `audit` como columnas generadas; `soft_delete`, `tenant` y comportamiento automático quedan diferidos hasta tener contrato estable
 - [x] Etapa 16: Diseñar el concepto público de `Entity Policies` para reutilizar columnas y comportamiento transversal sin romper el enfoque code-first actual
 - [x] Etapa 7+: Aplicar contra SQL Server real las migraciones generadas desde `examples/todo-app` mediante `mssql-orm-cli database update --execute` y validar historial idempotente con `DATABASE_URL`
 - [x] Etapa 7+: Preparar validación reproducible de generación automática con `examples/todo-app` usando snapshot exportado, migración inicial y migración incremental no-op

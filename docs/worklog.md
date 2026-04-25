@@ -2,6 +2,32 @@
 
 ## 2026-04-25
 
+### Sesión: retirar policy temporal del roadmap
+
+- Se atendió la decisión de producto de no implementar una policy temporal separada porque `audit = Audit` ya puede cubrir el caso con un struct reducido que solo declare `created_at` y `updated_at`.
+- Se retiró esa línea del backlog vivo en `docs/tasks.md`.
+- Se actualizó `docs/entity-policies.md` para presentar `audit = Audit` como el mecanismo único de columnas generadas del MVP y eliminar la sección de diseño futuro de la policy temporal.
+- Se actualizó `README.md` y `docs/context.md` para no listar esa policy como diseño futuro ni como próximo enfoque recomendado.
+- Se mantuvo el código sin cambios.
+
+### Resultado
+
+- El roadmap vivo queda simplificado: no hay implementación pendiente para una policy temporal separada; el siguiente foco vuelve a `concurrency = RowVersion`, `soft_delete`, `tenant` o `AuditProvider` según prioridad.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque el cambio fue documental y no modificó código ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Evaluar concurrency = RowVersion como política declarativa sobre el soporte existente de #[orm(rowversion)], sin romper ConcurrencyConflict`.
+
 ### Sesión: evaluación de `timestamps = Timestamps`
 
 - Se ejecutó la subtarea `Etapa 16+: Evaluar timestamps = Timestamps como política separada o alias simplificado de audit, evitando solapamientos de columnas con audit`.

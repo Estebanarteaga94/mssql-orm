@@ -8,7 +8,7 @@ Este documento fija el concepto de producto, las fronteras arquitectonicas y el 
 
 Una `Entity Policy` es una pieza reutilizable de modelo `code-first` que una entidad puede declarar para incorporar columnas transversales y, en etapas futuras, comportamiento asociado.
 
-El problema que resuelve es evitar duplicar manualmente los mismos campos estructurales en muchas entidades, por ejemplo columnas de auditoria, timestamps, borrado logico o tenant. La policy no reemplaza al modelo de entidad actual: lo extiende de forma declarativa.
+El problema que resuelve es evitar duplicar manualmente los mismos campos estructurales en muchas entidades, por ejemplo columnas de auditoria, borrado logico o tenant. La policy no reemplaza al modelo de entidad actual: lo extiende de forma declarativa.
 
 Ejemplo objetivo de lectura publica:
 
@@ -172,7 +172,6 @@ Una policy no debe introducir un DSL alternativo ni una capa de configuracion fl
 El concepto general cubre varias preocupaciones transversales, pero no todas pertenecen al MVP:
 
 - `audit = Audit`: columnas como `created_at`, `created_by`, `updated_at`, `updated_by`.
-- `timestamps = Timestamps`: variante reducida para `created_at` y `updated_at`.
 - `concurrency = RowVersion`: forma declarativa futura sobre el soporte actual de `#[orm(rowversion)]`.
 - `soft_delete = SoftDelete`: columnas y semantica de borrado logico.
 - `tenant = TenantScope`: columna y filtros obligatorios de seguridad por tenant.
@@ -183,16 +182,13 @@ La primera policy que debe implementarse es auditoria como generacion de columna
 
 El alcance inicial de Etapa 16 es deliberadamente estrecho: probar que el modelo `code-first` puede reutilizar columnas transversales sin cambiar el pipeline de metadata, snapshots, diff ni DDL.
 
-La unica policy que entra al MVP de implementacion es `audit = Audit`.
-
-`timestamps = Timestamps` queda reconocida como policy de columnas generadas, pero no entra al primer corte de codigo. Debe evaluarse despues de `audit` para decidir si sera una policy separada, un alias reducido o una convencion encima del mismo contrato de metadata.
+La unica policy que entra al MVP de implementacion es `audit = Audit`. Los casos que solo necesitan columnas temporales pueden modelarse con un struct `AuditFields` reducido que declare `created_at` y `updated_at`.
 
 `soft_delete = SoftDelete`, `tenant = TenantScope` y cualquier autollenado runtime quedan fuera del MVP.
 
 | Policy | Estado de Etapa 16 | Alcance permitido |
 | --- | --- | --- |
 | `audit = Audit` | MVP | Generar columnas normales de auditoria dentro de `EntityMetadata.columns`. |
-| `timestamps = Timestamps` | Diferido dentro de Etapa 16 | Disenar despues de `audit`; solo podria aportar columnas si no duplica nombres ni semantica. |
 | `soft_delete = SoftDelete` | Etapa 16+ | Requiere redisenar rutas de borrado, queries por defecto y Active Record. |
 | `tenant = TenantScope` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
 | `AuditProvider` o autollenado | Etapa 16+ | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
@@ -207,7 +203,7 @@ Para el MVP, eso significa:
 - el orden de columnas en `EntityMetadata.columns` es estable: primero columnas propias de la entidad en orden de declaracion Rust, despues columnas aportadas por `AuditFields` en orden de declaracion Rust
 - las columnas generadas participan en snapshots, diff y DDL sin rutas especiales
 - las colisiones con campos propios fallan en compile-time con un mensaje que nombra la columna duplicada
-- el MVP rechaza multiples declaraciones `audit`, dejando preparado el contrato `COLUMN_NAMES` para validar solapamientos cuando exista una segunda policy compilable como `timestamps`
+- el MVP rechaza multiples declaraciones `audit`, evitando sobrescritura silenciosa de columnas generadas
 - las columnas generadas no implican autollenado de valores en operaciones de escritura
 
 Esta definicion permite validar la feature en migraciones antes de introducir comportamiento runtime.
@@ -334,53 +330,6 @@ Reglas de escritura:
 - `updated_at` y `updated_by` pueden quedar `updatable = true`
 
 Estas flags son solo metadata de columna. En el MVP no hacen que `DbSet::insert`, `DbSet::update`, Active Record ni `save_changes` rellenen valores automaticamente.
-
-## Alcance de `timestamps = Timestamps`
-
-`timestamps = Timestamps` queda reservado como policy candidata para aportar solo columnas temporales, normalmente `created_at` y `updated_at`.
-
-No se implementa junto con `audit` en el primer corte porque puede solaparse con nombres y semantica de auditoria. La evaluacion de Etapa 16+ fija la decision para una implementacion futura: `timestamps = Timestamps` debe ser una policy separada de columnas generadas, no un alias simplificado de `audit`.
-
-La razon principal es que `audit = Audit` representa un shape definido por el usuario para auditoria completa, potencialmente con usuario, request, correlation id u otros campos. `timestamps = Timestamps` debe representar solo columnas temporales y no debe arrastrar semantica de `created_by`, `updated_by` ni `AuditProvider`. Modelarlo como alias de `audit` mezclaria dos preocupaciones y haria ambiguo que provider runtime debe actuar sobre cada columna.
-
-La forma preferida queda alineada con el contrato existente de `EntityPolicy`: un derive dedicado futuro, por ejemplo `#[derive(TimestampFields)]`, debe generar `ColumnMetadata` normales con `POLICY_NAME = "timestamps"` y `COLUMN_NAMES`. La entidad consumidora declararia la policy de forma explicita:
-
-```rust
-#[derive(TimestampFields)]
-struct Timestamps {
-    #[orm(default_sql = "SYSUTCDATETIME()")]
-    #[orm(updatable = false)]
-    created_at: chrono::NaiveDateTime,
-
-    #[orm(nullable)]
-    updated_at: Option<chrono::NaiveDateTime>,
-}
-
-#[derive(Entity)]
-#[orm(table = "todos", schema = "todo", timestamps = Timestamps)]
-struct Todo {
-    #[orm(primary_key)]
-    #[orm(identity)]
-    id: i64,
-
-    title: String,
-}
-```
-
-Reglas esperadas para la implementacion futura:
-
-- `timestamps = Timestamps` debe reutilizar el pipeline de columnas generadas: `EntityMetadata.columns`, snapshots, diff y DDL no reciben una ruta especial.
-- El shape de columnas debe vivir en el struct `TimestampFields`; no debe haber nombres globales obligatorios ni configuracion inline como `#[orm(timestamps(created_at, updated_at))]` en el primer corte.
-- Una entidad puede declarar `timestamps` sin `audit`.
-- Si una entidad declara `audit` y `timestamps`, la expansion debe validar colisiones entre columnas propias, columnas auditables y columnas timestamp antes de construir metadata.
-- Si `AuditFields` y `TimestampFields` producen la misma columna, la compilacion debe fallar con un diagnostico accionable que nombre la columna duplicada y recomiende renombrar uno de los campos con `#[orm(column = "...")]`.
-- El orden de expansion debe ser estable: columnas propias de la entidad, luego columnas de `audit`, luego columnas de `timestamps`. Ese orden solo es aceptable si las validaciones de colision se ejecutan antes de exponer la metadata.
-- `timestamps` no debe generar campos Rust visibles ni simbolos como `Todo::created_at` mientras las columnas vengan desde una policy, manteniendo el mismo limite que `audit`.
-- `timestamps` no debe activar autollenado runtime. Defaults SQL como `SYSUTCDATETIME()` siguen siendo metadata de esquema hasta que exista un provider runtime dedicado.
-
-La implementacion futura debe agregar una configuracion separada en `#[derive(Entity)]` (`timestamps: Option<Path>`) en vez de reutilizar el slot `audit`. El fixture actual que rechaza multiples `audit` cubre solo duplicacion de la misma policy; no reemplaza las pruebas necesarias para `audit + timestamps`.
-
-Hasta implementar esas subtareas, `timestamps` no debe aparecer como API compilable.
 
 ## Fuera del MVP
 

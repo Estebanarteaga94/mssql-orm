@@ -172,7 +172,7 @@ Lo que queda deliberadamente diferido:
 
 - autollenado runtime de `created_at`, `created_by`, `updated_at` o `updated_by`
 - campos Rust visibles y símbolos asociados como `Todo::created_at` cuando la columna viene de una policy
-- `timestamps = Timestamps`, `soft_delete = SoftDelete`, `tenant = TenantScope` y `AuditProvider`
+- `soft_delete = SoftDelete`, `tenant = TenantScope` y `AuditProvider`
 
 Documento: [docs/entity-policies.md](docs/entity-policies.md)
 
@@ -264,7 +264,7 @@ Este repo todavía no pretende vender humo. Hay límites explícitos en esta fas
 - SQL Server es el único backend objetivo
 - la API de change tracking sigue siendo experimental
 - `audit = Audit` no autollena valores en runtime ni agrega campos Rust visibles a las entidades
-- `soft_delete`, `tenant`, `timestamps` y `AuditProvider` siguen como diseño futuro
+- `soft_delete`, `tenant` y `AuditProvider` siguen como diseño futuro
 - no se está intentando soportar múltiples motores de base de datos
 - algunas decisiones de UX futura siguen abiertas alrededor de policies con comportamiento runtime
 
