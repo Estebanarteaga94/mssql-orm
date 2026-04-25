@@ -76,19 +76,19 @@ pub mod prelude {
         IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
         SqlServerType, SqlTypeMapping, SqlValue,
     };
-    pub use mssql_orm_macros::{Changeset, DbContext, Entity, Insertable};
+    pub use mssql_orm_macros::{AuditFields, Changeset, DbContext, Entity, Insertable};
     pub use mssql_orm_query::{Join, JoinType};
 }
 
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
-        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityPolicy,
-        EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable, MssqlConnectionConfig,
-        MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
-        MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
-        SqlServerType, SqlTypeMapping, SqlValue, Tracked,
+        ActiveRecord, AuditFields, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet,
+        Entity, EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata,
+        EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable,
+        MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions,
+        MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt,
+        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -125,6 +125,22 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
+    #[derive(AuditFields)]
+    struct PublicAudit {
+        #[orm(default_sql = "SYSUTCDATETIME()")]
+        #[orm(sql_type = "datetime2")]
+        #[orm(updatable = false)]
+        created_at: String,
+
+        #[orm(column = "created_by_user_id")]
+        created_by: Option<i64>,
+
+        #[orm(nullable)]
+        #[orm(length = 120)]
+        updated_by: Option<String>,
+    }
+
     #[test]
     fn exposes_public_prelude() {
         let error = OrmError::new("public-api");
@@ -151,6 +167,25 @@ mod tests {
             PublicPolicy::metadata(),
             EntityPolicyMetadata::new("public_policy", &[])
         );
+    }
+
+    #[test]
+    fn derives_audit_fields_policy_metadata_from_public_prelude() {
+        let metadata = PublicAudit::metadata();
+
+        assert_eq!(metadata.name, "audit");
+        assert_eq!(metadata.columns.len(), 3);
+        assert_eq!(metadata.columns[0].rust_field, "created_at");
+        assert_eq!(metadata.columns[0].column_name, "created_at");
+        assert_eq!(metadata.columns[0].sql_type, SqlServerType::DateTime2);
+        assert_eq!(metadata.columns[0].default_sql, Some("SYSUTCDATETIME()"));
+        assert!(metadata.columns[0].insertable);
+        assert!(!metadata.columns[0].updatable);
+        assert_eq!(metadata.columns[1].column_name, "created_by_user_id");
+        assert!(metadata.columns[1].nullable);
+        assert_eq!(metadata.columns[1].sql_type, SqlServerType::BigInt);
+        assert_eq!(metadata.columns[2].max_length, Some(120));
+        assert!(metadata.columns[2].updatable);
     }
 
     #[test]

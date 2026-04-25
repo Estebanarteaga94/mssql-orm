@@ -39,6 +39,106 @@ pub fn derive_changeset(input: TokenStream) -> TokenStream {
     }
 }
 
+#[proc_macro_derive(AuditFields, attributes(orm))]
+pub fn derive_audit_fields(input: TokenStream) -> TokenStream {
+    match derive_audit_fields_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let fields = match input.data {
+        Data::Struct(data) => match data.fields {
+            Fields::Named(fields) => fields.named,
+            _ => {
+                return Err(Error::new_spanned(
+                    ident,
+                    "AuditFields solo soporta structs con campos nombrados",
+                ));
+            }
+        },
+        _ => {
+            return Err(Error::new_spanned(
+                ident,
+                "AuditFields solo soporta structs",
+            ));
+        }
+    };
+
+    let mut columns = Vec::new();
+
+    for field in fields.iter() {
+        let field_ident = field
+            .ident
+            .as_ref()
+            .ok_or_else(|| Error::new_spanned(field, "AuditFields requiere campos nombrados"))?;
+        let config = parse_audit_field_config(field)?;
+        let type_info = analyze_type(&field.ty)?;
+        let field_ty = &field.ty;
+        let rust_field = LitStr::new(&field_ident.to_string(), field_ident.span());
+        let column_name = config
+            .column
+            .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+        let renamed_from = option_lit_str(config.renamed_from);
+        let sql_type = config.sql_type.map_or_else(
+            || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::SQL_SERVER_TYPE },
+            |sql_type| sql_type_from_string(&sql_type),
+        );
+        let nullable = config.nullable || type_info.nullable;
+        let default_sql = option_lit_str(config.default_sql);
+        let max_length = config.length.map_or_else(
+            || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_MAX_LENGTH },
+            |length| quote! { Some(#length) },
+        );
+        let precision = config.precision.map_or_else(
+            || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_PRECISION },
+            |precision| quote! { Some(#precision) },
+        );
+        let scale = config.scale.map_or_else(
+            || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_SCALE },
+            |scale| quote! { Some(#scale) },
+        );
+        let insertable = config.insertable.unwrap_or(true);
+        let updatable = config.updatable.unwrap_or(true);
+
+        columns.push(quote! {
+            ::mssql_orm::core::ColumnMetadata {
+                rust_field: #rust_field,
+                column_name: #column_name,
+                renamed_from: #renamed_from,
+                sql_type: #sql_type,
+                nullable: #nullable,
+                primary_key: false,
+                identity: None,
+                default_sql: #default_sql,
+                computed_sql: None,
+                rowversion: false,
+                insertable: #insertable,
+                updatable: #updatable,
+                max_length: #max_length,
+                precision: #precision,
+                scale: #scale,
+            }
+        });
+    }
+
+    Ok(quote! {
+        impl ::mssql_orm::core::EntityPolicy for #ident {
+            const POLICY_NAME: &'static str = "audit";
+
+            fn columns() -> &'static [::mssql_orm::core::ColumnMetadata] {
+                const COLUMNS: &[::mssql_orm::core::ColumnMetadata] = &[
+                    #(#columns),*
+                ];
+
+                COLUMNS
+            }
+        }
+    })
+}
+
 fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let ident = input.ident;
     let EntityConfig {
@@ -1106,6 +1206,46 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
     Ok(config)
 }
 
+fn parse_audit_field_config(field: &Field) -> Result<AuditFieldConfig> {
+    let mut config = AuditFieldConfig::default();
+
+    for attr in &field.attrs {
+        if !attr.path().is_ident("orm") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column") {
+                config.column = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("length") {
+                config.length = Some(parse_u32_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("nullable") {
+                config.nullable = true;
+            } else if meta.path.is_ident("default_sql") {
+                config.default_sql = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("renamed_from") {
+                config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("sql_type") {
+                config.sql_type = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("precision") {
+                config.precision = Some(parse_u8_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("scale") {
+                config.scale = Some(parse_u8_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("insertable") {
+                config.insertable = Some(parse_bool_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("updatable") {
+                config.updatable = Some(parse_bool_expr(meta.value()?.parse()?)?);
+            } else {
+                return Err(meta.error("atributo orm no soportado en campos de AuditFields"));
+            }
+
+            Ok(())
+        })?;
+    }
+
+    Ok(config)
+}
+
 fn parse_lit_str(expr: Expr) -> Result<LitStr> {
     match expr {
         Expr::Lit(ExprLit {
@@ -1113,6 +1253,16 @@ fn parse_lit_str(expr: Expr) -> Result<LitStr> {
             ..
         }) => Ok(value),
         other => Err(Error::new_spanned(other, "se esperaba un string literal")),
+    }
+}
+
+fn parse_bool_expr(expr: Expr) -> Result<bool> {
+    match expr {
+        Expr::Lit(ExprLit {
+            lit: Lit::Bool(value),
+            ..
+        }) => Ok(value.value),
+        other => Err(Error::new_spanned(other, "se esperaba un boolean literal")),
     }
 }
 
@@ -1589,6 +1739,20 @@ struct PersistenceModelConfig {
 #[derive(Default)]
 struct PersistenceFieldConfig {
     column: Option<LitStr>,
+}
+
+#[derive(Default)]
+struct AuditFieldConfig {
+    column: Option<LitStr>,
+    renamed_from: Option<LitStr>,
+    nullable: bool,
+    length: Option<u32>,
+    default_sql: Option<LitStr>,
+    sql_type: Option<LitStr>,
+    precision: Option<u8>,
+    scale: Option<u8>,
+    insertable: Option<bool>,
+    updatable: Option<bool>,
 }
 
 #[derive(Default)]

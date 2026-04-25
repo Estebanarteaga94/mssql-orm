@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: implementar `#[derive(AuditFields)]`
+
+- Se ejecutó la subtarea `Etapa 16: Implementar #[derive(AuditFields)] o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable`.
+- Se agregó `#[proc_macro_derive(AuditFields, attributes(orm))]` en `mssql-orm-macros`.
+- El derive implementa `mssql_orm::core::EntityPolicy` para el struct de auditoría, con `POLICY_NAME = "audit"` y `columns() -> &'static [ColumnMetadata]`.
+- Cada campo nombrado se convierte en `ColumnMetadata` normal, usando `rust_field`, `column_name`, `renamed_from`, `sql_type`, nullability, defaults, `max_length`, `precision`, `scale`, `insertable` y `updatable`.
+- Para el tipo SQL y defaults de longitud/precisión/escala, el derive usa las constantes de `SqlTypeMapping`, permitiendo que tipos custom con mapping propio puedan participar.
+- Se agregó parsing inicial de atributos permitidos para campos auditables: `column`, `length`, `nullable`, `default_sql`, `renamed_from`, `sql_type`, `precision`, `scale`, `insertable` y `updatable`.
+- La crate pública `mssql-orm` reexporta `AuditFields` desde `prelude`.
+- Se agregó cobertura en la crate pública para validar que `#[derive(AuditFields)]` produce metadata observable desde `mssql_orm::prelude::*`.
+- Se actualizó `docs/entity-policies.md` y `docs/context.md` con el estado real.
+
+### Resultado
+
+- Ya existe el derive base `AuditFields` y puede convertir un struct de auditoría definido por el usuario en metadata reusable como `EntityPolicy`.
+- La integración con entidades mediante `#[orm(audit = Audit)]` sigue pendiente y queda para las siguientes tareas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-macros`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Las validaciones compile-time exhaustivas de `AuditFields` quedan en la subtarea siguiente del backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar validaciones compile-time para AuditFields: solo structs con campos nombrados, tipos con SqlTypeMapping, atributos #[orm(...)] permitidos, nombres de columnas no vacíos y errores claros en casos inválidos`.
+
 ### Sesión: definir shape de struct de auditoría
 
 - Se ejecutó la subtarea `Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables`.
