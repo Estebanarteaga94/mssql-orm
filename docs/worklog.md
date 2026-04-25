@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: validación local mínima de cierre de Etapa 16
+
+- Se ejecutó la subtarea `Etapa 16: Ejecutar validación local mínima antes de cerrar: cargo fmt --all --check, cargo check --workspace, tests trybuild afectados y pruebas unitarias de core, macros, migrate y sqlserver relacionadas`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md` y el plan maestro.
+- Se movió la tarea a `En Progreso` antes de ejecutar validaciones y a `Completadas` después de que todas pasaran.
+- Se ejecutó el set de validación local mínima definido para cerrar Etapa 16: formato, check de workspace, `trybuild` afectado, pruebas de metadata/persistencia de policies, pruebas de migraciones auditadas y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver`.
+- Se actualizó `docs/context.md` para reflejar que Etapa 16 queda cerrada y que `AuditProvider`, `timestamps`, `concurrency = RowVersion`, `soft_delete` y `tenant` permanecen como backlog `Etapa 16+`.
+
+### Resultado
+
+- Etapa 16 queda cerrada localmente: el MVP de `Entity Policies` para auditoría de metadata/schema está documentado, cubierto y validado.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm-macros`
+- `cargo test -p mssql-orm-migrate`
+- `cargo test -p mssql-orm-sqlserver`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` completo porque la tarea pedía validación local mínima enfocada y ya se cubrieron los tests afectados por Etapa 16 junto con las crates relacionadas.
+
+### Próximo paso recomendado
+
+- Si se continúa con `Etapa 16+`, empezar por diseñar `AuditProvider` para autollenado futuro sin modificar todavía rutas runtime de persistencia.
+
 ### Sesión: cierre de contexto de Etapa 16
 
 - Se ejecutó la subtarea `Etapa 16: Actualizar docs/context.md al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública`.
