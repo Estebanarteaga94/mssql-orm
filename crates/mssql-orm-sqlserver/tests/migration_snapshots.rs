@@ -1,5 +1,5 @@
 use insta::assert_snapshot;
-use mssql_orm_core::ReferentialAction;
+use mssql_orm_core::{ReferentialAction, SqlServerType};
 use mssql_orm_migrate::{
     AddColumn, AddForeignKey, ColumnSnapshot, DropColumn, DropForeignKey, ForeignKeySnapshot,
     MigrationOperation, RenameColumn, RenameTable,
@@ -93,6 +93,92 @@ fn snapshots_computed_column_migration_sql() {
     let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
 
     assert_snapshot!("computed_column_migration_sql", render_statements(&sql));
+}
+
+#[test]
+fn snapshots_audit_column_migration_sql() {
+    let operations = vec![
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "audited_entities",
+            ColumnSnapshot::new(
+                "created_at",
+                SqlServerType::DateTime2,
+                false,
+                false,
+                None,
+                Some("SYSUTCDATETIME()".to_string()),
+                None,
+                false,
+                false,
+                false,
+                None,
+                None,
+                None,
+            ),
+        )),
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "audited_entities",
+            ColumnSnapshot::new(
+                "created_by_user_id",
+                SqlServerType::BigInt,
+                true,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                None,
+                None,
+                None,
+            ),
+        )),
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "audited_entities",
+            ColumnSnapshot::new(
+                "updated_at",
+                SqlServerType::DateTime2,
+                true,
+                false,
+                None,
+                Some("SYSUTCDATETIME()".to_string()),
+                None,
+                false,
+                false,
+                true,
+                None,
+                None,
+                None,
+            ),
+        )),
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "audited_entities",
+            ColumnSnapshot::new(
+                "updated_by",
+                SqlServerType::NVarChar,
+                true,
+                false,
+                None,
+                None,
+                None,
+                false,
+                true,
+                true,
+                Some(120),
+                None,
+                None,
+            ),
+        )),
+    ];
+
+    let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+    assert_snapshot!("audit_column_migration_sql", render_statements(&sql));
 }
 
 #[test]

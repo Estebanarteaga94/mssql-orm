@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: snapshot DDL SQL Server para columnas auditables
+
+- Se ejecutó la subtarea `Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como SYSUTCDATETIME(), longitudes nvarchar, nullability y tipos fecha compatibles`.
+- Se agregó en `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` el snapshot test `snapshots_audit_column_migration_sql`.
+- La prueba compila operaciones `AddColumn` para `created_at`, `created_by_user_id`, `updated_at` y `updated_by` usando `SqlServerCompiler::compile_migration_operations(...)`.
+- Se agregó el snapshot `crates/mssql-orm-sqlserver/tests/snapshots/migration_snapshots__audit_column_migration_sql.snap`.
+- El snapshot fija el DDL SQL Server esperado: `datetime2 NOT NULL DEFAULT SYSUTCDATETIME()`, `bigint NULL`, `datetime2 NULL DEFAULT SYSUTCDATETIME()` y `nvarchar(120) NULL`.
+- No se modificó la lógica productiva del compilador; la tarea cerró con cobertura observable de la salida DDL existente.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- El DDL SQL Server para columnas auditables queda validado por snapshot en la crate dueña de compilación SQL Server.
+
+### Validación
+
+- `cargo fmt --all`
+- `INSTA_UPDATE=always cargo test -p mssql-orm-sqlserver --test migration_snapshots snapshots_audit_column_migration_sql`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Actualizar el ejemplo todo-app o agregar fixture dedicado para mostrar al menos una entidad con #[orm(audit = Audit)] sin degradar el smoke existente`.
+
 ### Sesión: bloqueo destructivo al quitar auditoría
 
 - Se ejecutó la subtarea `Etapa 16: Agregar pruebas de diff donde quitar audit = Audit sea detectado como destructivo por la CLI cuando produzca DropColumn`.
