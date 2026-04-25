@@ -1,0 +1,5 @@
+error: Entity solo soporta una policy soft_delete; multiples policies que generen columnas solapadas deben rechazarse explicitamente
+  --> tests/ui/entity_duplicate_soft_delete_policy.rs:24:7
+   |
+24 | #[orm(soft_delete = SoftDeleteB)]
+   |       ^^^^^^^^^^^

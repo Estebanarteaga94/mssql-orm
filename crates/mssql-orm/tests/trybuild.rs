@@ -18,6 +18,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/audit_fields_valid.rs");
     tests.pass("tests/ui/entity_audit_attr_valid.rs");
     tests.pass("tests/ui/entity_audit_public_valid.rs");
+    tests.pass("tests/ui/entity_soft_delete_attr_valid.rs");
     tests.compile_fail("tests/ui/entity_missing_primary_key.rs");
     tests.compile_fail("tests/ui/entity_identity_invalid_type.rs");
     tests.compile_fail("tests/ui/entity_foreign_key_empty_segment.rs");
@@ -38,4 +39,7 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/entity_audit_column_collision.rs");
     tests.compile_fail("tests/ui/entity_duplicate_audit_policy.rs");
     tests.compile_fail("tests/ui/entity_audit_column_symbol_unavailable.rs");
+    tests.compile_fail("tests/ui/entity_soft_delete_missing_type.rs");
+    tests.compile_fail("tests/ui/entity_duplicate_soft_delete_policy.rs");
+    tests.compile_fail("tests/ui/entity_soft_delete_column_collision.rs");
 }

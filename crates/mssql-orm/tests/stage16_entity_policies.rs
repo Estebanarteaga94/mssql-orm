@@ -61,6 +61,69 @@ struct ArchivedEntity {
     id: i64,
 }
 
+struct SoftDeletePolicy;
+
+impl EntityPolicy for SoftDeletePolicy {
+    const POLICY_NAME: &'static str = "soft_delete";
+    const COLUMN_NAMES: &'static [&'static str] = &["deleted_at", "deleted_by"];
+
+    fn columns() -> &'static [ColumnMetadata] {
+        const COLUMNS: &[ColumnMetadata] = &[
+            ColumnMetadata {
+                rust_field: "deleted_at",
+                column_name: "deleted_at",
+                renamed_from: None,
+                sql_type: SqlServerType::DateTime2,
+                nullable: true,
+                primary_key: false,
+                identity: None,
+                default_sql: None,
+                computed_sql: None,
+                rowversion: false,
+                insertable: false,
+                updatable: true,
+                max_length: None,
+                precision: None,
+                scale: None,
+            },
+            ColumnMetadata {
+                rust_field: "deleted_by",
+                column_name: "deleted_by",
+                renamed_from: None,
+                sql_type: SqlServerType::NVarChar,
+                nullable: true,
+                primary_key: false,
+                identity: None,
+                default_sql: None,
+                computed_sql: None,
+                rowversion: false,
+                insertable: false,
+                updatable: true,
+                max_length: Some(120),
+                precision: None,
+                scale: None,
+            },
+        ];
+
+        COLUMNS
+    }
+}
+
+#[derive(Entity, Debug, Clone, PartialEq)]
+#[orm(
+    table = "soft_deleted_entities",
+    schema = "audit",
+    soft_delete = SoftDeletePolicy
+)]
+struct SoftDeletedEntity {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(length = 120)]
+    name: String,
+}
+
 struct TestRow {
     values: BTreeMap<&'static str, SqlValue>,
 }
@@ -161,6 +224,39 @@ fn audit_policy_columns_are_expanded_into_entity_metadata() {
         .expect("audit column should be present");
     assert!(updated_by.nullable);
     assert_eq!(updated_by.max_length, Some(120));
+}
+
+#[test]
+fn soft_delete_policy_columns_are_expanded_into_entity_metadata() {
+    let metadata = SoftDeletedEntity::metadata();
+
+    assert_eq!(metadata.columns.len(), 4);
+    assert_eq!(metadata.columns[0].column_name, "id");
+    assert_eq!(metadata.columns[1].column_name, "name");
+    assert_eq!(metadata.columns[2].column_name, "deleted_at");
+    assert_eq!(metadata.columns[3].column_name, "deleted_by");
+
+    let deleted_at = metadata
+        .column("deleted_at")
+        .expect("soft delete column should be present");
+    assert_eq!(deleted_at.rust_field, "deleted_at");
+    assert_eq!(deleted_at.sql_type, SqlServerType::DateTime2);
+    assert!(deleted_at.nullable);
+    assert!(!deleted_at.insertable);
+    assert!(deleted_at.updatable);
+
+    let deleted_by = metadata
+        .column("deleted_by")
+        .expect("soft delete column should be present");
+    assert_eq!(deleted_by.rust_field, "deleted_by");
+    assert_eq!(deleted_by.max_length, Some(120));
+    assert!(deleted_by.nullable);
+
+    let soft_delete = SoftDeletedEntity::soft_delete_policy().expect("soft delete policy");
+    assert_eq!(soft_delete.name, "soft_delete");
+    assert_eq!(soft_delete.columns.len(), 2);
+    assert_eq!(soft_delete.columns[0].column_name, "deleted_at");
+    assert_eq!(soft_delete.columns[1].column_name, "deleted_by");
 }
 
 #[test]

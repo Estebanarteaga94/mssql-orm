@@ -1,0 +1,5 @@
+error[E0412]: cannot find type `MissingSoftDelete` in this scope
+ --> tests/ui/entity_soft_delete_missing_type.rs:4:72
+  |
+4 | #[orm(table = "soft_deleted_entities", schema = "audit", soft_delete = MissingSoftDelete)]
+  |                                                                        ^^^^^^^^^^^^^^^^^ not found in this scope

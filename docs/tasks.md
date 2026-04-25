@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Extender `#[derive(Entity)]` para aceptar `#[orm(soft_delete = SoftDelete)]`, generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time
 - [ ] Etapa 16+: Implementar el contrato runtime de `soft_delete` en `mssql-orm` para producir y validar `Vec<ColumnValue>` de borrado lógico sin duplicar la lógica de `update`
 - [ ] Etapa 16+: Hacer que `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` usen `UpdateQuery` cuando la entidad tenga `soft_delete`
 - [ ] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
@@ -17,6 +16,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Extender `#[derive(Entity)]` para aceptar `#[orm(soft_delete = SoftDelete)]`, generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time
 - [x] Operativo: Descomponer la implementación de `soft_delete` en subtareas ejecutables antes de intentar cobertura integral
 - [x] Etapa 16+: Definir cómo `soft_delete` obtiene valores runtime para columnas como `deleted_at`, `deleted_by` o `is_deleted` sin acoplar `core` a contexto por request ni duplicar la lógica actual de `update`
 - [x] Etapa 16+: Definir cómo consultar entidades con `soft_delete`: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran `soft_delete`

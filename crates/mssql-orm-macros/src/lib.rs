@@ -158,6 +158,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         renamed_from: entity_renamed_from,
         indexes: entity_indexes,
         audit: entity_audit,
+        soft_delete: entity_soft_delete,
     } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
@@ -534,8 +535,90 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let soft_delete_collision_checks = entity_soft_delete
+        .as_ref()
+        .map(|soft_delete| {
+            entity_column_names
+                .iter()
+                .map(|column_name| {
+                    quote! {
+                        const _: () = assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                <#soft_delete as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES,
+                                #column_name,
+                            ),
+                            concat!(
+                                "soft_delete policy column `",
+                                #column_name,
+                                "` collides with an entity column; rename the entity field with #[orm(column = \"...\")] or the soft delete policy field with #[orm(column = \"...\")]",
+                            ),
+                        );
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let audit_soft_delete_collision_checks = match (&entity_audit, &entity_soft_delete) {
+        (Some(audit), Some(soft_delete)) => {
+            quote! {
+                const _: () = {
+                    let soft_delete_columns =
+                        <#soft_delete as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let audit_columns = <#audit as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let mut index = 0;
+                    while index < soft_delete_columns.len() {
+                        assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                audit_columns,
+                                soft_delete_columns[index],
+                            ),
+                            "soft_delete policy columns collide with audit policy columns; rename one of the generated columns explicitly",
+                        );
+                        index += 1;
+                    }
+                };
+            }
+        }
+        _ => quote! {},
+    };
 
-    let (metadata_static, metadata_expr) = if let Some(audit) = entity_audit {
+    let has_generated_policies = entity_audit.is_some() || entity_soft_delete.is_some();
+    let audit_columns_extend = entity_audit.as_ref().map(|audit| {
+        quote! {
+            columns.extend_from_slice(
+                <#audit as ::mssql_orm::core::EntityPolicy>::columns()
+            );
+        }
+    });
+    let soft_delete_columns_extend = entity_soft_delete.as_ref().map(|soft_delete| {
+        quote! {
+            columns.extend_from_slice(
+                <#soft_delete as ::mssql_orm::core::EntityPolicy>::columns()
+            );
+        }
+    });
+    let soft_delete_contract_impl = entity_soft_delete.as_ref().map_or_else(
+        || {
+            quote! {
+                impl ::mssql_orm::SoftDeleteEntity for #ident {
+                    fn soft_delete_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        None
+                    }
+                }
+            }
+        },
+        |soft_delete| {
+            quote! {
+                impl ::mssql_orm::SoftDeleteEntity for #ident {
+                    fn soft_delete_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        Some(<#soft_delete as ::mssql_orm::core::EntityPolicy>::metadata())
+                    }
+                }
+            }
+        },
+    );
+
+    let (metadata_static, metadata_expr) = if has_generated_policies {
         (
             quote! {
                 static #metadata_ident: ::std::sync::OnceLock<::mssql_orm::core::EntityMetadata> =
@@ -545,9 +628,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #metadata_ident.get_or_init(|| {
                     let mut columns = ::std::vec::Vec::new();
                     columns.extend_from_slice(&[#(#columns),*]);
-                    columns.extend_from_slice(
-                        <#audit as ::mssql_orm::core::EntityPolicy>::columns()
-                    );
+                    #audit_columns_extend
+                    #soft_delete_columns_extend
                     let columns: &'static [::mssql_orm::core::ColumnMetadata] =
                         ::std::boxed::Box::leak(columns.into_boxed_slice());
 
@@ -593,6 +675,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         #(#audit_collision_checks)*
+        #(#soft_delete_collision_checks)*
+        #audit_soft_delete_collision_checks
 
         #metadata_static
 
@@ -652,6 +736,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #(#sync_fields)*
             }
         }
+
+        #soft_delete_contract_impl
     })
 }
 
@@ -1150,6 +1236,13 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                     ));
                 }
                 config.audit = Some(meta.value()?.parse()?);
+            } else if meta.path.is_ident("soft_delete") {
+                if config.soft_delete.is_some() {
+                    return Err(meta.error(
+                        "Entity solo soporta una policy soft_delete; multiples policies que generen columnas solapadas deben rechazarse explicitamente",
+                    ));
+                }
+                config.soft_delete = Some(meta.value()?.parse()?);
             } else if meta.path.is_ident("index") {
                 config.indexes.push(parse_entity_index_config(meta)?);
             } else {
@@ -1821,6 +1914,7 @@ struct EntityConfig {
     renamed_from: Option<LitStr>,
     indexes: Vec<EntityIndexConfig>,
     audit: Option<Path>,
+    soft_delete: Option<Path>,
 }
 
 #[derive(Default)]

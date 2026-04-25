@@ -5422,3 +5422,26 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Extender #[derive(Entity)] para aceptar #[orm(soft_delete = SoftDelete)], generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time`.
+
+### Sesión: soporte base de macros para `soft_delete`
+
+- Se ejecutó la subtarea `Etapa 16+: Extender #[derive(Entity)] para aceptar #[orm(soft_delete = SoftDelete)], generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time`.
+- Se extendió `parse_entity_config(...)` en `crates/mssql-orm-macros/src/lib.rs` para aceptar `soft_delete = Tipo`, rechazar una segunda declaración `soft_delete` y seguir preservando errores explícitos en compile-time.
+- `#[derive(Entity)]` ahora expande columnas de `soft_delete` dentro de `EntityMetadata.columns` igual que otras columnas ordinarias, preservando el pipeline único de metadata/snapshot/diff/DDL.
+- El macro ahora valida colisiones entre columnas propias de la entidad y columnas de `soft_delete`, y también entre columnas de `audit` y `soft_delete`, fallando en compile-time con mensajes accionables.
+- La crate pública `mssql-orm` ahora expone el trait `SoftDeleteEntity`, y el derive `Entity` lo implementa para toda entidad derivada: devuelve `Some(EntityPolicyMetadata)` cuando la entidad declara `soft_delete` y `None` cuando no.
+- Se añadieron pruebas unitarias y `trybuild` nuevas en `crates/mssql-orm/tests/` para cubrir el camino válido, tipo inexistente, duplicación de policy y colisión de columna.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo fmt --all --check`, `cargo check --workspace`, `cargo test -p mssql-orm soft_delete_policy_columns_are_expanded_into_entity_metadata -- --nocapture` y `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`.
+- No se ejecutó `cargo test --workspace` completo ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión quedó acotada al soporte de macro/metadata y la cobertura dirigida ya valida la superficie tocada.
+
+### Resultado
+
+- `soft_delete` ya tiene soporte parcial real en la etapa de macros: la sintaxis compila, las columnas entran a metadata y el runtime futuro ya dispone de un contrato auxiliar para detectar la policy de la entidad.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Implementar el contrato runtime de soft_delete en mssql-orm para producir y validar Vec<ColumnValue> de borrado lógico sin duplicar la lógica de update`.

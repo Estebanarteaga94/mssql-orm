@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: soft_delete policy column `deleted_at` collides with an entity column; rename the entity field with #[orm(column = "...")] or the soft delete policy field with #[orm(column = "...")]
+  --> tests/ui/entity_soft_delete_column_collision.rs:14:10
+   |
+14 | #[derive(Entity, Debug, Clone)]
+   |          ^^^^^^ evaluation of `_` failed here

@@ -47,6 +47,10 @@ pub trait MigrationModelSource {
     fn entity_metadata() -> &'static [&'static EntityMetadata];
 }
 
+pub trait SoftDeleteEntity: core::Entity {
+    fn soft_delete_policy() -> Option<core::EntityPolicyMetadata>;
+}
+
 pub fn model_snapshot_from_source<S: MigrationModelSource>() -> migrate::ModelSnapshot {
     migrate::ModelSnapshot::from_entities(S::entity_metadata())
 }
@@ -65,7 +69,7 @@ pub mod prelude {
         MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
         MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
         MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
-        PredicateCompositionExt, Tracked, model_snapshot_from_source,
+        PredicateCompositionExt, SoftDeleteEntity, Tracked, model_snapshot_from_source,
         model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]
@@ -88,7 +92,7 @@ mod tests {
         EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable,
         MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions,
         MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt,
-        PrimaryKeyMetadata, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
+        PrimaryKeyMetadata, SoftDeleteEntity, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -167,6 +171,28 @@ mod tests {
         assert_eq!(
             PublicPolicy::metadata(),
             EntityPolicyMetadata::new("public_policy", &[])
+        );
+    }
+
+    #[test]
+    fn exposes_soft_delete_contract_in_prelude() {
+        struct PublicSoftDeleteEntity;
+
+        impl Entity for PublicSoftDeleteEntity {
+            fn metadata() -> &'static EntityMetadata {
+                &PUBLIC_ENTITY_METADATA
+            }
+        }
+
+        impl SoftDeleteEntity for PublicSoftDeleteEntity {
+            fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+                Some(EntityPolicyMetadata::new("soft_delete", &[]))
+            }
+        }
+
+        assert_eq!(
+            PublicSoftDeleteEntity::soft_delete_policy(),
+            Some(EntityPolicyMetadata::new("soft_delete", &[]))
         );
     }
 
