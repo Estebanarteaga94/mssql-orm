@@ -233,6 +233,16 @@ Reglas iniciales:
 - defaults SQL como `SYSUTCDATETIME()` son metadata de esquema, no valores calculados por Rust
 - en este corte, las columnas auditables son columnas de metadata/schema; no generan campos Rust visibles dentro de la entidad ni simbolos asociados como `Todo::created_at`
 
+### Simbolos de columna en el MVP
+
+`#[derive(Entity)]` genera simbolos asociados `EntityColumn`, como `Todo::title`, solo para campos Rust declarados directamente en la entidad.
+
+Las columnas aportadas por `#[orm(audit = Audit)]` no generan simbolos asociados en esta etapa. Aunque `created_at` aparezca en `EntityMetadata.columns`, `Todo::created_at` no existe si `created_at` viene del struct `AuditFields`.
+
+Esta limitacion es intencional en el MVP: el macro de entidad solo recibe el path `audit = Audit` y no debe intentar duplicar o inferir los campos de otro derive para crear API de query. Exponer esos simbolos requiere un diseno posterior que preserve coherencia con `FromRow`, campos Rust visibles, autollenado y ergonomia del query builder.
+
+Mientras tanto, las columnas auditables participan en snapshots, diff y DDL como metadata ordinaria, pero no forman parte del DSL tipado de columnas del entity.
+
 ## Shape de `AuditFields`
 
 El struct de auditoria del usuario debe ser un struct Rust con campos nombrados y `#[derive(AuditFields)]`.

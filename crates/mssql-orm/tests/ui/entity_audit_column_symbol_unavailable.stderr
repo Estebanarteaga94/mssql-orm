@@ -1,0 +1,8 @@
+error[E0599]: no function or associated item named `created_at` found for struct `AuditedEntity` in the current scope
+  --> tests/ui/entity_audit_column_symbol_unavailable.rs:18:28
+   |
+12 | struct AuditedEntity {
+   | -------------------- function or associated item `created_at` not found for this struct
+...
+18 |     let _ = AuditedEntity::created_at;
+   |                            ^^^^^^^^^^ function or associated item not found in `AuditedEntity`

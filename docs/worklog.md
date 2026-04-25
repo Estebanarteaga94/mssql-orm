@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: documentar símbolos de columnas auditables en el MVP
+
+- Se ejecutó la subtarea `Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como Todo::created_at`.
+- Se revisó `#[derive(Entity)]` y se confirmó que los símbolos `EntityColumn` se generan solo desde campos Rust declarados directamente en la entidad.
+- Se decidió no generar `Todo::created_at` para columnas aportadas por `#[orm(audit = Audit)]` en el MVP, porque el macro de entidad solo recibe el path de la policy y no debe inferir campos de otro derive para crear API de query.
+- Se agregó el fixture `trybuild` inválido `entity_audit_column_symbol_unavailable.rs`, que fija que `AuditedEntity::created_at` no existe cuando `created_at` viene de `AuditFields`.
+- Se documentó la decisión en `docs/entity-policies.md` y `docs/context.md`.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- El límite del MVP quedó explícito y cubierto: las columnas auditables participan en metadata/schema, snapshots, diff y DDL, pero no en el DSL tipado de columnas asociadas del entity.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Generar símbolos asociados para columnas de policies queda diferido hasta diseñar cómo se relaciona con campos Rust visibles, `FromRow`, query builder y autollenado.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Asegurar que FromRow generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa`.
+
 ### Sesión: rechazar policies audit duplicadas
 
 - Se ejecutó la subtarea `Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de audit + timestamps`.
