@@ -1,7 +1,7 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
+- [ ] Etapa 15+: Corregir o bloquear `db.transaction(...)` sobre `SharedConnection::Pool` hasta pinnear una conexión física durante todo el closure transaccional
 - [ ] Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
@@ -30,6 +30,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
 - [x] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
 - [x] Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como `SYSUTCDATETIME()`, longitudes `nvarchar`, nullability y tipos fecha compatibles
 - [x] Etapa 16: Agregar pruebas de diff donde quitar `audit = Audit` sea detectado como destructivo por la CLI cuando produzca `DropColumn`

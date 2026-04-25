@@ -2,6 +2,39 @@
 
 ## 2026-04-25
 
+### Sesión: guía pública de transacciones runtime
+
+- Se ejecutó la subtarea `Etapa 15: Preparar guía de transacciones y límites operativos de db.transaction(...)`.
+- Se revisó la implementación real en `crates/mssql-orm/src/context.rs`, el derive `DbContext`, el adaptador transaccional de `mssql-orm-tiberius` y las pruebas públicas de commit/rollback.
+- Se agregó `docs/transactions.md` como guía pública de `db.transaction(|tx| async move { ... })`.
+- La guía documenta el contrato actual: `BEGIN TRANSACTION`, commit si el closure devuelve `Ok`, rollback si devuelve `Err`, uso obligatorio del contexto `tx`, operaciones soportadas, errores, timeouts, tracing y retry deshabilitado dentro de transacciones.
+- Se dejó explícito que no hay savepoints, transacciones anidadas, rollback en `Drop`, rollback automático ante panic ni transacciones distribuidas.
+- Se detectó y documentó un límite importante con `pool-bb8`: `db.transaction(...)` no pinnea todavía una conexión física del pool durante todo el closure, por lo que no debe prometerse como soportado sobre `from_pool(...)`.
+- Se agregó en `docs/tasks.md` una tarea técnica pendiente para corregir o bloquear `db.transaction(...)` sobre `SharedConnection::Pool`.
+- Se enlazó la nueva guía desde `README.md` y desde `docs/code-first.md`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La guía de transacciones queda disponible y alineada con el comportamiento real de la API pública, incluyendo sus garantías y exclusiones operativas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+- `cargo test -p mssql-orm-tiberius transaction`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos para la tarea documental.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y se validó con compilación completa más pruebas enfocadas de surface pública y capa transaccional.
+- Queda como riesgo/tarea pendiente corregir o bloquear `db.transaction(...)` sobre pool hasta pinnear conexión física durante todo el closure.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas`.
+
 ### Sesión: guía pública del query builder
 
 - Se ejecutó la subtarea `Etapa 15: Preparar guía del query builder público (filter, order_by, joins, take, paginate, count)`.

@@ -83,6 +83,7 @@ async fn main() -> Result<(), OrmError> {
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
+Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
 
 ## Arquitectura
 
@@ -149,6 +150,17 @@ Guía práctica para:
 - entender límites actuales como aliases, proyección parcial y conteos con joins
 
 Documento: [docs/query-builder.md](docs/query-builder.md)
+
+### Guía de transacciones
+
+Guía operativa para:
+
+- usar `db.transaction(|tx| async move { ... })`
+- entender commit en `Ok` y rollback en `Err`
+- conocer la interacción con timeouts, tracing y retry
+- respetar los límites actuales de conexión compartida, pool y savepoints
+
+Documento: [docs/transactions.md](docs/transactions.md)
 
 ### Guía de migraciones
 
