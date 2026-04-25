@@ -278,6 +278,13 @@ mod tests {
     }
 
     #[test]
+    fn exposes_dbcontext_soft_delete_runtime_helpers() {
+        let _with_soft_delete_provider = DerivedDbContext::with_soft_delete_provider;
+        let _with_soft_delete_request_values = DerivedDbContext::with_soft_delete_request_values;
+        let _clear_soft_delete_request_values = DerivedDbContext::clear_soft_delete_request_values;
+    }
+
+    #[test]
     fn exposes_migration_model_source_contract_in_prelude() {
         fn require_trait<C: super::MigrationModelSource>() {}
 

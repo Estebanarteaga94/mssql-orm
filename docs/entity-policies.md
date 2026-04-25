@@ -507,7 +507,9 @@ Estado implementado actual:
 - la crate publica ya expone `SoftDeleteProvider`, `SoftDeleteContext`, `SoftDeleteOperation` y `SoftDeleteRequestValues`
 - `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` ya ramifican hacia `UpdateQuery` cuando la entidad declara `soft_delete`
 - la validacion de duplicados, nullability, `updatable` y columnas runtime requeridas ya ocurre antes de compilar SQL
-- todavia no existe wiring publico del provider en `DbContext`, por lo que una entidad `soft_delete` que necesite valores runtime reales falla de forma explicita hasta que ese provider quede integrado al contexto
+- `SharedConnection` ya puede transportar `SoftDeleteProvider` y `SoftDeleteRequestValues`, y el derive `DbContext` ya expone `with_soft_delete_provider(...)`, `with_soft_delete_request_values(...)` y `clear_soft_delete_request_values()`
+- `db.transaction(...)` conserva ese wiring porque el contexto transaccional nace desde el mismo `SharedConnection`
+- la limitacion pendiente ya no es el provider sino la visibilidad de lectura: `query()` y `find()` todavia no excluyen filas soft-deleted por defecto
 
 ### Shape conceptual del provider
 

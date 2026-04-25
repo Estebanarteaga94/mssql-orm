@@ -24,12 +24,19 @@ use mssql_orm_tiberius::{MssqlPool, MssqlPooledConnection};
 #[derive(Clone)]
 pub struct SharedConnection {
     inner: Arc<SharedConnectionInner>,
+    runtime: Arc<SharedConnectionRuntime>,
 }
 
 enum SharedConnectionInner {
     Direct(tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>),
     #[cfg(feature = "pool-bb8")]
     Pool(MssqlPool),
+}
+
+#[derive(Clone, Default)]
+struct SharedConnectionRuntime {
+    soft_delete_provider: Option<Arc<dyn SoftDeleteProvider>>,
+    soft_delete_request_values: Option<Arc<SoftDeleteRequestValues>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +58,7 @@ impl SharedConnection {
             inner: Arc::new(SharedConnectionInner::Direct(tokio::sync::Mutex::new(
                 connection,
             ))),
+            runtime: Arc::new(SharedConnectionRuntime::default()),
         }
     }
 
@@ -58,6 +66,37 @@ impl SharedConnection {
     pub fn from_pool(pool: MssqlPool) -> Self {
         Self {
             inner: Arc::new(SharedConnectionInner::Pool(pool)),
+            runtime: Arc::new(SharedConnectionRuntime::default()),
+        }
+    }
+
+    pub fn with_soft_delete_provider(&self, provider: Arc<dyn SoftDeleteProvider>) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                soft_delete_provider: Some(provider),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+            }),
+        }
+    }
+
+    pub fn with_soft_delete_request_values(&self, request_values: SoftDeleteRequestValues) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: Some(Arc::new(request_values)),
+            }),
+        }
+    }
+
+    pub fn clear_soft_delete_request_values(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: None,
+            }),
         }
     }
 
@@ -79,6 +118,14 @@ impl SharedConnection {
             #[cfg(feature = "pool-bb8")]
             SharedConnectionInner::Pool(_) => SharedConnectionKind::Pool,
         }
+    }
+
+    pub(crate) fn soft_delete_provider(&self) -> Option<Arc<dyn SoftDeleteProvider>> {
+        self.runtime.soft_delete_provider.clone()
+    }
+
+    pub(crate) fn soft_delete_request_values(&self) -> Option<Arc<SoftDeleteRequestValues>> {
+        self.runtime.soft_delete_request_values.clone()
     }
 }
 
@@ -412,13 +459,15 @@ impl<E: Entity> DbSet<E> {
     where
         E: FromRow + Send + SoftDeleteEntity,
     {
+        let shared_connection = self.require_connection()?;
+        let soft_delete_provider = shared_connection.soft_delete_provider();
+        let soft_delete_request_values = shared_connection.soft_delete_request_values();
         let compiled = self.delete_compiled_query_sql_value(
             key.clone(),
             concurrency_token.clone(),
-            None,
-            None,
+            soft_delete_provider.as_deref(),
+            soft_delete_request_values.as_deref(),
         )?;
-        let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         let result = connection.execute(compiled).await?;
         let deleted = result.total() > 0;

@@ -22,6 +22,9 @@ fn main() {
     let _connect_with_config = AppDbContext::connect_with_config;
     let _from_shared = AppDbContext::from_shared_connection;
     let _from_connection = AppDbContext::from_connection;
+    let _with_soft_delete_provider = AppDbContext::with_soft_delete_provider;
+    let _with_soft_delete_request_values = AppDbContext::with_soft_delete_request_values;
+    let _clear_soft_delete_request_values = AppDbContext::clear_soft_delete_request_values;
     let _db_set: fn(&AppDbContext) -> &DbSet<User> =
         <AppDbContext as mssql_orm::DbContextEntitySet<User>>::db_set;
     let _entity_metadata: fn() -> &'static [&'static mssql_orm::EntityMetadata] =

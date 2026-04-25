@@ -899,13 +899,22 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         .collect::<Result<Vec<_>>>()?;
 
     Ok(quote! {
+        impl #ident {
+            fn __from_shared_parts(
+                connection: ::mssql_orm::SharedConnection,
+                tracking_registry: ::mssql_orm::TrackingRegistryHandle,
+            ) -> Self {
+                Self {
+                    #(#initializers),*
+                }
+            }
+        }
+
         impl ::mssql_orm::DbContext for #ident {
             fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
                 let tracking_registry =
                     ::std::sync::Arc::new(::mssql_orm::TrackingRegistry::default());
-                Self {
-                    #(#initializers),*
-                }
+                Self::__from_shared_parts(connection, tracking_registry)
             }
 
             fn shared_connection(&self) -> ::mssql_orm::SharedConnection {
@@ -920,6 +929,39 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         impl #ident {
             pub fn from_shared_connection(connection: ::mssql_orm::SharedConnection) -> Self {
                 <Self as ::mssql_orm::DbContext>::from_shared_connection(connection)
+            }
+
+            pub fn with_soft_delete_provider(
+                &self,
+                provider: ::std::sync::Arc<dyn ::mssql_orm::SoftDeleteProvider>,
+            ) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_soft_delete_provider(provider);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
+            pub fn with_soft_delete_request_values(
+                &self,
+                request_values: ::mssql_orm::SoftDeleteRequestValues,
+            ) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_soft_delete_request_values(request_values);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
+            pub fn clear_soft_delete_request_values(&self) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .clear_soft_delete_request_values();
+                Self::__from_shared_parts(connection, tracking_registry)
             }
 
             pub fn from_connection(

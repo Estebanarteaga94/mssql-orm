@@ -5495,3 +5495,26 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Integrar SoftDeleteProvider y/o SoftDeleteRequestValues al DbContext/DbSet para que delete, Active Record y change tracking puedan poblar columnas como deleted_at, deleted_by o is_deleted sin wiring manual interno`.
+
+### Sesión: integración pública de `SoftDeleteProvider` en `DbContext`
+
+- Se ejecutó la subtarea `Etapa 16+: Integrar SoftDeleteProvider y/o SoftDeleteRequestValues al DbContext/DbSet para que delete, Active Record y change tracking puedan poblar columnas como deleted_at, deleted_by o is_deleted sin wiring manual interno`.
+- En `crates/mssql-orm/src/context.rs` se extendió `SharedConnection` con runtime config inmutable para `SoftDeleteProvider` y `SoftDeleteRequestValues`, más helpers públicos `with_soft_delete_provider(...)`, `with_soft_delete_request_values(...)` y `clear_soft_delete_request_values()`.
+- `DbSet::delete_by_sql_value(...)` ahora lee esa configuración desde la conexión compartida y la pasa al helper `apply_soft_delete_values::<E>(...)`, de modo que las rutas de `delete`, Active Record y change tracking ya consumen el provider real sin wiring por `DbSet`.
+- En `crates/mssql-orm-macros/src/lib.rs`, `#[derive(DbContext)]` ahora genera un constructor interno compartido para preservar el mismo `tracking_registry`, y expone métodos públicos `with_soft_delete_provider(...)`, `with_soft_delete_request_values(...)` y `clear_soft_delete_request_values()` sobre el contexto derivado.
+- Se reforzó la surface pública en `crates/mssql-orm/src/lib.rs` y en `crates/mssql-orm/tests/ui/dbcontext_valid.rs` para fijar compile-time que esos helpers forman parte del contrato del derive.
+- Se agregó `crates/mssql-orm/tests/stage16_soft_delete_runtime.rs` como smoke opcional contra SQL Server real: crea una entidad con `soft_delete`, configura el provider desde el contexto, ejecuta `delete`, verifica que la fila siga existiendo y confirma que `deleted_at` quedó poblado. El test se auto-salta cuando `MSSQL_ORM_TEST_CONNECTION_STRING` no está definido.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo fmt --all --check`, `cargo check --workspace`, `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`, `cargo test -p mssql-orm exposes_dbcontext_soft_delete_runtime_helpers --lib -- --nocapture` y `cargo test -p mssql-orm public_dbcontext_soft_delete_provider_routes_delete_through_update -- --nocapture`.
+- La última validación no pudo ejecutar SQL Server real en esta sesión porque `MSSQL_ORM_TEST_CONNECTION_STRING` no estaba definido; el smoke quedó compilado y se auto-saltó según diseño.
+
+### Resultado
+
+- `SoftDeleteProvider` ya no es solo un contrato aislado: quedó integrado al contexto público y puede viajar por `DbContext`, `DbSet`, Active Record, tracking y transacciones mediante `SharedConnection`.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos después de ajustar el smoke de integración para usar `fetch_one(...)` en lugar de iterar `query_raw(...)`.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Implementar visibilidad de lectura para soft_delete en DbSetQuery con modo por defecto ActiveOnly y APIs públicas with_deleted() / only_deleted()`.
