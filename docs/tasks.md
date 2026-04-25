@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16: Mantener fuera del MVP el autollenado de `created_by`, `updated_by`, `created_at` y `updated_at` desde `DbSet::insert`, `DbSet::update`, Active Record y `save_changes`
 - [ ] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [ ] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
 - [ ] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
@@ -23,6 +22,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Mantener fuera del MVP el autollenado de `created_by`, `updated_by`, `created_at` y `updated_at` desde `DbSet::insert`, `DbSet::update`, Active Record y `save_changes`
 - [x] Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que `migration add --snapshot-bin ...` capture columnas auditables en `model_snapshot.json`
 - [x] Etapa 16: Actualizar el ejemplo `todo-app` o agregar fixture dedicado para mostrar al menos una entidad con `#[orm(audit = Audit)]` sin degradar el smoke existente
 - [x] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados

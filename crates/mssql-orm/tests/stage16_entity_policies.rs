@@ -1,4 +1,4 @@
-use mssql_orm::{migrate::ModelSnapshot, prelude::*};
+use mssql_orm::{EntityPersist, migrate::ModelSnapshot, prelude::*};
 use std::collections::BTreeMap;
 
 #[derive(AuditFields)]
@@ -37,6 +37,20 @@ struct AuditedEntity {
     #[orm(length = 40)]
     #[orm(default_sql = "'new'")]
     status: Option<String>,
+}
+
+#[derive(Insertable, Debug, Clone)]
+#[orm(entity = AuditedEntity)]
+struct NewAuditedEntity {
+    name: String,
+    status: Option<String>,
+}
+
+#[derive(Changeset, Debug, Clone)]
+#[orm(entity = AuditedEntity)]
+struct UpdateAuditedEntity {
+    name: Option<String>,
+    status: Option<Option<String>>,
 }
 
 #[derive(Entity, Debug, Clone, PartialEq)]
@@ -197,6 +211,57 @@ fn audited_entity_from_row_ignores_audit_metadata_columns_when_present() {
 }
 
 #[test]
+fn insertable_and_changeset_do_not_auto_fill_audit_columns() {
+    let values = <NewAuditedEntity as Insertable<AuditedEntity>>::values(&NewAuditedEntity {
+        name: "new".to_string(),
+        status: None,
+    });
+    let changes =
+        <UpdateAuditedEntity as Changeset<AuditedEntity>>::changes(&UpdateAuditedEntity {
+            name: Some("updated".to_string()),
+            status: Some(None),
+        });
+
+    assert_eq!(
+        column_names(&values),
+        vec!["name", "status"],
+        "DbSet::insert only receives explicit Insertable fields in the MVP"
+    );
+    assert_eq!(
+        column_names(&changes),
+        vec!["name", "status"],
+        "DbSet::update only receives explicit Changeset fields in the MVP"
+    );
+    assert_no_audit_columns(&values);
+    assert_no_audit_columns(&changes);
+}
+
+#[test]
+fn entity_persist_for_active_record_and_save_changes_does_not_auto_fill_audit_columns() {
+    let entity = AuditedEntity {
+        id: 0,
+        name: "tracked".to_string(),
+        status: Some("new".to_string()),
+    };
+
+    let insert_values = <AuditedEntity as EntityPersist>::insert_values(&entity);
+    let update_changes = <AuditedEntity as EntityPersist>::update_changes(&entity);
+
+    assert_eq!(
+        column_names(&insert_values),
+        vec!["name", "status"],
+        "Active Record insert/save routes use only real entity fields in the MVP"
+    );
+    assert_eq!(
+        column_names(&update_changes),
+        vec!["name", "status"],
+        "Active Record update/save_changes routes use only real entity fields in the MVP"
+    );
+    assert_no_audit_columns(&insert_values);
+    assert_no_audit_columns(&update_changes);
+}
+
+#[test]
 fn model_snapshot_includes_audit_columns_without_special_pipeline() {
     let snapshot =
         ModelSnapshot::from_entities(&[AuditedEntity::metadata(), ArchivedEntity::metadata()]);
@@ -269,4 +334,24 @@ fn model_snapshot_includes_audit_columns_without_special_pipeline() {
         ModelSnapshot::from_entities(&[AuditedEntity::metadata(), ArchivedEntity::metadata()]),
         snapshot
     );
+}
+
+fn column_names(values: &[ColumnValue]) -> Vec<&'static str> {
+    values.iter().map(|value| value.column_name).collect()
+}
+
+fn assert_no_audit_columns(values: &[ColumnValue]) {
+    let columns = column_names(values);
+
+    for audit_column in [
+        "created_at",
+        "created_by_user_id",
+        "updated_at",
+        "updated_by",
+    ] {
+        assert!(
+            !columns.contains(&audit_column),
+            "{audit_column} should remain metadata/schema only in the MVP"
+        );
+    }
 }

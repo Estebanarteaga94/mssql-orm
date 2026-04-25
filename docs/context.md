@@ -99,6 +99,8 @@ En este corte, las columnas auditables son metadata/schema: participan como `Col
 
 El flujo reproducible `examples/todo-app/scripts/migration_e2e.sh` ahora valida explícitamente que `migration add --snapshot-bin model_snapshot --manifest-path examples/todo-app/Cargo.toml` capture `audit_events` y las columnas auditables (`created_at`, `created_by_user_id`, `updated_at`, `updated_by`) en `model_snapshot.json`. También valida que el `up.sql` inicial incluya `CREATE TABLE [todo].[audit_events]`.
 
+El MVP de auditoría queda explícitamente sin autollenado runtime. `crates/mssql-orm/tests/stage16_entity_policies.rs` confirma que `Insertable`/`Changeset` para `DbSet::insert` y `DbSet::update`, además de `EntityPersist` para Active Record y `save_changes`, no inyectan `created_at`, `created_by_user_id`, `updated_at` ni `updated_by`. Esas columnas siguen siendo metadata/schema hasta diseñar un `AuditProvider`.
+
 Para `soft_delete`, el comportamiento esperado futuro debe quedar claro desde el diseño: si una entidad declara `#[orm(soft_delete = SoftDelete)]`, entonces `DbSet::delete(...)`, `entity.delete(&db)`, `DbSet::remove_tracked(...)` y `save_changes()` no deberían compilar ni ejecutar un `DELETE FROM ...` normal para esa entidad. En su lugar deben construir un `UPDATE` que marque la fila como eliminada lógicamente, por ejemplo asignando `deleted_at`, `deleted_by` o los campos definidos por el struct `SoftDelete`. Esta ruta debe seguir respetando primary key simple/compuesta según soporte vigente, `rowversion`, `ConcurrencyConflict`, transacciones y el pipeline existente de compilación SQL Server. También debe existir una decisión explícita sobre queries: por defecto las entidades con `soft_delete` deberían excluir filas con borrado lógico, y cualquier acceso a eliminadas debe requerir una API visible como `with_deleted()` o `only_deleted()`, no un bypass accidental.
 
 Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodidad. Si una entidad declara `#[orm(tenant = TenantScope)]`, toda ruta pública que lea o modifique esa entidad debe aplicar el tenant activo: `query().all()`, `first`, `count`, `find`, `update`, `delete`, Active Record y `save_changes()`. En ausencia de tenant activo, la política debe fallar cerrado por defecto para entidades tenant-scoped, en vez de ejecutar una consulta sin filtro. Los inserts deben recibir `tenant_id` desde el contexto o rechazar la operación si el usuario intenta insertar con un tenant distinto. Esta policy necesita pruebas dedicadas para asegurar que joins, query builder manual, tracking y helpers internos no puedan omitir el filtro por accidente.
@@ -371,6 +373,6 @@ Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodi
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 16: Mantener fuera del MVP el autollenado de created_by, updated_by, created_at y updated_at desde DbSet::insert, DbSet::update, Active Record y save_changes`.
-2. Continuar después con la documentación pública de `#[orm(audit = Audit)]` en `docs/code-first.md`.
+1. Ejecutar `Etapa 16: Actualizar docs/code-first.md con la sintaxis #[orm(audit = Audit)], límites del MVP y ejemplo compilable respaldado por fixture trybuild`.
+2. Continuar después con la actualización de README/roadmap para presentar `Entity Policies` como evolución code-first.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.

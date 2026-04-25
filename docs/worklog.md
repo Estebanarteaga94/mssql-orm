@@ -2,6 +2,37 @@
 
 ## 2026-04-25
 
+### Sesión: auditoría sin autollenado runtime en MVP
+
+- Se ejecutó la subtarea `Etapa 16: Mantener fuera del MVP el autollenado de created_by, updated_by, created_at y updated_at desde DbSet::insert, DbSet::update, Active Record y save_changes`.
+- Se revisaron las rutas de persistencia de `DbSet`, Active Record, `EntityPersist` y `save_changes`.
+- No se agregó `AuditProvider`, hooks runtime ni modificación de `ColumnValue` en las rutas de escritura.
+- Se amplió `crates/mssql-orm/tests/stage16_entity_policies.rs` con cobertura explícita para una entidad auditada.
+- La prueba `insertable_and_changeset_do_not_auto_fill_audit_columns` confirma que `Insertable` y `Changeset`, usados por `DbSet::insert` y `DbSet::update`, solo producen columnas explícitas del payload (`name`, `status`) y no columnas auditables.
+- La prueba `entity_persist_for_active_record_and_save_changes_does_not_auto_fill_audit_columns` confirma que `EntityPersist`, usado por Active Record y `save_changes`, solo produce campos reales de la entidad y no columnas auditables generadas por `AuditFields`.
+- Se actualizó `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+
+### Resultado
+
+- El límite del MVP queda cubierto por pruebas: `audit = Audit` aporta metadata/schema, pero no autollenado runtime en inserciones, actualizaciones, Active Record ni tracking.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Actualizar docs/code-first.md con la sintaxis #[orm(audit = Audit)], límites del MVP y ejemplo compilable respaldado por fixture trybuild`.
+
 ### Sesión: validación snapshot-bin con columnas auditables en todo-app
 
 - Se ejecutó la subtarea `Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que migration add --snapshot-bin ... capture columnas auditables en model_snapshot.json`.
