@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: diff al activar auditoría sobre tabla existente
+
+- Se ejecutó la subtarea `Etapa 16: Agregar pruebas de diff donde activar audit = Audit sobre una tabla existente genere AddColumn para cada columna auditable esperada`.
+- Se amplió `crates/mssql-orm/tests/stage16_audit_migrations.rs` con `PlainEntity`, una entidad sin auditoría que apunta a la misma tabla que `AuditedEntity`.
+- La prueba nueva compara `ModelSnapshot::from_entities(&[PlainEntity::metadata()])` contra `ModelSnapshot::from_entities(&[AuditedEntity::metadata()])`.
+- Se validó que `diff_column_operations(...)` emite exactamente cuatro operaciones `AddColumn`, una por cada columna auditable: `created_at`, `created_by_user_id`, `updated_at` y `updated_by`.
+- La prueba fija además shape de columnas agregadas: tipo SQL Server, default SQL, nullability, longitud `nvarchar` y flags `insertable`/`updatable`.
+- No se introdujeron cambios productivos; el diff funciona porque las columnas auditables participan como `ColumnSnapshot` ordinarias en la tabla compartida.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Activar `#[orm(audit = Audit)]` sobre una tabla existente queda cubierto como migración incremental no destructiva basada en `AddColumn` por cada columna auditable.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-migrate diff`
+- `cargo test -p mssql-orm-sqlserver migration`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar pruebas de diff donde quitar audit = Audit sea detectado como destructivo por la CLI cuando produzca DropColumn`.
+
 ### Sesión: migración `CREATE TABLE` para entidad auditada
 
 - Se ejecutó la subtarea `Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con audit = Audit genere CREATE TABLE con columnas auditables`.

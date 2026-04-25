@@ -1,4 +1,6 @@
-use mssql_orm::migrate::{ModelSnapshot, diff_schema_and_table_operations};
+use mssql_orm::migrate::{
+    MigrationOperation, ModelSnapshot, diff_column_operations, diff_schema_and_table_operations,
+};
 use mssql_orm::prelude::*;
 use mssql_orm::sqlserver::SqlServerCompiler;
 
@@ -40,6 +42,21 @@ struct AuditedEntity {
     status: Option<String>,
 }
 
+#[derive(Entity, Debug, Clone, PartialEq)]
+#[orm(table = "audited_entities", schema = "audit")]
+struct PlainEntity {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(length = 120)]
+    name: String,
+
+    #[orm(length = 40)]
+    #[orm(default_sql = "'new'")]
+    status: Option<String>,
+}
+
 #[test]
 fn new_audited_entity_migration_creates_table_with_audit_columns() {
     let previous = ModelSnapshot::default();
@@ -63,4 +80,65 @@ fn new_audited_entity_migration_creates_table_with_audit_columns() {
         sql[1],
         "CREATE TABLE [audit].[audited_entities] (\n    [id] bigint IDENTITY(1, 1) NOT NULL,\n    [name] nvarchar(120) NOT NULL,\n    [status] nvarchar(40) NULL DEFAULT 'new',\n    [created_at] datetime2 NOT NULL DEFAULT SYSUTCDATETIME(),\n    [created_by_user_id] bigint NULL,\n    [updated_at] datetime2 NULL DEFAULT SYSUTCDATETIME(),\n    [updated_by] nvarchar(120) NULL,\n    PRIMARY KEY ([id])\n)"
     );
+}
+
+#[test]
+fn enabling_audit_on_existing_entity_emits_add_column_for_each_audit_column() {
+    let previous = ModelSnapshot::from_entities(&[PlainEntity::metadata()]);
+    let current = ModelSnapshot::from_entities(&[AuditedEntity::metadata()]);
+    let operations = diff_column_operations(&previous, &current);
+
+    assert_eq!(operations.len(), 4);
+
+    let added_columns = operations
+        .iter()
+        .map(|operation| match operation {
+            MigrationOperation::AddColumn(operation) => {
+                assert_eq!(operation.schema_name, "audit");
+                assert_eq!(operation.table_name, "audited_entities");
+                operation.column.clone()
+            }
+            other => panic!("expected AddColumn operation, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        added_columns
+            .iter()
+            .map(|column| column.name.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "created_at",
+            "created_by_user_id",
+            "updated_at",
+            "updated_by",
+        ]
+    );
+
+    let created_at = &added_columns[0];
+    assert_eq!(created_at.sql_type, SqlServerType::DateTime2);
+    assert_eq!(created_at.default_sql.as_deref(), Some("SYSUTCDATETIME()"));
+    assert!(!created_at.nullable);
+    assert!(!created_at.insertable);
+    assert!(!created_at.updatable);
+
+    let created_by = &added_columns[1];
+    assert_eq!(created_by.sql_type, SqlServerType::BigInt);
+    assert!(created_by.nullable);
+    assert!(created_by.insertable);
+    assert!(created_by.updatable);
+
+    let updated_at = &added_columns[2];
+    assert_eq!(updated_at.sql_type, SqlServerType::DateTime2);
+    assert_eq!(updated_at.default_sql.as_deref(), Some("SYSUTCDATETIME()"));
+    assert!(updated_at.nullable);
+    assert!(!updated_at.insertable);
+    assert!(updated_at.updatable);
+
+    let updated_by = &added_columns[3];
+    assert_eq!(updated_by.sql_type, SqlServerType::NVarChar);
+    assert_eq!(updated_by.max_length, Some(120));
+    assert!(updated_by.nullable);
+    assert!(updated_by.insertable);
+    assert!(updated_by.updatable);
 }
