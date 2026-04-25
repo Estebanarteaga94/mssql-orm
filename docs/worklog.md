@@ -2,6 +2,41 @@
 
 ## 2026-04-25
 
+### Sesión: migración `CREATE TABLE` para entidad auditada
+
+- Se ejecutó la subtarea `Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con audit = Audit genere CREATE TABLE con columnas auditables`.
+- Se agregó `crates/mssql-orm/tests/stage16_audit_migrations.rs` como prueba de integración pública de Etapa 16.
+- La prueba define un `Audit` con `#[derive(AuditFields)]` y una entidad `AuditedEntity` con `#[orm(audit = Audit)]`, usando la misma surface pública que un consumidor.
+- El flujo validado es completo: `EntityMetadata` derivada -> `ModelSnapshot::from_entities(...)` -> `diff_schema_and_table_operations(...)` -> `MigrationOperation::CreateSchema/CreateTable` -> `SqlServerCompiler::compile_migration_operations(...)`.
+- El SQL esperado confirma `CREATE TABLE [audit].[audited_entities]` con columnas propias y auditables: `created_at`, `created_by_user_id`, `updated_at` y `updated_by`, además de PK e identity.
+- No se introdujo lógica especial para auditoría en migraciones: la prueba pasa porque las columnas auditables ya llegan como `ColumnMetadata`/`ColumnSnapshot` ordinarias.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Una entidad nueva con `#[orm(audit = Audit)]` ya tiene cobertura de migración para creación de tabla, confirmando que el pipeline code-first genera `CREATE TABLE` con columnas auditables.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo test -p mssql-orm-migrate diff`
+- `cargo test -p mssql-orm-sqlserver migration`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar pruebas de diff donde activar audit = Audit sobre una tabla existente genere AddColumn para cada columna auditable esperada`.
+
 ### Sesión: snapshot de entidades auditadas
 
 - Se ejecutó la subtarea `Etapa 16: Confirmar que ModelSnapshot::from_entities(...) incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista`.
