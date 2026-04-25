@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: evaluación de `timestamps = Timestamps`
+
+- Se ejecutó la subtarea `Etapa 16+: Evaluar timestamps = Timestamps como política separada o alias simplificado de audit, evitando solapamientos de columnas con audit`.
+- Se confirmó que el plan maestro no está en la raíz con el nombre solicitado; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md`, `docs/entity-policies.md`, el plan maestro y la implementación actual de `AuditFields`/`#[orm(audit = ...)]` en `crates/mssql-orm-macros/src/lib.rs`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se actualizó `docs/entity-policies.md` con la decisión: `timestamps = Timestamps` debe ser una policy separada de columnas generadas, no un alias de `audit`.
+- La decisión fija un derive futuro `#[derive(TimestampFields)]`, consumo explícito con `#[orm(timestamps = Timestamps)]`, reutilización de `EntityPolicy`, ausencia de autollenado runtime, ausencia de campos Rust visibles/símbolos asociados y validaciones obligatorias de colisión contra columnas propias y `audit = Audit`.
+- Se descompuso el backlog en subtareas verificables para diseño, parser de entidad, derive, colisiones y cobertura de `timestamps`.
+- Se actualizó `docs/context.md` con el nuevo estado operativo y el siguiente paso recomendado.
+
+### Resultado
+
+- `timestamps = Timestamps` queda decidido como extensión `Etapa 16+` separada de `audit`, con contrato esperado y backlog listo para implementación posterior sin introducir todavía API compilable.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue de evaluación/diseño documental y no cambió código, macros ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Diseñar TimestampFields como derive dedicado para timestamps = Timestamps, reutilizando EntityPolicy sin introducir alias implícito de audit`.
+
 ### Sesión: mutación futura de `Vec<ColumnValue>` por `AuditProvider`
 
 - Se ejecutó la subtarea `Etapa 16+: Definir cómo AuditProvider debe modificar Vec<ColumnValue> en insert/update sin duplicar la lógica existente de Insertable, Changeset, EntityPersist, Active Record ni change tracking`.

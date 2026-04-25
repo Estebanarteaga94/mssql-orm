@@ -1,7 +1,11 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
+- [ ] Etapa 16+: Diseñar `TimestampFields` como derive dedicado para `timestamps = Timestamps`, reutilizando `EntityPolicy` sin introducir alias implícito de `audit`
+- [ ] Etapa 16+: Implementar parser de `#[orm(timestamps = Timestamps)]` en `#[derive(Entity)]` sin cambiar el comportamiento de entidades que no declaran `timestamps`
+- [ ] Etapa 16+: Implementar `#[derive(TimestampFields)]` con validaciones equivalentes a columnas generadas, limitado a metadata/schema y sin autollenado runtime
+- [ ] Etapa 16+: Validar colisiones entre columnas propias, `audit = Audit` y `timestamps = Timestamps`, con diagnóstico compile-time que nombre la columna duplicada
+- [ ] Etapa 16+: Cubrir `timestamps = Timestamps` en metadata, snapshots, diff, DDL SQL Server, `trybuild`, documentación pública y límites de no materialización/no autollenado
 - [ ] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
 - [ ] Etapa 16+: Evaluar `soft_delete = SoftDelete` como cambio semántico explícito de `delete`, `entity.delete(&db)`, queries por defecto y migraciones, documentando sus riesgos antes de implementarlo
 - [ ] Etapa 16+: Diseñar `soft_delete = SoftDelete` para que `DbSet::delete(...)`, `entity.delete(&db)`, `remove_tracked(...)` y `save_changes()` no emitan `DELETE` físico cuando la entidad tenga esa política; deben emitir `UPDATE` sobre columnas como `deleted_at`/`deleted_by` y respetar `rowversion`/`ConcurrencyConflict`
@@ -16,6 +20,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
 - [x] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
 - [x] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [x] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas

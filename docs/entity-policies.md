@@ -339,14 +339,48 @@ Estas flags son solo metadata de columna. En el MVP no hacen que `DbSet::insert`
 
 `timestamps = Timestamps` queda reservado como policy candidata para aportar solo columnas temporales, normalmente `created_at` y `updated_at`.
 
-No se implementa junto con `audit` en el primer corte porque puede solaparse con nombres y semantica de auditoria. Antes de implementarla se debe decidir:
+No se implementa junto con `audit` en el primer corte porque puede solaparse con nombres y semantica de auditoria. La evaluacion de Etapa 16+ fija la decision para una implementacion futura: `timestamps = Timestamps` debe ser una policy separada de columnas generadas, no un alias simplificado de `audit`.
 
-- si reutiliza el mismo contrato de metadata que `AuditFields`
-- si es un alias predefinido o un struct definido por el usuario
-- como se detectan colisiones con `audit = Audit`
-- si tendra defaults SQL o autollenado futuro
+La razon principal es que `audit = Audit` representa un shape definido por el usuario para auditoria completa, potencialmente con usuario, request, correlation id u otros campos. `timestamps = Timestamps` debe representar solo columnas temporales y no debe arrastrar semantica de `created_by`, `updated_by` ni `AuditProvider`. Modelarlo como alias de `audit` mezclaria dos preocupaciones y haria ambiguo que provider runtime debe actuar sobre cada columna.
 
-Hasta resolver esas decisiones, `timestamps` no debe aparecer como API compilable.
+La forma preferida queda alineada con el contrato existente de `EntityPolicy`: un derive dedicado futuro, por ejemplo `#[derive(TimestampFields)]`, debe generar `ColumnMetadata` normales con `POLICY_NAME = "timestamps"` y `COLUMN_NAMES`. La entidad consumidora declararia la policy de forma explicita:
+
+```rust
+#[derive(TimestampFields)]
+struct Timestamps {
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(updatable = false)]
+    created_at: chrono::NaiveDateTime,
+
+    #[orm(nullable)]
+    updated_at: Option<chrono::NaiveDateTime>,
+}
+
+#[derive(Entity)]
+#[orm(table = "todos", schema = "todo", timestamps = Timestamps)]
+struct Todo {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    title: String,
+}
+```
+
+Reglas esperadas para la implementacion futura:
+
+- `timestamps = Timestamps` debe reutilizar el pipeline de columnas generadas: `EntityMetadata.columns`, snapshots, diff y DDL no reciben una ruta especial.
+- El shape de columnas debe vivir en el struct `TimestampFields`; no debe haber nombres globales obligatorios ni configuracion inline como `#[orm(timestamps(created_at, updated_at))]` en el primer corte.
+- Una entidad puede declarar `timestamps` sin `audit`.
+- Si una entidad declara `audit` y `timestamps`, la expansion debe validar colisiones entre columnas propias, columnas auditables y columnas timestamp antes de construir metadata.
+- Si `AuditFields` y `TimestampFields` producen la misma columna, la compilacion debe fallar con un diagnostico accionable que nombre la columna duplicada y recomiende renombrar uno de los campos con `#[orm(column = "...")]`.
+- El orden de expansion debe ser estable: columnas propias de la entidad, luego columnas de `audit`, luego columnas de `timestamps`. Ese orden solo es aceptable si las validaciones de colision se ejecutan antes de exponer la metadata.
+- `timestamps` no debe generar campos Rust visibles ni simbolos como `Todo::created_at` mientras las columnas vengan desde una policy, manteniendo el mismo limite que `audit`.
+- `timestamps` no debe activar autollenado runtime. Defaults SQL como `SYSUTCDATETIME()` siguen siendo metadata de esquema hasta que exista un provider runtime dedicado.
+
+La implementacion futura debe agregar una configuracion separada en `#[derive(Entity)]` (`timestamps: Option<Path>`) en vez de reutilizar el slot `audit`. El fixture actual que rechaza multiples `audit` cubre solo duplicacion de la misma policy; no reemplaza las pruebas necesarias para `audit + timestamps`.
+
+Hasta implementar esas subtareas, `timestamps` no debe aparecer como API compilable.
 
 ## Fuera del MVP
 
