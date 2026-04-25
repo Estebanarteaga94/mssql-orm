@@ -5299,3 +5299,28 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 2: Implementar derives #[derive(Insertable)] y #[derive(Changeset)]`.
+
+### Sesión: Evaluación de `soft_delete = SoftDelete`
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+- Se movió en `docs/tasks.md` la tarea `Etapa 16+: Evaluar soft_delete = SoftDelete como cambio semántico explícito de delete, entity.delete(&db), queries por defecto y migraciones, documentando sus riesgos antes de implementarlo` a `En Progreso` antes de revisar y luego a `Completadas` al cerrar la evaluación documental.
+- Se revisaron las rutas reales de borrado y consulta en `crates/mssql-orm/src/context.rs`, `crates/mssql-orm/src/active_record.rs` y `crates/mssql-orm/src/dbset_query.rs` para confirmar el comportamiento actual.
+- La revisión confirmó que `DbSet::delete(...)`, `delete_by_sql_value(...)`, `entity.delete(&db)` y la persistencia experimental de entidades `Deleted` siguen convergiendo en `DeleteQuery` + `SqlServerCompiler::compile_delete(...)`, es decir, borrado físico real.
+- También se confirmó que `DbSet::query()` y `DbSetQuery` parten de `SelectQuery::from_entity::<E>()` sin filtros implícitos, por lo que hoy no existe ninguna exclusión automática para filas lógicamente borradas.
+- Se dejó documentado en `docs/entity-policies.md` que `soft_delete = SoftDelete` sí encaja en el roadmap, pero no como una policy de metadata pura: cambia semántica observable de `delete`, Active Record, change tracking, consultas por defecto y preservación de `rowversion`/`ConcurrencyConflict`.
+- La decisión vigente queda explícita: no implementar `soft_delete` en esta sesión y no tratarlo como alias o convención implícita por nombres mágicos; antes debe diseñarse su semántica pública y su integración sobre las rutas existentes.
+- Se actualizó `docs/context.md` para reflejar que la evaluación ya quedó cerrada y que el siguiente paso correcto es diseñar la semántica pública de `soft_delete`, no reevaluarla.
+- La validación ejecutada para cerrar esta sesión fue `cargo fmt --all --check` y `cargo check --workspace`.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión sólo cerró documentación de diseño y trazabilidad; no se modificó código de crates ni superficies ejecutables.
+
+### Resultado
+
+- La evaluación de `soft_delete = SoftDelete` quedó cerrada y trazada: el repositorio ya documenta que es una extensión semántica de alto impacto y que debe diseñarse explícitamente antes de tocar macros, query builder, persistencia o migraciones.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Diseñar soft_delete = SoftDelete para que DbSet::delete(...), entity.delete(&db), remove_tracked(...) y save_changes() no emitan DELETE físico cuando la entidad tenga esa política; deben emitir UPDATE sobre columnas como deleted_at/deleted_by y respetar rowversion/ConcurrencyConflict`.

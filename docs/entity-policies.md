@@ -228,6 +228,39 @@ Decision vigente:
 
 Si en el futuro se quiere mejorar ergonomia, debe hacerse sobre el atributo de campo existente, por ejemplo con documentacion o helpers de derives, no con una policy que genere columnas ocultas.
 
+## Evaluacion de `soft_delete = SoftDelete`
+
+`soft_delete = SoftDelete` si encaja en el concepto general de `Entity Policies`, pero no es una policy de metadata pura como `audit = Audit`.
+
+Cambiar esa feature implica redefinir comportamiento observable en varias rutas publicas que hoy ya existen y hoy emiten borrado fisico real:
+
+- `DbSet::delete(...)` compila `DeleteQuery` y termina en `DELETE FROM ...`
+- `entity.delete(&db)` delega a `DbSet::delete_by_sql_value(...)`
+- `DbSet::remove_tracked(...)` y `save_changes()` hoy convergen en rutas que terminan borrando fisicamente
+- `DbSet::query()` y `DbSetQuery` parten de `SelectQuery::from_entity::<E>()` sin filtros implicitos
+- migraciones y snapshots hoy solo conocen columnas, no semantica de borrado
+
+Por eso, la decision vigente es tratar `soft_delete` como un cambio semantico de alto riesgo, no como una extension menor del derive.
+
+Riesgos concretos que deben quedar resueltos antes de implementar:
+
+- si alguna ruta publica sigue compilando `DELETE FROM` para una entidad con `soft_delete`, la feature queda rota de forma silenciosa
+- si las queries por defecto no excluyen filas borradas logicamente, el modelo queda inconsistente con la expectativa del usuario
+- si los joins o `count()` ignoran el filtro de borrado logico en unas rutas si y en otras no, la API publica se vuelve impredecible
+- si `save_changes()` marca `Deleted` pero luego intenta hacer `DELETE` fisico, se rompe la unidad de trabajo experimental
+- si `rowversion` no participa en el `UPDATE` de borrado logico, se pierde la proteccion de `ConcurrencyConflict`
+- si migraciones/snapshots no tratan las columnas de `SoftDelete` como columnas ordinarias, se abre un segundo pipeline de esquema
+
+Decision de evaluacion:
+
+- `soft_delete = SoftDelete` sigue siendo candidata valida de roadmap
+- no debe implementarse como alias ni como convencion por nombres magicos (`deleted_at`, `is_deleted`) sin declaracion explicita
+- antes de tocar macros o runtime, debe existir un diseño separado para:
+  `delete`, Active Record, tracking, queries por defecto, APIs explicitas `with_deleted`/`only_deleted` o equivalente, y migraciones
+- la implementacion debe converger en las rutas actuales de `DbSet`, `ActiveRecord`, `save_changes()` y `DbSetQuery`; no debe abrir una segunda via de ejecucion
+
+En otras palabras: `soft_delete` es razonable como feature futura, pero solo despues de redisenar explicitamente el contrato de borrado y lectura. No debe entrar como una policy “pequeña” solo porque comparta el mecanismo de metadata.
+
 ## Que Significa Columnas Generadas
 
 Una policy de columnas generadas aporta metadata de columnas como si esas columnas hubieran sido declaradas manualmente en la entidad.
