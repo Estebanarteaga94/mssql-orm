@@ -2,6 +2,32 @@
 
 ## 2026-04-25
 
+### Sesión: decidir sintaxis MVP de auditoría
+
+- Se ejecutó la subtarea `Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando #[orm(audit = Audit)] sobre alternativas implícitas o runtime`.
+- Se actualizó `docs/entity-policies.md` para fijar `#[orm(audit = Audit)]` a nivel de entidad como sintaxis canónica del MVP.
+- Se documentó que el lado derecho debe ser un path Rust visible desde el scope del derive, por ejemplo `Audit`, `crate::model::Audit` o `common::Audit`.
+- Se dejaron explícitamente rechazadas las variantes `#[orm(audit)]`, `#[orm(audit = "Audit")]`, `#[orm(audit(Audit))]`, llamadas runtime, providers y configuración inline de columnas en la entidad.
+- Se confirmó que entidades sin `audit` deben conservar el comportamiento actual y que cada entidad solo podrá declarar una policy `audit` en el MVP.
+- Se actualizó `docs/context.md` con la decisión sintáctica.
+
+### Resultado
+
+- La sintaxis pública objetivo para auditoría quedó decidida y lista para que las siguientes tareas implementen el parser macro y el contrato `AuditFields`.
+
+### Validación
+
+- `cargo fmt --all --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión fue documental; no se ejecutaron pruebas Rust porque no hubo cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables`.
+
 ### Sesión: definir contrato core de metadata para policies
 
 - Se ejecutó la subtarea `Etapa 16: Definir el contrato de metadata para políticas reutilizables en mssql-orm-core, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (ColumnMetadata) sin crear un segundo pipeline de esquema`.

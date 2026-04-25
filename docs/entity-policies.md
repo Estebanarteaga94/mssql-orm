@@ -78,7 +78,7 @@ Las siguientes tareas deben definir como `AuditFields` implementa o reutiliza `E
 
 ## Forma Publica Esperada
 
-El concepto publico se expresa en atributos sobre la entidad:
+El concepto publico se expresa en atributos sobre la entidad. Para el MVP de auditoria, la sintaxis canónica soportada sera:
 
 ```rust
 #[derive(Entity)]
@@ -90,9 +90,62 @@ struct Order {
 }
 ```
 
-La policy referenciada debe ser un tipo Rust visible desde el sitio donde se deriva la entidad. La intencion de Etapa 16 es empezar con un contrato tipo `#[derive(AuditFields)]` o equivalente, para que el usuario defina el shape reusable en su propio crate.
+La policy referenciada debe ser un tipo Rust visible desde el sitio donde se deriva la entidad. La intencion de Etapa 16 es empezar con `#[derive(AuditFields)]`, para que el usuario defina el shape reusable en su propio crate.
 
 La declaracion vive en compile-time. No debe depender de configuracion runtime, reflection o descubrimiento dinamico.
+
+## Sintaxis MVP de Auditoria
+
+La sintaxis MVP queda fijada como atributo de entidad:
+
+```rust
+#[derive(Entity)]
+#[orm(table = "todos", schema = "todo", audit = Audit)]
+struct Todo {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    title: String,
+}
+```
+
+Reglas de sintaxis:
+
+- `audit = Audit` se declara en `#[orm(...)]` a nivel del struct que deriva `Entity`
+- el lado derecho debe ser un path Rust hacia un tipo que implemente el contrato de auditoria definido por el derive posterior
+- `Audit` se resuelve en compile-time, desde el scope normal de Rust del consumidor
+- una entidad puede declarar como maximo una policy `audit`
+- entidades sin `audit` deben conservar exactamente el comportamiento actual
+
+Formas permitidas:
+
+```rust
+#[orm(audit = Audit)]
+#[orm(audit = crate::model::Audit)]
+#[orm(table = "orders", schema = "sales", audit = common::Audit)]
+```
+
+Formas rechazadas para el MVP:
+
+```rust
+#[orm(audit)]
+#[orm(audit = "Audit")]
+#[orm(audit(Audit))]
+#[orm(audit = Audit::default())]
+#[orm(audit_provider = provider)]
+```
+
+Estas variantes se rechazan porque introducen inferencia implicita, strings sin chequeo de tipos, sintaxis paralela o configuracion runtime antes de tener contratos estables.
+
+La sintaxis tambien excluye por ahora configuracion inline de columnas dentro de la entidad:
+
+```rust
+#[orm(audit(created_at, updated_at))]
+#[orm(audit(created_at = "created_on"))]
+```
+
+El shape de columnas debe vivir en el struct de auditoria reusable, no en cada entidad consumidora. Esto mantiene la policy reutilizable y evita duplicar configuracion por entidad.
 
 ## Relacion con el Enfoque Code-First
 
