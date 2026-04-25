@@ -82,6 +82,7 @@ async fn main() -> Result<(), OrmError> {
 
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
+Si quieres ver el inventario de API publicada por la crate raíz, revisa [docs/api.md](docs/api.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
 Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
 Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
@@ -138,6 +139,20 @@ Guía conceptual y práctica para:
 - fijar límites reales de la estrategia `code-first` actual
 
 Documento: [docs/code-first.md](docs/code-first.md)
+
+### API pública
+
+Inventario de la surface expuesta por la crate raíz:
+
+- `prelude`
+- derives públicos
+- `DbContext`, `DbSet` y `DbSetQuery`
+- query builder, Active Record y tracking experimental
+- migraciones code-first
+- configuración SQL Server/Tiberius
+- módulos avanzados reexportados y exclusiones explícitas
+
+Documento: [docs/api.md](docs/api.md)
 
 ### Guía del query builder
 

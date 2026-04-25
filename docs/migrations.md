@@ -329,6 +329,7 @@ Para cambios delicados:
 
 ## Referencias relacionadas
 
+- API publica: [docs/api.md](api.md)
 - Guia `code-first`: [docs/code-first.md](code-first.md)
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

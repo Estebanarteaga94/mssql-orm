@@ -166,3 +166,5 @@ cargo run
 ## Siguiente paso
 
 Si quieres ver una integración más realista con HTTP, health checks, pool y relaciones entre tablas, revisa [examples/todo-app/README.md](../examples/todo-app/README.md).
+
+Para revisar el inventario de la API publica disponible en la crate raiz, consulta [docs/api.md](api.md).

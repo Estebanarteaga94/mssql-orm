@@ -233,6 +233,7 @@ Para esta etapa del release, conviene asumir estos limites:
 
 ## Referencias relacionadas
 
+- API publica: [docs/api.md](api.md)
 - Quickstart reproducible: [docs/quickstart.md](quickstart.md)
 - Query builder publico: [docs/query-builder.md](query-builder.md)
 - Relaciones y joins: [docs/relationships.md](relationships.md)

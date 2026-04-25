@@ -203,6 +203,7 @@ El AST sigue sin ser SQL. Si necesitas validar el SQL generado en tests de bajo 
 
 ## Referencias relacionadas
 
+- API publica: [docs/api.md](api.md)
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
 - Relaciones y joins: [docs/relationships.md](relationships.md)

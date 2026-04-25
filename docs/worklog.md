@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: inventario de API pública de la crate raíz
+
+- Se ejecutó la subtarea `Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz`.
+- Se revisó `crates/mssql-orm/src/lib.rs`, la `prelude`, los reexports de crates internas y las pruebas unitarias de exposición pública.
+- Se agregó `docs/api.md` como inventario mínimo de API pública publicada por `mssql-orm`.
+- La guía separa la ruta recomendada `mssql_orm::prelude::*` de módulos avanzados (`core`, `query`, `migrate`, `sqlserver`, `tiberius`) y enumera derives, contratos de modelo, `DbContext`, `DbSet`, query builder, Active Record, tracking experimental, migraciones, configuración operacional, Entity Policies y exclusiones explícitas.
+- Se enlazó la nueva guía desde `README.md`, `docs/code-first.md`, `docs/quickstart.md`, `docs/query-builder.md`, `docs/relationships.md`, `docs/transactions.md` y `docs/migrations.md`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La surface pública de la crate raíz queda documentada como índice mínimo de release, con límites explícitos y enlaces hacia las guías de uso específicas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm exposes_public_prelude`
+- `cargo test -p mssql-orm exposes_operational_configuration_surface`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y se validó con compilación completa más pruebas enfocadas de exposición pública.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas`.
+
 ### Sesión: guía pública de relaciones y joins explícitos
 
 - Se ejecutó la subtarea `Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas`.
