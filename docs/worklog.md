@@ -2,6 +2,34 @@
 
 ## 2026-04-25
 
+### Sesión: changelog inicial del release
+
+- Se ejecutó la subtarea `Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas`.
+- Se revisó la version del workspace (`0.1.0`), `docs/api.md`, `README.md`, `docs/tasks.md` y el estado operativo de Etapas 12 a 16.
+- Se agregó `CHANGELOG.md` con entrada `0.1.0 - Unreleased`.
+- El changelog enumera la surface disponible: workspace modular, derives, metadata, `DbContext`, `DbSet`, CRUD, query builder, SQL Server compiler, adaptador Tiberius, Active Record, concurrencia, tracking experimental, migraciones, CLI, ejemplo `todo-app` y documentación pública.
+- Se agregaron secciones dedicadas a `Entity Policies`, exclusiones explícitas, validación conocida y documentación de referencia.
+- Se enlazó `CHANGELOG.md` desde `README.md`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- El release inicial ya tiene changelog operativo con la surface disponible y los límites explícitos del estado actual.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental; la validación final completa queda como siguiente subtarea explícita de Etapa 15.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados`.
+
 ### Sesión: inventario de API pública de la crate raíz
 
 - Se ejecutó la subtarea `Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz`.

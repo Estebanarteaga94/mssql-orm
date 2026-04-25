@@ -260,6 +260,7 @@ El ejemplo `todo_app` también quedó validado contra SQL Server real con fixtur
 ## Documentación del Repositorio
 
 - plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md)
+- changelog: [CHANGELOG.md](CHANGELOG.md)
 - arquitectura: [docs/architecture/overview.md](docs/architecture/overview.md)
 - backlog: [docs/tasks.md](docs/tasks.md)
 - contexto operativo: [docs/context.md](docs/context.md)
