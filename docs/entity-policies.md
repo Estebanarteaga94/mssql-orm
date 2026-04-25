@@ -92,6 +92,89 @@ El concepto general cubre varias preocupaciones transversales, pero no todas per
 
 La primera policy que debe implementarse es auditoria como generacion de columnas. Las politicas que cambian comportamiento de lectura o escritura requieren diseno separado porque afectan `DbSet`, Active Record, transacciones y change tracking.
 
+## Alcance Inicial
+
+El alcance inicial de Etapa 16 es deliberadamente estrecho: probar que el modelo `code-first` puede reutilizar columnas transversales sin cambiar el pipeline de metadata, snapshots, diff ni DDL.
+
+La unica policy que entra al MVP de implementacion es `audit = Audit`.
+
+`timestamps = Timestamps` queda reconocida como policy de columnas generadas, pero no entra al primer corte de codigo. Debe evaluarse despues de `audit` para decidir si sera una policy separada, un alias reducido o una convencion encima del mismo contrato de metadata.
+
+`soft_delete = SoftDelete`, `tenant = TenantScope` y cualquier autollenado runtime quedan fuera del MVP.
+
+| Policy | Estado de Etapa 16 | Alcance permitido |
+| --- | --- | --- |
+| `audit = Audit` | MVP | Generar columnas normales de auditoria dentro de `EntityMetadata.columns`. |
+| `timestamps = Timestamps` | Diferido dentro de Etapa 16 | Disenar despues de `audit`; solo podria aportar columnas si no duplica nombres ni semantica. |
+| `soft_delete = SoftDelete` | Etapa 16+ | Requiere redisenar rutas de borrado, queries por defecto y Active Record. |
+| `tenant = TenantScope` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
+| `AuditProvider` o autollenado | Etapa 16+ | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
+
+## Que Significa Columnas Generadas
+
+Una policy de columnas generadas aporta metadata de columnas como si esas columnas hubieran sido declaradas manualmente en la entidad.
+
+Para el MVP, eso significa:
+
+- cada columna generada tiene `rust_field`, `column_name`, tipo SQL, nullability, defaults y flags `insertable`/`updatable`
+- el orden de columnas en `EntityMetadata.columns` debe ser estable
+- las columnas generadas participan en snapshots, diff y DDL sin rutas especiales
+- las colisiones con campos propios o con otras policies deben fallar en compile-time
+- las columnas generadas no implican autollenado de valores en operaciones de escritura
+
+Esta definicion permite validar la feature en migraciones antes de introducir comportamiento runtime.
+
+## Alcance de `audit = Audit`
+
+`audit = Audit` es una policy definida por el usuario mediante un tipo Rust reusable. Su responsabilidad inicial es describir columnas auditables.
+
+El usuario debe poder controlar el shape de esas columnas desde atributos de columna ya familiares en el proyecto, por ejemplo:
+
+- `column`
+- `length`
+- `nullable`
+- `default_sql`
+- `sql_type`
+- `precision`
+- `scale`
+
+El MVP no debe imponer nombres globales como unica forma valida. Nombres frecuentes como `created_at`, `created_by`, `updated_at` o `updated_by` deben surgir del struct reusable o de atributos explicitos.
+
+Reglas iniciales esperadas:
+
+- los campos de `Audit` se expanden despues de las columnas propias de la entidad, salvo que una tarea posterior documente otro orden estable
+- los campos de `Audit` no forman parte de la primary key de la entidad
+- los campos de `Audit` no crean foreign keys automaticamente
+- los campos de `Audit` no generan filtros ni hooks runtime
+- defaults SQL como `SYSUTCDATETIME()` son metadata de esquema, no valores calculados por Rust
+
+## Alcance de `timestamps = Timestamps`
+
+`timestamps = Timestamps` queda reservado como policy candidata para aportar solo columnas temporales, normalmente `created_at` y `updated_at`.
+
+No se implementa junto con `audit` en el primer corte porque puede solaparse con nombres y semantica de auditoria. Antes de implementarla se debe decidir:
+
+- si reutiliza el mismo contrato de metadata que `AuditFields`
+- si es un alias predefinido o un struct definido por el usuario
+- como se detectan colisiones con `audit = Audit`
+- si tendra defaults SQL o autollenado futuro
+
+Hasta resolver esas decisiones, `timestamps` no debe aparecer como API compilable.
+
+## Fuera del MVP
+
+Estas capacidades quedan explicitamente fuera del MVP aunque sean parte del concepto general de `Entity Policies`:
+
+- rellenar `created_at` o `updated_at` desde Rust al insertar o actualizar
+- leer usuario actual desde contexto, request o variable global
+- modificar `Insertable`, `Changeset` o `EntityPersist` para inyectar valores auditables
+- convertir `delete` en borrado logico
+- agregar filtros implicitos a `query()`, `find`, `count`, joins o Active Record
+- exigir tenant activo o validar `tenant_id` en inserts
+- alterar el comportamiento de `save_changes()`
+
+Cada una de esas capacidades necesita su propia tarea, pruebas y contrato publico antes de entrar al codigo.
+
 ## Limites Arquitectonicos
 
 Las tareas de implementacion deben respetar estos limites:
@@ -127,4 +210,3 @@ El concepto queda listo para pasar a implementacion cuando se cumplan estas cond
 - Las columnas generadas tienen orden estable y reglas de colision claras.
 - Las rutas existentes de snapshots, diff y DDL no reciben un pipeline paralelo.
 - Los comportamientos automaticos quedan explicitamente fuera del MVP o en tareas futuras.
-

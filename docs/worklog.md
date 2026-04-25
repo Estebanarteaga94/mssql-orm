@@ -2,6 +2,33 @@
 
 ## 2026-04-25
 
+### Sesión: documentar alcance inicial de `Entity Policies`
+
+- Se ejecutó la subtarea `Etapa 16: Documentar explícitamente el alcance inicial de Entity Policies: audit y timestamps como columnas generadas; soft_delete, tenant y comportamiento automático quedan diferidos hasta tener contrato estable`.
+- Se amplió `docs/entity-policies.md` con una matriz de alcance para `audit`, `timestamps`, `soft_delete`, `tenant` y autollenado runtime.
+- Quedó fijado que `audit = Audit` es la única policy que entra al MVP de implementación.
+- `timestamps = Timestamps` queda reconocida como policy candidata de columnas generadas, pero diferida hasta decidir si será una policy separada, un alias o una convención encima del mismo contrato de metadata.
+- `soft_delete = SoftDelete`, `tenant = TenantScope`, `AuditProvider` y todo autollenado quedan fuera del MVP porque requieren contratos runtime y afectan rutas públicas de escritura, borrado, consulta, seguridad o tracking.
+- Se documentó qué significa "columnas generadas": columnas normales con metadata completa, orden estable, participación en snapshots/diff/DDL y validación de colisiones en compile-time, sin inyección automática de valores.
+- Se actualizó `docs/context.md` con el alcance inicial vigente.
+
+### Resultado
+
+- El alcance inicial de Etapa 16 quedó explícito y separa claramente el MVP de metadata/DDL de las futuras policies con comportamiento automático.
+
+### Validación
+
+- `cargo fmt --all --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión fue documental; no se ejecutaron pruebas Rust porque no hubo cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Definir el contrato de metadata para políticas reutilizables en mssql-orm-core, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (ColumnMetadata) sin crear un segundo pipeline de esquema`.
+
 ### Sesión: diseñar concepto público de `Entity Policies`
 
 - Se ejecutó la subtarea `Etapa 16: Diseñar el concepto público de Entity Policies para reutilizar columnas y comportamiento transversal sin romper el enfoque code-first actual`.
