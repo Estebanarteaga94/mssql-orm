@@ -2,6 +2,47 @@
 
 ## 2026-04-25
 
+### Sesión: entidad auditada en todo-app
+
+- Se ejecutó la subtarea `Etapa 16: Actualizar el ejemplo todo-app o agregar fixture dedicado para mostrar al menos una entidad con #[orm(audit = Audit)] sin degradar el smoke existente`.
+- Se revisó `docs/entity-policies.md`, el dominio del ejemplo, `TodoAppDbContext`, el exportador `model_snapshot` y el fixture SQL de smoke.
+- Se decidió no aplicar `audit = TodoAudit` sobre `User`, `TodoList` ni `TodoItem` porque esas entidades ya tienen campos manuales como `created_at`; hacerlo activaría correctamente la validación de colisiones del macro.
+- Se agregó `TodoAudit` con `#[derive(AuditFields)]` en `examples/todo-app/src/domain.rs`.
+- Se agregó la entidad `AuditEvent` con `#[orm(table = "audit_events", schema = "todo", audit = TodoAudit)]`.
+- Se incorporó `audit_events: DbSet<AuditEvent>` en `TodoAppDbContext`.
+- Se reexportaron `AuditEvent` y `TodoAudit` desde la librería del ejemplo.
+- Se agregó cobertura unitaria de metadata para confirmar que las columnas auditables se expanden en orden estable dentro de `AuditEvent::metadata()`.
+- Se actualizó `examples/todo-app/scripts/smoke_setup.sql` para crear `todo.audit_events` sin insertar datos ni tocar endpoints existentes.
+- Se actualizó `examples/todo-app/README.md` para documentar la entidad auditada del ejemplo.
+- Se confirmó con el exportador `model_snapshot` que `audit_events`, `created_by_user_id` y `updated_by` aparecen en el snapshot generado.
+- Se actualizó `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+
+### Resultado
+
+- `todo-app` ahora muestra una entidad code-first con `#[orm(audit = TodoAudit)]` sin cambiar los endpoints HTTP ni las queries de smoke existentes.
+- El autollenado runtime de auditoría sigue fuera del MVP; la entidad muestra columnas de metadata/schema.
+
+### Validación
+
+- `cargo fmt --manifest-path examples/todo-app/Cargo.toml --all`
+- `cargo fmt --manifest-path examples/todo-app/Cargo.toml --all --check`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml domain::tests::audit_event_metadata_expands_reusable_audit_policy_columns`
+- `cargo clippy --manifest-path examples/todo-app/Cargo.toml --all-targets --all-features`
+- `cargo check --workspace`
+- `cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --manifest-path examples/todo-app/Cargo.toml --all-targets --all-features` terminó con código 0, pero mantiene advertencias no bloqueantes preexistentes en el ejemplo (`manual_async_fn`, `bool_assert_comparison`, `iter_overeager_cloned`).
+- No se ejecutó smoke real contra SQL Server porque esta subtarea no requería `DATABASE_URL`; el fixture SQL quedó actualizado para que el smoke manual siga reflejando el modelo.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que migration add --snapshot-bin ... capture columnas auditables en model_snapshot.json`.
+
 ### Sesión: validación final de release Etapa 15
 
 - Se ejecutó la subtarea `Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados`.

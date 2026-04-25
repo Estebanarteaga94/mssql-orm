@@ -10,6 +10,12 @@ BEGIN
 END;
 GO
 
+IF OBJECT_ID('todo.audit_events', 'U') IS NOT NULL
+BEGIN
+    DROP TABLE todo.audit_events;
+END;
+GO
+
 IF OBJECT_ID('todo.todo_lists', 'U') IS NOT NULL
 BEGIN
     DROP TABLE todo.todo_lists;
@@ -71,6 +77,17 @@ CREATE INDEX ix_todo_lists_owner_title ON todo.todo_lists(owner_user_id, title);
 GO
 
 CREATE INDEX ix_todo_items_list_position ON todo.todo_items(list_id, position);
+GO
+
+CREATE TABLE todo.audit_events (
+    id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    event_name NVARCHAR(80) NOT NULL,
+    subject NVARCHAR(200) NOT NULL,
+    created_at DATETIME2 NOT NULL CONSTRAINT df_audit_events_created_at DEFAULT SYSUTCDATETIME(),
+    created_by_user_id BIGINT NULL,
+    updated_at DATETIME2 NULL CONSTRAINT df_audit_events_updated_at DEFAULT SYSUTCDATETIME(),
+    updated_by NVARCHAR(120) NULL
+);
 GO
 
 SET IDENTITY_INSERT todo.users ON;

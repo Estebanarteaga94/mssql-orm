@@ -1,4 +1,4 @@
-use crate::domain::{TodoItem, TodoList, User};
+use crate::domain::{AuditEvent, TodoItem, TodoList, User};
 use mssql_orm::prelude::*;
 
 #[derive(DbContext, Debug, Clone)]
@@ -6,4 +6,5 @@ pub struct TodoAppDbContext {
     pub users: DbSet<User>,
     pub todo_lists: DbSet<TodoList>,
     pub todo_items: DbSet<TodoItem>,
+    pub audit_events: DbSet<AuditEvent>,
 }

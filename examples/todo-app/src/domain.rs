@@ -1,5 +1,25 @@
 use mssql_orm::prelude::*;
 
+#[derive(AuditFields)]
+pub struct TodoAudit {
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(sql_type = "datetime2")]
+    #[orm(updatable = false)]
+    pub created_at: String,
+
+    #[orm(column = "created_by_user_id")]
+    pub created_by: Option<i64>,
+
+    #[orm(nullable)]
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(sql_type = "datetime2")]
+    pub updated_at: Option<String>,
+
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    pub updated_by: Option<String>,
+}
+
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "users", schema = "todo")]
 pub struct User {
@@ -87,10 +107,24 @@ pub struct TodoItem {
     pub version: Vec<u8>,
 }
 
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "audit_events", schema = "todo", audit = TodoAudit)]
+pub struct AuditEvent {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(length = 80)]
+    pub event_name: String,
+
+    #[orm(length = 200)]
+    pub subject: String,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{TodoItem, TodoList, User};
-    use mssql_orm::prelude::{Entity, ReferentialAction};
+    use super::{AuditEvent, TodoAudit, TodoItem, TodoList, User};
+    use mssql_orm::prelude::{Entity, EntityPolicy, ReferentialAction, SqlServerType};
 
     #[test]
     fn todo_user_metadata_exposes_expected_table_and_columns() {
@@ -202,6 +236,73 @@ mod tests {
         assert_eq!(
             TodoItem::completed_by_user_id.column_name(),
             "completed_by_user_id"
+        );
+    }
+
+    #[test]
+    fn audit_event_metadata_expands_reusable_audit_policy_columns() {
+        let audit_metadata = TodoAudit::metadata();
+        let metadata = AuditEvent::metadata();
+
+        assert_eq!(audit_metadata.name, "audit");
+        assert_eq!(
+            audit_metadata
+                .columns
+                .iter()
+                .map(|column| column.column_name)
+                .collect::<Vec<_>>(),
+            vec![
+                "created_at",
+                "created_by_user_id",
+                "updated_at",
+                "updated_by"
+            ]
+        );
+        assert_eq!(metadata.schema, "todo");
+        assert_eq!(metadata.table, "audit_events");
+        assert_eq!(metadata.columns.len(), 7);
+        assert_eq!(
+            metadata
+                .columns
+                .iter()
+                .map(|column| column.column_name)
+                .collect::<Vec<_>>(),
+            vec![
+                "id",
+                "event_name",
+                "subject",
+                "created_at",
+                "created_by_user_id",
+                "updated_at",
+                "updated_by"
+            ]
+        );
+        assert_eq!(
+            metadata
+                .column("created_at")
+                .expect("created_at audit column")
+                .sql_type,
+            SqlServerType::DateTime2
+        );
+        assert_eq!(
+            metadata
+                .column("created_at")
+                .expect("created_at audit column")
+                .default_sql,
+            Some("SYSUTCDATETIME()")
+        );
+        assert!(
+            metadata
+                .column("updated_at")
+                .expect("updated_at audit column")
+                .nullable
+        );
+        assert_eq!(
+            metadata
+                .column("updated_by")
+                .expect("updated_by audit column")
+                .max_length,
+            Some(120)
         );
     }
 }

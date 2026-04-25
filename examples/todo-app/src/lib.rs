@@ -19,7 +19,7 @@ pub mod http;
 pub mod queries;
 
 pub use db::TodoAppDbContext;
-pub use domain::{TodoItem, TodoList, User as TodoUser};
+pub use domain::{AuditEvent, TodoAudit, TodoItem, TodoList, User as TodoUser};
 pub use http::{
     OpenItemsCountResponse, PageParams, PreviewParams, TodoAppApi, TodoItemPreviewResponse,
     TodoListResponse, count_open_items_handler, get_todo_list_handler, list_user_lists_handler,
