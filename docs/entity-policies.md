@@ -76,7 +76,7 @@ El contrato no agrega una coleccion de policies a `EntityMetadata` en esta etapa
 
 Las siguientes tareas deben definir como `AuditFields` implementa o reutiliza `EntityPolicy`, como se validan colisiones y como el derive `Entity` incorpora esas columnas al arreglo final de `EntityMetadata.columns`.
 
-Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable. La integracion con `#[derive(Entity)]` mediante `#[orm(audit = Audit)]` sigue pendiente.
+Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]` a nivel sintactico, pero la expansion de esas columnas dentro de `EntityMetadata.columns` sigue pendiente.
 
 ## Forma Publica Esperada
 

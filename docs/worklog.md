@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: aceptar `#[orm(audit = Audit)]` en `Entity`
+
+- Se ejecutó la subtarea `Etapa 16: Extender #[derive(Entity)] para aceptar #[orm(audit = Audit)] a nivel de entidad sin afectar entidades existentes que no declaran auditoría`.
+- `parse_entity_config(...)` ahora acepta `audit = <Path>` a nivel de entidad y lo guarda en la configuración del derive.
+- En este corte el atributo se parsea pero no se consume para expandir columnas; esa expansión queda en la subtarea siguiente.
+- Se agregó el fixture `tests/ui/entity_audit_attr_valid.rs`, que valida que una entidad con `#[orm(audit = Audit)]` compila usando solo `mssql_orm::prelude::*`.
+- El fixture fija explícitamente que, por ahora, `EntityMetadata.columns` conserva solo las columnas propias de la entidad y no incluye todavía columnas auditables.
+- Se actualizó `docs/context.md` y `docs/entity-policies.md` con el estado real.
+
+### Resultado
+
+- La sintaxis pública `#[orm(audit = Audit)]` ya es aceptada por `#[derive(Entity)]` sin alterar entidades existentes ni adelantar la expansión de columnas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-macros`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- La expansión real de columnas auditables dentro de `EntityMetadata.columns` queda pendiente.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Hacer que #[orm(audit = Audit)] expanda las columnas auditables dentro de EntityMetadata.columns en orden estable y documentado`.
+
 ### Sesión: validar compile-time `AuditFields`
 
 - Se ejecutó la subtarea `Etapa 16: Agregar validaciones compile-time para AuditFields: solo structs con campos nombrados, tipos con SqlTypeMapping, atributos #[orm(...)] permitidos, nombres de columnas no vacíos y errores claros en casos inválidos`.

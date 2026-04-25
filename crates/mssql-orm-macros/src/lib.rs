@@ -147,6 +147,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         schema: entity_schema,
         renamed_from: entity_renamed_from,
         indexes: entity_indexes,
+        audit: _entity_audit,
     } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
@@ -1061,6 +1062,8 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                 config.schema = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("renamed_from") {
                 config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("audit") {
+                config.audit = Some(meta.value()?.parse()?);
             } else if meta.path.is_ident("index") {
                 config.indexes.push(parse_entity_index_config(meta)?);
             } else {
@@ -1731,6 +1734,7 @@ struct EntityConfig {
     schema: Option<LitStr>,
     renamed_from: Option<LitStr>,
     indexes: Vec<EntityIndexConfig>,
+    audit: Option<Path>,
 }
 
 #[derive(Default)]
