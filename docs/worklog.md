@@ -2,6 +2,36 @@
 
 ## 2026-04-25
 
+### Sesión: validación snapshot-bin con columnas auditables en todo-app
+
+- Se ejecutó la subtarea `Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que migration add --snapshot-bin ... capture columnas auditables en model_snapshot.json`.
+- Se revisó el exportador existente `examples/todo-app/src/bin/model_snapshot.rs`, el script `examples/todo-app/scripts/migration_e2e.sh` y la documentación del ejemplo.
+- No fue necesario crear un binario nuevo: `model_snapshot` ya exporta `TodoAppDbContext`, que ahora incluye `audit_events: DbSet<AuditEvent>`.
+- Se reforzó `migration_e2e.sh` para validar que la migración inicial generada por `migration add --snapshot-bin model_snapshot --manifest-path examples/todo-app/Cargo.toml` contenga en `model_snapshot.json` la tabla `audit_events` y las columnas `created_at`, `created_by_user_id`, `updated_at` y `updated_by`.
+- El mismo script valida que `up.sql` contenga `CREATE TABLE [todo].[audit_events]`.
+- Se actualizó `examples/todo-app/README.md` para dejar documentada esa validación.
+- Se actualizó `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+
+### Resultado
+
+- El flujo reproducible del ejemplo ahora prueba que `migration add --snapshot-bin ...` captura columnas auditables dentro del `model_snapshot.json` versionado.
+
+### Validación
+
+- `examples/todo-app/scripts/migration_e2e.sh`
+- `cargo fmt --manifest-path examples/todo-app/Cargo.toml --all --check`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `migration_e2e.sh` omitió la aplicación real con `sqlcmd` porque `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER` y `MSSQL_ORM_SQLCMD_PASSWORD` no están configuradas; la tarea solo requería validar el snapshot y artefactos locales generados.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Mantener fuera del MVP el autollenado de created_by, updated_by, created_at y updated_at desde DbSet::insert, DbSet::update, Active Record y save_changes`.
+
 ### Sesión: entidad auditada en todo-app
 
 - Se ejecutó la subtarea `Etapa 16: Actualizar el ejemplo todo-app o agregar fixture dedicado para mostrar al menos una entidad con #[orm(audit = Audit)] sin degradar el smoke existente`.

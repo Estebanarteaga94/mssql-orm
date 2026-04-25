@@ -23,8 +23,33 @@ mkdir -p "${WORK_ROOT}"
     "${CLI_BIN}" database update > database_update.sql
 )
 
+INITIAL_MIGRATION_DIR="$(find "${WORK_ROOT}/migrations" -maxdepth 1 -type d -name '*_createtodoschema' | sort | tail -n 1)"
+if [[ -z "${INITIAL_MIGRATION_DIR}" ]]; then
+    printf 'Expected initial migration directory was not generated.\n' >&2
+    exit 1
+fi
+
+for expected in \
+    '"name": "audit_events"' \
+    '"name": "created_at"' \
+    '"name": "created_by_user_id"' \
+    '"name": "updated_at"' \
+    '"name": "updated_by"'
+do
+    if ! grep -Fq "${expected}" "${INITIAL_MIGRATION_DIR}/model_snapshot.json"; then
+        printf 'Expected %s in %s/model_snapshot.json\n' "${expected}" "${INITIAL_MIGRATION_DIR}" >&2
+        exit 1
+    fi
+done
+
+if ! grep -Fq 'CREATE TABLE [todo].[audit_events]' "${INITIAL_MIGRATION_DIR}/up.sql"; then
+    printf 'Expected audit_events table DDL in %s/up.sql\n' "${INITIAL_MIGRATION_DIR}" >&2
+    exit 1
+fi
+
 printf 'Migration workspace: %s\n' "${WORK_ROOT}"
 printf 'Generated script: %s\n' "${WORK_ROOT}/database_update.sql"
+printf 'Validated audit snapshot: %s/model_snapshot.json\n' "${INITIAL_MIGRATION_DIR}"
 
 if [[ -n "${MSSQL_ORM_SQLCMD_SERVER:-}" && -n "${MSSQL_ORM_SQLCMD_USER:-}" && -n "${MSSQL_ORM_SQLCMD_PASSWORD:-}" ]]; then
     sqlcmd -S "${MSSQL_ORM_SQLCMD_SERVER}" \

@@ -77,7 +77,7 @@ También hay un script reproducible que genera una migración inicial desde el m
 examples/todo-app/scripts/migration_e2e.sh
 ```
 
-El script imprime el directorio temporal usado y el `database_update.sql` generado. Si configuras `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER`, `MSSQL_ORM_SQLCMD_PASSWORD` y opcionalmente `MSSQL_ORM_SQLCMD_DATABASE`, también intenta aplicar el script con `sqlcmd`.
+El script valida además que `model_snapshot.json` capture `audit_events` y las columnas auditables generadas por `TodoAudit`. También imprime el directorio temporal usado y el `database_update.sql` generado. Si configuras `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER`, `MSSQL_ORM_SQLCMD_PASSWORD` y opcionalmente `MSSQL_ORM_SQLCMD_DATABASE`, también intenta aplicar el script con `sqlcmd`.
 
 Nota operativa:
 
