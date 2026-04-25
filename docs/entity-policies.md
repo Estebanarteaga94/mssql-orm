@@ -172,7 +172,6 @@ Una policy no debe introducir un DSL alternativo ni una capa de configuracion fl
 El concepto general cubre varias preocupaciones transversales, pero no todas pertenecen al MVP:
 
 - `audit = Audit`: columnas como `created_at`, `created_by`, `updated_at`, `updated_by`.
-- `concurrency = RowVersion`: forma declarativa futura sobre el soporte actual de `#[orm(rowversion)]`.
 - `soft_delete = SoftDelete`: columnas y semantica de borrado logico.
 - `tenant = TenantScope`: columna y filtros obligatorios de seguridad por tenant.
 
@@ -192,6 +191,42 @@ La unica policy que entra al MVP de implementacion es `audit = Audit`. Los casos
 | `soft_delete = SoftDelete` | Etapa 16+ | Requiere redisenar rutas de borrado, queries por defecto y Active Record. |
 | `tenant = TenantScope` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
 | `AuditProvider` o autollenado | Etapa 16+ | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
+
+## Concurrencia y `rowversion`
+
+La concurrencia optimista no debe modelarse como una `Entity Policy` separada.
+
+El soporte vigente ya esta alineado con el plan maestro mediante un atributo de columna:
+
+```rust
+#[derive(Entity, Debug, Clone)]
+struct Customer {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(rowversion)]
+    version: Vec<u8>,
+}
+```
+
+Ese shape debe seguir siendo la forma canonica porque la columna `rowversion` necesita existir como campo Rust visible en la entidad. La entidad materializada debe conservar el token devuelto por SQL Server para que `EntityPersist::concurrency_token()`, `Changeset::concurrency_token()`, Active Record y `save_changes()` puedan emitir predicates protegidos como:
+
+```sql
+WHERE [id] = @P1 AND [version] = @P2
+```
+
+Una policy oculta tipo `#[orm(concurrency = RowVersion)]` aportaria una columna sin campo Rust visible, igual que `audit = Audit`. Eso no sirve para la concurrencia actual: sin token visible en la entidad no hay valor que comparar en updates/deletes posteriores, y el resultado seria un segundo pipeline o una semantica incompleta.
+
+Decision vigente:
+
+- no implementar `concurrency = RowVersion` como policy declarativa
+- mantener `#[orm(rowversion)]` como API publica canonica
+- preservar `Vec<u8>` como tipo requerido para el token
+- preservar `OrmError::ConcurrencyConflict` como error publico estable cuando el token no coincide y la primary key todavia existe
+- no mover reglas de concurrencia a `AuditProvider`, `EntityPolicy`, `mssql-orm-query`, `mssql-orm-sqlserver` ni `mssql-orm-tiberius`
+
+Si en el futuro se quiere mejorar ergonomia, debe hacerse sobre el atributo de campo existente, por ejemplo con documentacion o helpers de derives, no con una policy que genere columnas ocultas.
 
 ## Que Significa Columnas Generadas
 

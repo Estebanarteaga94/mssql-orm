@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
 - [ ] Etapa 16+: Evaluar `soft_delete = SoftDelete` como cambio semántico explícito de `delete`, `entity.delete(&db)`, queries por defecto y migraciones, documentando sus riesgos antes de implementarlo
 - [ ] Etapa 16+: Diseñar `soft_delete = SoftDelete` para que `DbSet::delete(...)`, `entity.delete(&db)`, `remove_tracked(...)` y `save_changes()` no emitan `DELETE` físico cuando la entidad tenga esa política; deben emitir `UPDATE` sobre columnas como `deleted_at`/`deleted_by` y respetar `rowversion`/`ConcurrencyConflict`
 - [ ] Etapa 16+: Definir cómo consultar entidades con `soft_delete`: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran `soft_delete`
@@ -15,6 +14,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
 - [x] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
 - [x] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [x] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas

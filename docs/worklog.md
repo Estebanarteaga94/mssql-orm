@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: evaluación de `concurrency = RowVersion`
+
+- Se ejecutó la subtarea `Etapa 16+: Evaluar concurrency = RowVersion como política declarativa sobre el soporte existente de #[orm(rowversion)], sin romper ConcurrencyConflict`.
+- Se confirmó que el plan maestro no está en la raíz con el nombre solicitado; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md`, `docs/entity-policies.md`, el plan maestro y las rutas reales de concurrencia en `crates/mssql-orm/src/context.rs`, `active_record.rs`, `lib.rs` y pruebas asociadas.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se actualizó `docs/entity-policies.md` con la decisión: no implementar `concurrency = RowVersion` como `Entity Policy`.
+- La razón técnica quedó documentada: la concurrencia optimista necesita un campo Rust visible `#[orm(rowversion)] version: Vec<u8>` para materializar el token devuelto por SQL Server y reutilizarlo en `Changeset::concurrency_token()`, `EntityPersist::concurrency_token()`, Active Record y `save_changes()`.
+- Se actualizó `docs/context.md` para reflejar que `#[orm(rowversion)]` sigue siendo la API canónica y que `OrmError::ConcurrencyConflict` debe preservarse en las rutas actuales.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- La concurrencia optimista queda explícitamente fuera de `Entity Policies`. No hay API nueva pendiente para `concurrency = RowVersion`; el siguiente foco del backlog vivo pasa a `soft_delete = SoftDelete`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue de evaluación/diseño documental y no cambió código, macros ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Evaluar soft_delete = SoftDelete como cambio semántico explícito de delete, entity.delete(&db), queries por defecto y migraciones, documentando sus riesgos antes de implementarlo`.
+
 ### Sesión: retirar policy temporal del roadmap
 
 - Se atendió la decisión de producto de no implementar una policy temporal separada porque `audit = Audit` ya puede cubrir el caso con un struct reducido que solo declare `created_at` y `updated_at`.
