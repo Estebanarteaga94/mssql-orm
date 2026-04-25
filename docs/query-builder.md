@@ -205,5 +205,6 @@ El AST sigue sin ser SQL. Si necesitas validar el SQL generado en tests de bajo 
 
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
+- Relaciones y joins: [docs/relationships.md](relationships.md)
 - Ejemplo real con queries: [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

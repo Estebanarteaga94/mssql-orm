@@ -235,6 +235,7 @@ Para esta etapa del release, conviene asumir estos limites:
 
 - Quickstart reproducible: [docs/quickstart.md](quickstart.md)
 - Query builder publico: [docs/query-builder.md](query-builder.md)
+- Relaciones y joins: [docs/relationships.md](relationships.md)
 - Transacciones runtime: [docs/transactions.md](transactions.md)
 - Ejemplo real con relaciones y HTTP: [examples/todo-app/README.md](../examples/todo-app/README.md)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

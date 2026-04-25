@@ -83,6 +83,7 @@ async fn main() -> Result<(), OrmError> {
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
+Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
 Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
 
 ## Arquitectura
@@ -150,6 +151,19 @@ Guía práctica para:
 - entender límites actuales como aliases, proyección parcial y conteos con joins
 
 Documento: [docs/query-builder.md](docs/query-builder.md)
+
+### Guía de relaciones y joins
+
+Guía práctica para:
+
+- declarar `foreign_key` desde entidades dependientes
+- usar la sintaxis estructurada `foreign_key(entity = User, column = id)`
+- configurar `on_delete`
+- inspeccionar `ForeignKeyMetadata`
+- escribir `inner_join` y `left_join` explícitos
+- entender límites actuales como aliases, navigation properties y proyecciones
+
+Documento: [docs/relationships.md](docs/relationships.md)
 
 ### Guía de transacciones
 

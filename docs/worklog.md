@@ -2,6 +2,37 @@
 
 ## 2026-04-25
 
+### Sesión: guía pública de relaciones y joins explícitos
+
+- Se ejecutó la subtarea `Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas`.
+- Se revisó la implementación real de `foreign_key` en `#[derive(Entity)]`, los helpers de `ForeignKeyMetadata`, el AST de joins, la compilación SQL Server y el dominio/queries de `examples/todo-app`.
+- Se agregó `docs/relationships.md` como guía pública de relaciones code-first y joins explícitos.
+- La guía documenta la sintaxis estructurada `#[orm(foreign_key(entity = User, column = id))]`, la sintaxis string legacy, nombres generados o explícitos de constraints, `on_delete`, metadata derivada, migraciones y DDL.
+- También documenta cómo escribir `inner_join::<T>(...)` y `left_join::<T>(...)` con `Predicate::eq(Expr::from(...), Expr::from(...))`.
+- Se dejaron explícitos los límites actuales: no hay navigation properties, lazy/eager loading, aliases, joins inferidos, proyecciones parciales públicas ni foreign keys compuestas derivadas automáticamente desde atributos públicos.
+- Se enlazó la nueva guía desde `README.md`, `docs/code-first.md` y `docs/query-builder.md`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La guía pública de relaciones queda disponible y alineada con la API real de metadata relacional, migraciones y joins explícitos.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test stage9_relationship_metadata`
+- `cargo test -p mssql-orm --test stage6_public_query_builder`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y se validó con compilación completa más pruebas enfocadas de relaciones y query builder público.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz`.
+
 ### Sesión: guía pública de transacciones runtime
 
 - Se ejecutó la subtarea `Etapa 15: Preparar guía de transacciones y límites operativos de db.transaction(...)`.
