@@ -8,7 +8,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Hacer que `#[orm(audit = Audit)]` expanda las columnas auditables dentro de `EntityMetadata.columns` en orden estable y documentado
 - [ ] Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable
 - [ ] Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de `audit` + `timestamps`
 - [ ] Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como `Todo::created_at`
@@ -45,6 +44,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Hacer que `#[orm(audit = Audit)]` expanda las columnas auditables dentro de `EntityMetadata.columns` en orden estable y documentado
 - [x] Etapa 16: Extender `#[derive(Entity)]` para aceptar `#[orm(audit = Audit)]` a nivel de entidad sin afectar entidades existentes que no declaran auditoría
 - [x] Etapa 16: Agregar validaciones compile-time para `AuditFields`: solo structs con campos nombrados, tipos con `SqlTypeMapping`, atributos `#[orm(...)]` permitidos, nombres de columnas no vacíos y errores claros en casos inválidos
 - [x] Etapa 16: Implementar `#[derive(AuditFields)]` o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable

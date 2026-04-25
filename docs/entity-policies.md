@@ -74,9 +74,9 @@ La responsabilidad del contrato es minima: una policy reusable expone un nombre 
 
 El contrato no agrega una coleccion de policies a `EntityMetadata` en esta etapa. Esa decision es intencional: el dato que debe circular por snapshots, diff y DDL es la columna resultante, no la policy que la produjo.
 
-Las siguientes tareas deben definir como `AuditFields` implementa o reutiliza `EntityPolicy`, como se validan colisiones y como el derive `Entity` incorpora esas columnas al arreglo final de `EntityMetadata.columns`.
+Las siguientes tareas deben definir como se validan colisiones entre columnas propias y columnas generadas, y como se cubre el pipeline de snapshots, diff y DDL con esas columnas ordinarias.
 
-Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]` a nivel sintactico, pero la expansion de esas columnas dentro de `EntityMetadata.columns` sigue pendiente.
+Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]` y expande esas columnas dentro de `EntityMetadata.columns`.
 
 ## Forma Publica Esperada
 
@@ -199,7 +199,7 @@ Una policy de columnas generadas aporta metadata de columnas como si esas column
 Para el MVP, eso significa:
 
 - cada columna generada tiene `rust_field`, `column_name`, tipo SQL, nullability, defaults y flags `insertable`/`updatable`
-- el orden de columnas en `EntityMetadata.columns` debe ser estable
+- el orden de columnas en `EntityMetadata.columns` es estable: primero columnas propias de la entidad en orden de declaracion Rust, despues columnas aportadas por `AuditFields` en orden de declaracion Rust
 - las columnas generadas participan en snapshots, diff y DDL sin rutas especiales
 - las colisiones con campos propios o con otras policies deben fallar en compile-time
 - las columnas generadas no implican autollenado de valores en operaciones de escritura
@@ -222,13 +222,14 @@ El usuario debe poder controlar el shape de esas columnas desde atributos de col
 
 El MVP no debe imponer nombres globales como unica forma valida. Nombres frecuentes como `created_at`, `created_by`, `updated_at` o `updated_by` deben surgir del struct reusable o de atributos explicitos.
 
-Reglas iniciales esperadas:
+Reglas iniciales:
 
-- los campos de `Audit` se expanden despues de las columnas propias de la entidad, salvo que una tarea posterior documente otro orden estable
+- los campos de `Audit` se expanden despues de las columnas propias de la entidad, preservando el orden de declaracion del struct de auditoria
 - los campos de `Audit` no forman parte de la primary key de la entidad
 - los campos de `Audit` no crean foreign keys automaticamente
 - los campos de `Audit` no generan filtros ni hooks runtime
 - defaults SQL como `SYSUTCDATETIME()` son metadata de esquema, no valores calculados por Rust
+- en este corte, las columnas auditables son columnas de metadata/schema; no generan campos Rust visibles dentro de la entidad ni simbolos asociados como `Todo::created_at`
 
 ## Shape de `AuditFields`
 

@@ -147,7 +147,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         schema: entity_schema,
         renamed_from: entity_renamed_from,
         indexes: entity_indexes,
-        audit: _entity_audit,
+        audit: entity_audit,
     } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
@@ -500,20 +500,64 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
     });
 
+    let (metadata_static, metadata_expr) = if let Some(audit) = entity_audit {
+        (
+            quote! {
+                static #metadata_ident: ::std::sync::OnceLock<::mssql_orm::core::EntityMetadata> =
+                    ::std::sync::OnceLock::new();
+            },
+            quote! {
+                #metadata_ident.get_or_init(|| {
+                    let mut columns = ::std::vec::Vec::new();
+                    columns.extend_from_slice(&[#(#columns),*]);
+                    columns.extend_from_slice(
+                        <#audit as ::mssql_orm::core::EntityPolicy>::columns()
+                    );
+                    let columns: &'static [::mssql_orm::core::ColumnMetadata] =
+                        ::std::boxed::Box::leak(columns.into_boxed_slice());
+
+                    ::mssql_orm::core::EntityMetadata {
+                        rust_name: #rust_name,
+                        schema: #schema,
+                        table: #table,
+                        renamed_from: #renamed_from,
+                        columns,
+                        primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
+                            None,
+                            &[#(#primary_key_columns),*],
+                        ),
+                        indexes: &[#(#indexes),*],
+                        foreign_keys: &[#(#foreign_keys),*],
+                    }
+                })
+            },
+        )
+    } else {
+        (
+            quote! {
+                static #metadata_ident: ::mssql_orm::core::EntityMetadata =
+                    ::mssql_orm::core::EntityMetadata {
+                        rust_name: #rust_name,
+                        schema: #schema,
+                        table: #table,
+                        renamed_from: #renamed_from,
+                        columns: &[#(#columns),*],
+                        primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
+                            None,
+                            &[#(#primary_key_columns),*],
+                        ),
+                        indexes: &[#(#indexes),*],
+                        foreign_keys: &[#(#foreign_keys),*],
+                    };
+            },
+            quote! {
+                &#metadata_ident
+            },
+        )
+    };
+
     Ok(quote! {
-        static #metadata_ident: ::mssql_orm::core::EntityMetadata = ::mssql_orm::core::EntityMetadata {
-            rust_name: #rust_name,
-            schema: #schema,
-            table: #table,
-            renamed_from: #renamed_from,
-            columns: &[#(#columns),*],
-            primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
-                None,
-                &[#(#primary_key_columns),*],
-            ),
-            indexes: &[#(#indexes),*],
-            foreign_keys: &[#(#foreign_keys),*],
-        };
+        #metadata_static
 
         #[allow(non_upper_case_globals)]
         impl #ident {
@@ -528,7 +572,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
 
         impl ::mssql_orm::core::Entity for #ident {
             fn metadata() -> &'static ::mssql_orm::core::EntityMetadata {
-                &#metadata_ident
+                #metadata_expr
             }
         }
 

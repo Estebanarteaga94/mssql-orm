@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: expandir columnas auditables en metadata de entidad
+
+- Se ejecutó la subtarea `Etapa 16: Hacer que #[orm(audit = Audit)] expanda las columnas auditables dentro de EntityMetadata.columns en orden estable y documentado`.
+- El plan maestro requerido por la sesión está en `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz.
+- `#[derive(Entity)]` ahora usa el path de `audit = Audit` para exigir que el tipo implemente `EntityPolicy` y anexar sus columnas a la metadata de la entidad.
+- Para entidades con auditoría, la metadata se construye una vez con `OnceLock`, combinando columnas propias y columnas de policy en un slice estático.
+- El orden estable queda documentado como columnas propias de la entidad en orden de declaración Rust, seguidas por columnas de `AuditFields` en orden de declaración Rust.
+- Las entidades sin `audit` conservan el camino anterior de `static EntityMetadata`.
+- Se actualizó el fixture `trybuild` `entity_audit_attr_valid.rs` para esperar la columna `created_at`.
+- Se agregó la prueba ejecutable `stage16_entity_policies.rs` para verificar schema, table, columnas propias, columnas auditables, defaults, nullability, flags `insertable`/`updatable` y orden estable.
+- Se actualizó `docs/entity-policies.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- `#[orm(audit = Audit)]` ya expande columnas auditables como `ColumnMetadata` normales dentro de `EntityMetadata.columns`.
+- En este corte las columnas auditables son metadata/schema: no generan campos Rust visibles en la entidad ni símbolos asociados como `Todo::created_at`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-macros`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- La validación de colisiones entre columnas propias y auditables queda pendiente para la siguiente subtarea.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable`.
+
 ### Sesión: aceptar `#[orm(audit = Audit)]` en `Entity`
 
 - Se ejecutó la subtarea `Etapa 16: Extender #[derive(Entity)] para aceptar #[orm(audit = Audit)] a nivel de entidad sin afectar entidades existentes que no declaran auditoría`.

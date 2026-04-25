@@ -24,6 +24,9 @@ fn main() {
 
     assert_eq!(metadata.schema, "audit");
     assert_eq!(metadata.table, "audited_entities");
-    assert_eq!(metadata.columns.len(), 2);
-    assert!(metadata.column("created_at").is_none());
+    assert_eq!(metadata.columns.len(), 3);
+    assert_eq!(metadata.columns[0].column_name, "id");
+    assert_eq!(metadata.columns[1].column_name, "name");
+    assert_eq!(metadata.columns[2].column_name, "created_at");
+    assert!(metadata.column("created_at").is_some());
 }
