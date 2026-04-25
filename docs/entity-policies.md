@@ -456,11 +456,55 @@ Puntos reales de integracion:
 - `Changeset<E>::changes()` sigue siendo responsable de extraer cambios explicitos del payload de update.
 - `EntityPersist::insert_values()` y `EntityPersist::update_changes()` siguen siendo la fuente para Active Record y `save_changes()`.
 - `DbSet::insert(...)` y `DbSet::update(...)` son los puntos publicos donde esos `Vec<ColumnValue>` se convierten en queries.
-- Las rutas internas que ya existen para valores crudos (`insert_query_values`, `update_query_changes`, `RawInsertable` y `RawChangeset`) son el lugar natural para aplicar una transformacion comun antes de construir `InsertQuery` o `UpdateQuery`.
+- Las rutas internas que ya existen para valores crudos (`insert_entity_values`, `update_entity_values_by_sql_value`, `insert_query_values`, `update_query_sql_value`, `RawInsertable` y `RawChangeset`) son el lugar natural para aplicar una transformacion comun antes de construir `InsertQuery` o `UpdateQuery`.
 
 Por esa razon, una implementacion futura no deberia modificar los derives `Insertable`, `Changeset` ni `Entity` para inyectar valores auditables. Esos derives deben seguir siendo conversiones puras desde structs Rust hacia `ColumnValue`. El autollenado debe vivir en la capa publica de persistencia, donde ya convergen `DbSet`, Active Record y change tracking.
 
 Tampoco debe agregarse logica a `mssql-orm-query`: esa crate solo recibe `InsertQuery` o `UpdateQuery` ya armados con valores. `mssql-orm-sqlserver` debe seguir compilando el AST sin saber si un valor vino del usuario o del provider. `mssql-orm-tiberius` debe seguir ejecutando queries parametrizadas sin interpretar metadata de auditoria.
+
+### Mutacion de `Vec<ColumnValue>`
+
+La implementacion futura debe introducir una unica transformacion interna en la crate publica, conceptualmente:
+
+```rust
+fn apply_audit_values<E: Entity>(
+    operation: AuditOperation,
+    values: Vec<ColumnValue>,
+    audit_columns: &'static [ColumnMetadata],
+    audit_provider: Option<&dyn AuditProvider>,
+    request_values: &AuditRequestValues,
+) -> Result<Vec<ColumnValue>, OrmError>;
+```
+
+El nombre puede cambiar, pero la responsabilidad no: recibe los valores explicitos ya producidos por `Insertable`, `Changeset` o `EntityPersist`, completa columnas auditables faltantes y devuelve otro `Vec<ColumnValue>` para el pipeline existente.
+
+Reglas de integracion:
+
+- `DbSet::insert(...)` debe obtener `insertable.values()`, aplicar la transformacion comun y delegar en `insert_entity_values(...)`.
+- `DbSet::update(...)` debe obtener `changeset.changes()`, aplicar la transformacion comun y despues compilar mediante `update_query_sql_value(...)`.
+- Active Record ya converge en `insert_entity(...)` y `update_entity_by_sql_value(...)`; esos metodos deben seguir delegando en `insert_entity_values(...)` y `update_entity_values_by_sql_value(...)`, donde se aplica la misma transformacion.
+- `save_changes()` ya converge en `save_tracked_added(...)` y `save_tracked_modified(...)`, que llaman a `insert_entity(...)` y `update_entity_by_sql_value(...)`; no debe tener logica de auditoria propia.
+- `RawInsertable` y `RawChangeset` deben seguir siendo adaptadores mecanicos para construir `InsertQuery`/`UpdateQuery` desde valores ya normalizados.
+
+Reglas de precedencia:
+
+- Los valores explicitos del usuario ganan por defecto. Si el payload ya contiene `created_at`, `created_by`, `updated_at` o `updated_by`, el provider no debe sobrescribirlos silenciosamente.
+- El provider solo agrega una columna auditable cuando la columna existe en la policy, no esta ya presente en el `Vec<ColumnValue>` y la metadata permite escribirla para la operacion actual.
+- En insert solo se consideran columnas con `insertable = true`.
+- En update solo se consideran columnas con `updatable = true`.
+- Una columna con `default_sql` puede omitirse si el provider no produce valor; entonces SQL Server conserva la responsabilidad del default.
+- Si el provider declara que una columna es requerida y no puede producir valor, la operacion debe fallar antes de compilar SQL.
+- Si el `Vec<ColumnValue>` de entrada contiene columnas duplicadas, la transformacion debe devolver `OrmError` en vez de elegir una de forma implicita.
+
+Reglas por operacion:
+
+- `AuditOperation::Insert` puede agregar columnas como `created_at`, `created_by`, `updated_at` y `updated_by` si son parte del struct `AuditFields` y sus flags de metadata permiten insercion.
+- `AuditOperation::Update` no debe agregar `created_at` ni `created_by` salvo que el usuario haya definido explicitamente esas columnas como `updatable = true` y el provider haya decidido producirlas; la forma recomendada es limitar updates automaticos a `updated_at` y `updated_by`.
+- La transformacion no debe crear predicados, filtros, `OUTPUT`, `rowversion` ni reglas de concurrencia. La concurrencia sigue viviendo en `Changeset::concurrency_token()`, `EntityPersist::concurrency_token()` y `update_query_sql_value(...)`.
+
+La transformacion debe trabajar contra columnas auditables declaradas por la entidad, no contra nombres magicos globales. Como `EntityMetadata.columns` no conserva hoy el origen de cada columna, la implementacion runtime de `AuditProvider` necesitara exponer el slice de columnas auditables generado por `#[orm(audit = Audit)]` mediante un contrato auxiliar de runtime, por ejemplo un trait interno implementado por el derive de `Entity`. Ese contrato no debe cambiar el pipeline de snapshots, diff ni DDL: sigue siendo solo una forma de que `mssql-orm` sepa que subconjunto de `ColumnMetadata` puede autollenar.
+
+No se debe inferir auditoria por convencion de nombres como `created_at` o `updated_by` sobre cualquier entidad. Una entidad solo participa en autollenado cuando declara `#[orm(audit = Audit)]` y el contexto tiene un `AuditProvider` configurado.
 
 ### Transacciones
 
@@ -476,7 +520,7 @@ Reglas esperadas:
 
 ### Limites de esta tarea
 
-Este diseno no define todavia como se modifican los `Vec<ColumnValue>` producidos por `Insertable`, `Changeset` o `EntityPersist`. Esa responsabilidad queda para la siguiente tarea del backlog, porque toca deduplicacion de columnas, precedencia entre valores explicitos y generados, y rutas compartidas entre `DbSet`, Active Record y `save_changes()`.
+Este diseno no implementa `AuditProvider`, no agrega autollenado runtime y no cambia los contratos publicos actuales. La tarea solo fija donde y como debe ocurrir la futura mutacion de `Vec<ColumnValue>` para que una implementacion posterior pueda ser pequena, verificable y sin duplicacion entre `DbSet`, Active Record y change tracking.
 
 ## Limites Arquitectonicos
 

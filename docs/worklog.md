@@ -2,6 +2,38 @@
 
 ## 2026-04-25
 
+### Sesión: mutación futura de `Vec<ColumnValue>` por `AuditProvider`
+
+- Se ejecutó la subtarea `Etapa 16+: Definir cómo AuditProvider debe modificar Vec<ColumnValue> en insert/update sin duplicar la lógica existente de Insertable, Changeset, EntityPersist, Active Record ni change tracking`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md`, `docs/entity-policies.md`, el plan maestro y las rutas reales de persistencia en `crates/mssql-orm/src/context.rs`, `active_record.rs` y `tracking.rs`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se actualizó `docs/entity-policies.md` con la sección `Mutacion de Vec<ColumnValue>`.
+- El diseño fija una única transformación interna futura en `mssql-orm` para recibir valores explícitos de `Insertable`, `Changeset` o `EntityPersist`, completar columnas auditables faltantes y devolver valores normalizados antes de construir `InsertQuery` o `UpdateQuery`.
+- La transformación debe preservar precedencia de valores explícitos del usuario, respetar `insertable`/`updatable`, detectar columnas duplicadas como error, no tocar concurrencia/rowversion y no inferir auditoría por nombres mágicos.
+- Se dejó explícito que `DbSet::insert`, `DbSet::update`, Active Record y `save_changes()` deben converger en esa transformación mediante `insert_entity_values(...)` y `update_entity_values_by_sql_value(...)`.
+- Se registró que una implementación runtime posterior necesitará un contrato auxiliar generado por `#[orm(audit = Audit)]` para exponer el slice de columnas auditables, sin alterar snapshots, diff ni DDL.
+- Se actualizó `docs/context.md` con el nuevo estado operativo.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- Quedó definido el punto y algoritmo de mutación futura de `Vec<ColumnValue>` por `AuditProvider`, sin implementar autollenado runtime ni cambiar APIs actuales.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y no modificó código, macros ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Evaluar timestamps = Timestamps como política separada o alias simplificado de audit, evitando solapamientos de columnas con audit`.
+
 ### Sesión: revisión de acoplamiento de `AuditProvider`
 
 - Se revisó el diseño documental de `AuditProvider` contra la implementación actual de persistencia.
