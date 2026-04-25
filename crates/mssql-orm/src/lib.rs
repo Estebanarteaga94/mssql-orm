@@ -71,10 +71,10 @@ pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
     pub use mssql_orm_core::{
-        Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
-        ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata, IndexMetadata,
-        Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType,
-        SqlTypeMapping, SqlValue,
+        Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata, EntityPolicy,
+        EntityPolicyMetadata, ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata,
+        IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
+        SqlServerType, SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::{Changeset, DbContext, Entity, Insertable};
     pub use mssql_orm_query::{Join, JoinType};
@@ -84,11 +84,11 @@ pub mod prelude {
 mod tests {
     use super::prelude::{
         ActiveRecord, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
-        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityState,
-        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
-        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
-        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SqlServerType, SqlTypeMapping,
-        SqlValue, Tracked,
+        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityPolicy,
+        EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable, MssqlConnectionConfig,
+        MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+        MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
+        SqlServerType, SqlTypeMapping, SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -115,6 +115,16 @@ mod tests {
         }
     }
 
+    struct PublicPolicy;
+
+    impl EntityPolicy for PublicPolicy {
+        const POLICY_NAME: &'static str = "public_policy";
+
+        fn columns() -> &'static [super::core::ColumnMetadata] {
+            &[]
+        }
+    }
+
     #[test]
     fn exposes_public_prelude() {
         let error = OrmError::new("public-api");
@@ -133,6 +143,14 @@ mod tests {
     #[test]
     fn exposes_entity_contract_in_prelude() {
         assert_eq!(PublicEntity::metadata().table, "public_entities");
+    }
+
+    #[test]
+    fn exposes_entity_policy_contract_in_prelude() {
+        assert_eq!(
+            PublicPolicy::metadata(),
+            EntityPolicyMetadata::new("public_policy", &[])
+        );
     }
 
     #[test]

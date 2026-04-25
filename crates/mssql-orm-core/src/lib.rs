@@ -55,6 +55,30 @@ pub trait Entity: Sized + Send + Sync + 'static {
     fn metadata() -> &'static EntityMetadata;
 }
 
+/// Static metadata exposed by a reusable entity policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntityPolicyMetadata {
+    pub name: &'static str,
+    pub columns: &'static [ColumnMetadata],
+}
+
+impl EntityPolicyMetadata {
+    pub const fn new(name: &'static str, columns: &'static [ColumnMetadata]) -> Self {
+        Self { name, columns }
+    }
+}
+
+/// Stable contract for reusable code-first policies that contribute normal columns.
+pub trait EntityPolicy: Sized + Send + Sync + 'static {
+    const POLICY_NAME: &'static str;
+
+    fn columns() -> &'static [ColumnMetadata];
+
+    fn metadata() -> EntityPolicyMetadata {
+        EntityPolicyMetadata::new(Self::POLICY_NAME, Self::columns())
+    }
+}
+
 /// Base Rust <-> SQL Server mapping contract used by row readers and persistence models.
 pub trait SqlTypeMapping: Sized {
     const SQL_SERVER_TYPE: SqlServerType;
@@ -564,9 +588,9 @@ impl EntityMetadata {
 mod tests {
     use super::{
         CRATE_IDENTITY, Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn,
-        EntityMetadata, ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata,
-        IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
-        SqlServerType, SqlTypeMapping, SqlValue,
+        EntityMetadata, EntityPolicy, EntityPolicyMetadata, ForeignKeyMetadata, FromRow,
+        IdentityMetadata, IndexColumnMetadata, IndexMetadata, Insertable, OrmError,
+        PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlTypeMapping, SqlValue,
     };
     use chrono::{NaiveDate, NaiveDateTime};
     use rust_decimal::Decimal;
@@ -662,6 +686,43 @@ mod tests {
         ReferentialAction::NoAction,
     )];
 
+    const AUDIT_POLICY_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "created_at",
+            column_name: "created_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: Some("SYSUTCDATETIME()"),
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "updated_at",
+            column_name: "updated_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
     const USER_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "User",
         schema: "dbo",
@@ -678,6 +739,16 @@ mod tests {
     impl Entity for User {
         fn metadata() -> &'static EntityMetadata {
             &USER_METADATA
+        }
+    }
+
+    struct AuditPolicy;
+
+    impl EntityPolicy for AuditPolicy {
+        const POLICY_NAME: &'static str = "audit";
+
+        fn columns() -> &'static [ColumnMetadata] {
+            &AUDIT_POLICY_COLUMNS
         }
     }
 
@@ -763,6 +834,21 @@ mod tests {
         assert_eq!(metadata.indexes.len(), 1);
         assert_eq!(metadata.foreign_keys.len(), 1);
         assert_eq!(metadata.primary_key.columns, &["id", "tenant_id"]);
+    }
+
+    #[test]
+    fn entity_policy_exposes_reusable_column_metadata() {
+        let metadata = AuditPolicy::metadata();
+
+        assert_eq!(
+            metadata,
+            EntityPolicyMetadata::new("audit", &AUDIT_POLICY_COLUMNS)
+        );
+        assert_eq!(metadata.columns[0].column_name, "created_at");
+        assert_eq!(metadata.columns[0].default_sql, Some("SYSUTCDATETIME()"));
+        assert!(!metadata.columns[0].primary_key);
+        assert!(metadata.columns[1].nullable);
+        assert!(metadata.columns[1].updatable);
     }
 
     #[test]

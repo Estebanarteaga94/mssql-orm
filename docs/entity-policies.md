@@ -49,6 +49,33 @@ Esta regla evita crear un segundo pipeline de esquema. El resto del sistema debe
 
 La policy puede tener metadata interna para validacion y ergonomia, pero esa metadata no debe convertirse en una ruta paralela para snapshots, diff o DDL.
 
+## Contrato de Metadata
+
+El contrato neutral vive en `mssql-orm-core` y no conoce Tiberius, SQL ejecutable ni el sistema de migraciones:
+
+```rust
+pub struct EntityPolicyMetadata {
+    pub name: &'static str,
+    pub columns: &'static [ColumnMetadata],
+}
+
+pub trait EntityPolicy: Sized + Send + Sync + 'static {
+    const POLICY_NAME: &'static str;
+
+    fn columns() -> &'static [ColumnMetadata];
+
+    fn metadata() -> EntityPolicyMetadata {
+        EntityPolicyMetadata::new(Self::POLICY_NAME, Self::columns())
+    }
+}
+```
+
+La responsabilidad del contrato es minima: una policy reusable expone un nombre estable y un slice estatico de `ColumnMetadata`. La expansion dentro de una entidad sigue siendo responsabilidad de `mssql-orm-macros`.
+
+El contrato no agrega una coleccion de policies a `EntityMetadata` en esta etapa. Esa decision es intencional: el dato que debe circular por snapshots, diff y DDL es la columna resultante, no la policy que la produjo.
+
+Las siguientes tareas deben definir como `AuditFields` implementa o reutiliza `EntityPolicy`, como se validan colisiones y como el derive `Entity` incorpora esas columnas al arreglo final de `EntityMetadata.columns`.
+
 ## Forma Publica Esperada
 
 El concepto publico se expresa en atributos sobre la entidad:

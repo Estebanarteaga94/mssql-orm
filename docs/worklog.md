@@ -2,6 +2,36 @@
 
 ## 2026-04-25
 
+### Sesión: definir contrato core de metadata para policies
+
+- Se ejecutó la subtarea `Etapa 16: Definir el contrato de metadata para políticas reutilizables en mssql-orm-core, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (ColumnMetadata) sin crear un segundo pipeline de esquema`.
+- Se agregó en `mssql-orm-core` el contenedor `EntityPolicyMetadata { name, columns }`.
+- Se agregó el trait neutral `EntityPolicy`, con `POLICY_NAME`, `columns() -> &'static [ColumnMetadata]` y helper `metadata()`.
+- El contrato queda deliberadamente centrado en columnas normales; no agrega una lista de policies a `EntityMetadata` ni crea metadata paralela para snapshots, diff o DDL.
+- Se agregó cobertura unitaria en `mssql-orm-core` para confirmar que una policy reusable expone `ColumnMetadata` ordinario con defaults, nullability e insertable/updatable.
+- La crate pública `mssql-orm` reexporta `EntityPolicy` y `EntityPolicyMetadata` desde `prelude`, con cobertura de exposición pública.
+- Se documentó el contrato en `docs/entity-policies.md` y se actualizó `docs/context.md` con el estado real.
+
+### Resultado
+
+- El core ya tiene el contrato mínimo para que las próximas tareas implementen `AuditFields` y la expansión desde `#[derive(Entity)]` sin inventar un segundo pipeline de esquema.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Aún no existe derive `AuditFields` ni parser de `#[orm(audit = Audit)]`; siguen como tareas posteriores del backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando #[orm(audit = Audit)] sobre alternativas implícitas o runtime`.
+
 ### Sesión: documentar alcance inicial de `Entity Policies`
 
 - Se ejecutó la subtarea `Etapa 16: Documentar explícitamente el alcance inicial de Entity Policies: audit y timestamps como columnas generadas; soft_delete, tenant y comportamiento automático quedan diferidos hasta tener contrato estable`.
