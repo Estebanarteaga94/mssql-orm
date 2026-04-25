@@ -77,7 +77,7 @@ El contrato no agrega una coleccion de policies a `EntityMetadata` en esta etapa
 
 Las siguientes tareas deben definir como se validan colisiones entre columnas propias y columnas generadas, y como se cubre el pipeline de snapshots, diff y DDL con esas columnas ordinarias.
 
-Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable, ademas de `COLUMN_NAMES` para validacion compile-time. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]`, valida colisiones entre columnas propias y columnas auditables mediante aserciones constantes y expande esas columnas dentro de `EntityMetadata.columns`.
+Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable, ademas de `COLUMN_NAMES` para validacion compile-time. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]`, rechaza una segunda declaracion `audit`, valida colisiones entre columnas propias y columnas auditables mediante aserciones constantes y expande esas columnas dentro de `EntityMetadata.columns`.
 
 ## Forma Publica Esperada
 
@@ -118,7 +118,7 @@ Reglas de sintaxis:
 - `audit = Audit` se declara en `#[orm(...)]` a nivel del struct que deriva `Entity`
 - el lado derecho debe ser un path Rust hacia un tipo que implemente el contrato de auditoria definido por el derive posterior
 - `Audit` se resuelve en compile-time, desde el scope normal de Rust del consumidor
-- una entidad puede declarar como maximo una policy `audit`
+- una entidad puede declarar como maximo una policy `audit`; repetir `audit` falla en compile-time en vez de sobrescribir silenciosamente la policy anterior
 - entidades sin `audit` deben conservar exactamente el comportamiento actual
 
 Formas permitidas:
@@ -203,7 +203,7 @@ Para el MVP, eso significa:
 - el orden de columnas en `EntityMetadata.columns` es estable: primero columnas propias de la entidad en orden de declaracion Rust, despues columnas aportadas por `AuditFields` en orden de declaracion Rust
 - las columnas generadas participan en snapshots, diff y DDL sin rutas especiales
 - las colisiones con campos propios fallan en compile-time con un mensaje que nombra la columna duplicada
-- las colisiones entre varias policies quedan como tarea futura antes de introducir `timestamps` u otras policies simultaneas
+- el MVP rechaza multiples declaraciones `audit`, dejando preparado el contrato `COLUMN_NAMES` para validar solapamientos cuando exista una segunda policy compilable como `timestamps`
 - las columnas generadas no implican autollenado de valores en operaciones de escritura
 
 Esta definicion permite validar la feature en migraciones antes de introducir comportamiento runtime.

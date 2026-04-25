@@ -1,0 +1,5 @@
+error: Entity solo soporta una policy audit; multiples policies que generen columnas solapadas deben rechazarse explicitamente
+  --> tests/ui/entity_duplicate_audit_policy.rs:16:7
+   |
+16 | #[orm(audit = Timestamps)]
+   |       ^^^^^

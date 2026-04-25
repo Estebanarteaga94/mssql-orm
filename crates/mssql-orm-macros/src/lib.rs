@@ -1137,6 +1137,11 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
             } else if meta.path.is_ident("renamed_from") {
                 config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("audit") {
+                if config.audit.is_some() {
+                    return Err(meta.error(
+                        "Entity solo soporta una policy audit; multiples policies que generen columnas solapadas deben rechazarse explicitamente",
+                    ));
+                }
                 config.audit = Some(meta.value()?.parse()?);
             } else if meta.path.is_ident("index") {
                 config.indexes.push(parse_entity_index_config(meta)?);

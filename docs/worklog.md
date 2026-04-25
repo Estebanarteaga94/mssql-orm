@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: rechazar policies audit duplicadas
+
+- Se ejecutó la subtarea `Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de audit + timestamps`.
+- En el MVP actual solo existe una policy compilable a nivel de entidad: `audit = Audit`; `timestamps` sigue diferida y no se introdujo sintaxis nueva.
+- `parse_entity_config(...)` ahora rechaza una segunda declaración `audit` en `#[derive(Entity)]` en vez de sobrescribir silenciosamente la primera.
+- El mensaje compile-time deja explícito que `Entity` solo soporta una policy `audit` y que múltiples policies con columnas solapadas deben rechazarse explícitamente.
+- Se agregó el fixture `trybuild` inválido `entity_duplicate_audit_policy.rs`, modelando el caso futuro `audit` + `timestamps` con dos structs `AuditFields` que producirían `created_at`.
+- Se actualizó `docs/entity-policies.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- Una entidad ya no puede declarar dos policies `audit`; esto evita el caso más cercano de doble policy en el MVP y conserva `COLUMN_NAMES` como base para validar solapamientos cuando exista una segunda policy real.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se implementó `timestamps = Timestamps`; sigue diferido por diseño y por backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como Todo::created_at`.
+
 ### Sesión: generar `down.sql` reversible cuando el payload lo permite
 
 - Se completó la subtarea `Etapa 7+: Evaluar generación reversible de down.sql cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura`.
