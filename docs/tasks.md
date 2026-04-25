@@ -7,7 +7,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Confirmar que `ModelSnapshot::from_entities(...)` incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista
 - [ ] Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con `audit = Audit` genere `CREATE TABLE` con columnas auditables
 - [ ] Etapa 16: Agregar pruebas de diff donde activar `audit = Audit` sobre una tabla existente genere `AddColumn` para cada columna auditable esperada
 - [ ] Etapa 16: Agregar pruebas de diff donde quitar `audit = Audit` sea detectado como destructivo por la CLI cuando produzca `DropColumn`
@@ -36,6 +35,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Confirmar que `ModelSnapshot::from_entities(...)` incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista
 - [x] Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable
 - [x] Etapa 16: Cubrir errores `trybuild` para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado
 - [x] Etapa 16: Cubrir `#[orm(audit = Audit)]` con tests `trybuild` válidos en la crate pública usando únicamente la API reexportada por `mssql-orm::prelude`

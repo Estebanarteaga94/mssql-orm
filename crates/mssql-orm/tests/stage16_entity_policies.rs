@@ -1,4 +1,4 @@
-use mssql_orm::prelude::*;
+use mssql_orm::{migrate::ModelSnapshot, prelude::*};
 use std::collections::BTreeMap;
 
 #[derive(AuditFields)]
@@ -37,6 +37,14 @@ struct AuditedEntity {
     #[orm(length = 40)]
     #[orm(default_sql = "'new'")]
     status: Option<String>,
+}
+
+#[derive(Entity, Debug, Clone, PartialEq)]
+#[orm(table = "archived_entities", schema = "audit")]
+struct ArchivedEntity {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
 }
 
 struct TestRow {
@@ -185,5 +193,80 @@ fn audited_entity_from_row_ignores_audit_metadata_columns_when_present() {
             name: "with audit columns".to_string(),
             status: None,
         }
+    );
+}
+
+#[test]
+fn model_snapshot_includes_audit_columns_without_special_pipeline() {
+    let snapshot =
+        ModelSnapshot::from_entities(&[AuditedEntity::metadata(), ArchivedEntity::metadata()]);
+    let schema = snapshot
+        .schema("audit")
+        .expect("audit schema should be present");
+
+    assert_eq!(schema.tables.len(), 2);
+    assert_eq!(schema.tables[0].name, "archived_entities");
+    assert_eq!(schema.tables[1].name, "audited_entities");
+
+    let table = schema
+        .table("audited_entities")
+        .expect("audited table should be present");
+    let column_names = table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        column_names,
+        vec![
+            "id",
+            "name",
+            "status",
+            "created_at",
+            "created_by_user_id",
+            "updated_at",
+            "updated_by",
+        ]
+    );
+    assert_eq!(table.primary_key_columns, vec!["id"]);
+
+    let created_at = table
+        .column("created_at")
+        .expect("audit column should be present in snapshot");
+    assert_eq!(created_at.sql_type, SqlServerType::DateTime2);
+    assert_eq!(created_at.default_sql.as_deref(), Some("SYSUTCDATETIME()"));
+    assert!(!created_at.nullable);
+    assert!(!created_at.primary_key);
+    assert!(!created_at.insertable);
+    assert!(!created_at.updatable);
+
+    let created_by = table
+        .column("created_by_user_id")
+        .expect("renamed audit column should be present in snapshot");
+    assert_eq!(created_by.sql_type, SqlServerType::BigInt);
+    assert!(created_by.nullable);
+    assert!(created_by.insertable);
+    assert!(created_by.updatable);
+
+    let updated_by = table
+        .column("updated_by")
+        .expect("audit column should be present in snapshot");
+    assert_eq!(updated_by.sql_type, SqlServerType::NVarChar);
+    assert_eq!(updated_by.max_length, Some(120));
+    assert!(updated_by.nullable);
+
+    let json = snapshot
+        .to_json_pretty()
+        .expect("audited snapshot should serialize");
+    assert!(json.contains("\"created_by_user_id\""));
+    assert!(json.contains("\"SYSUTCDATETIME()\""));
+
+    let roundtripped =
+        ModelSnapshot::from_json(&json).expect("audited snapshot should deserialize");
+    assert_eq!(roundtripped, snapshot);
+    assert_eq!(
+        ModelSnapshot::from_entities(&[AuditedEntity::metadata(), ArchivedEntity::metadata()]),
+        snapshot
     );
 }

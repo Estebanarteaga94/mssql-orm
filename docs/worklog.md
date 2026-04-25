@@ -2,6 +2,39 @@
 
 ## 2026-04-25
 
+### Sesión: snapshot de entidades auditadas
+
+- Se ejecutó la subtarea `Etapa 16: Confirmar que ModelSnapshot::from_entities(...) incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista`.
+- Se amplió `crates/mssql-orm/tests/stage16_entity_policies.rs` con una entidad adicional del mismo schema para fijar el orden determinista de tablas dentro de `ModelSnapshot`.
+- Se agregó la prueba `model_snapshot_includes_audit_columns_without_special_pipeline`, que construye el snapshot desde `AuditedEntity::metadata()` y confirma que las columnas auditables aparecen como `ColumnSnapshot` normales.
+- La prueba cubre orden de columnas, primary key, tipos SQL, defaults, nullability, `insertable`, `updatable`, longitud `nvarchar` y columna auditable renombrada (`created_by_user_id`).
+- La prueba valida `to_json_pretty()` y `from_json(...)`, incluyendo roundtrip completo y presencia observable de columnas/defaults auditables en JSON.
+- No se introdujeron cambios productivos: el pipeline existente `EntityMetadata -> TableSnapshot -> ModelSnapshot -> JSON` ya soportaba auditoría porque consume `ColumnMetadata`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- `ModelSnapshot::from_entities(...)` queda cubierto para entidades auditadas sin lógica especial de policies: las columnas generadas por `AuditFields` entran al snapshot, se serializan/deserializan y mantienen orden determinista.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-migrate snapshot`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con audit = Audit genere CREATE TABLE con columnas auditables`.
+
 ### Sesión: cobertura unitaria de metadata de auditoría
 
 - Se ejecutó la subtarea `Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable`.
