@@ -446,6 +446,22 @@ El derive `DbContext` no debe duplicar reglas de auditoria por entidad. Debe pro
 
 La integracion futura debe preservar que la API publica permanezca concentrada en `mssql-orm`; `core` solo deberia contener contratos neutrales si hacen falta, y `tiberius` no debe conocer `AuditProvider`.
 
+### Acoplamiento con la implementacion actual
+
+El diseno de `AuditProvider` debe engancharse en los puntos donde la crate publica ya centraliza persistencia, no en los derives ni en el adaptador Tiberius.
+
+Puntos reales de integracion:
+
+- `Insertable<E>::values()` sigue siendo responsable de extraer valores explicitos del payload de insercion.
+- `Changeset<E>::changes()` sigue siendo responsable de extraer cambios explicitos del payload de update.
+- `EntityPersist::insert_values()` y `EntityPersist::update_changes()` siguen siendo la fuente para Active Record y `save_changes()`.
+- `DbSet::insert(...)` y `DbSet::update(...)` son los puntos publicos donde esos `Vec<ColumnValue>` se convierten en queries.
+- Las rutas internas que ya existen para valores crudos (`insert_query_values`, `update_query_changes`, `RawInsertable` y `RawChangeset`) son el lugar natural para aplicar una transformacion comun antes de construir `InsertQuery` o `UpdateQuery`.
+
+Por esa razon, una implementacion futura no deberia modificar los derives `Insertable`, `Changeset` ni `Entity` para inyectar valores auditables. Esos derives deben seguir siendo conversiones puras desde structs Rust hacia `ColumnValue`. El autollenado debe vivir en la capa publica de persistencia, donde ya convergen `DbSet`, Active Record y change tracking.
+
+Tampoco debe agregarse logica a `mssql-orm-query`: esa crate solo recibe `InsertQuery` o `UpdateQuery` ya armados con valores. `mssql-orm-sqlserver` debe seguir compilando el AST sin saber si un valor vino del usuario o del provider. `mssql-orm-tiberius` debe seguir ejecutando queries parametrizadas sin interpretar metadata de auditoria.
+
 ### Transacciones
 
 Dentro de `db.transaction(...)`, el contexto transaccional debe heredar el mismo `AuditProvider` y los mismos valores por request que tenia el contexto padre al abrir la transaccion.

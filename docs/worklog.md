@@ -2,6 +2,33 @@
 
 ## 2026-04-25
 
+### Sesión: revisión de acoplamiento de `AuditProvider`
+
+- Se revisó el diseño documental de `AuditProvider` contra la implementación actual de persistencia.
+- Se confirmó que el commit previo fue documental y no introdujo código runtime ni dependencias nuevas.
+- Se contrastó el diseño con los contratos existentes: `Insertable`, `Changeset`, `EntityPersist`, `DbSet`, `RawInsertable`, `RawChangeset`, `DbContext::transaction`, `mssql-orm-query`, `mssql-orm-sqlserver` y `mssql-orm-tiberius`.
+- Se agregó en `docs/entity-policies.md` la sección `Acoplamiento con la implementacion actual`.
+- La sección fija que el autollenado futuro debe vivir en la capa pública de persistencia de `mssql-orm`, donde convergen `DbSet::insert`, `DbSet::update`, Active Record y `save_changes()`.
+- También deja explícito que los derives deben seguir siendo conversiones puras, `query` no debe conocer policies, `sqlserver` no debe distinguir origen de valores y `tiberius` no debe interpretar metadata de auditoría.
+- Se actualizó `docs/context.md` con este criterio.
+
+### Resultado
+
+- El diseño de `AuditProvider` queda acoplado al proyecto en términos de puntos reales de integración, sin romper límites entre crates ni adelantar implementación runtime.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Definir cómo AuditProvider debe modificar Vec<ColumnValue> en insert/update sin duplicar la lógica existente de Insertable, Changeset, EntityPersist, Active Record ni change tracking`.
+
 ### Sesión: diseño conceptual de `AuditProvider`
 
 - Se ejecutó la subtarea `Etapa 16+: Diseñar AuditProvider para autollenado futuro, incluyendo now, usuario actual, valores por request, integración con DbContext y comportamiento dentro de transacciones`.
