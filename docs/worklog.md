@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: documentar auditoría en code-first
+
+- Se ejecutó la subtarea `Etapa 16: Actualizar docs/code-first.md con la sintaxis #[orm(audit = Audit)], límites del MVP y ejemplo compilable respaldado por fixture trybuild`.
+- Se revisó `docs/code-first.md`, `docs/entity-policies.md` y los fixtures `crates/mssql-orm/tests/ui/entity_audit_public_valid.rs` y `audit_fields_valid.rs`.
+- Se agregó `audit` a la lista de atributos soportados por `#[derive(Entity)]`.
+- Se agregó una sección de `Entity Policies` en `docs/code-first.md` con ejemplo de `#[derive(AuditFields)]` y uso de `#[orm(audit = Audit)]`.
+- La guía deja explícito que las columnas auditables se expanden como `ColumnMetadata` normales para snapshots, diff y DDL.
+- La guía enlaza el ejemplo con el fixture compilable `entity_audit_public_valid.rs`, que usa únicamente `mssql_orm::prelude::*`.
+- Se documentaron los límites del MVP: sin campos Rust visibles, sin símbolos como `Todo::created_at`, sin autollenado runtime y con colisiones rechazadas en compile-time.
+- Se actualizó `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+
+### Resultado
+
+- La guía code-first pública ya documenta la sintaxis `#[orm(audit = Audit)]` y sus límites reales, alineada con cobertura `trybuild`.
+
+### Validación
+
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Actualizar README.md y/o documentación de roadmap para presentar Entity Policies como evolución code-first, aclarando qué está implementado y qué queda diferido`.
+
 ### Sesión: auditoría sin autollenado runtime en MVP
 
 - Se ejecutó la subtarea `Etapa 16: Mantener fuera del MVP el autollenado de created_by, updated_by, created_at y updated_at desde DbSet::insert, DbSet::update, Active Record y save_changes`.

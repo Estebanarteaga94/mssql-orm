@@ -62,10 +62,66 @@ Hoy la surface publica soporta al menos estos atributos relevantes del modelo:
 - `foreign_key`
 - `on_delete`
 - `renamed_from`
+- `audit`
 
 `#[derive(Entity)]` tambien genera simbolos de columna como `User::email`, que despues se reutilizan desde el query builder publico.
 
-## 2. Modelar payloads de escritura
+## 2. Reutilizar columnas con Entity Policies
+
+La Etapa 16 introduce `Entity Policies` como una extension conservadora del modelo `code-first`. El primer caso soportado es auditoria como columnas generadas de metadata/schema.
+
+El usuario define un struct reusable de auditoria con `#[derive(AuditFields)]`:
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(AuditFields)]
+struct Audit {
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(sql_type = "datetime2")]
+    #[orm(updatable = false)]
+    created_at: String,
+
+    #[orm(column = "created_by_user_id")]
+    #[orm(nullable)]
+    created_by: Option<i64>,
+
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    updated_by: Option<String>,
+}
+```
+
+Luego una entidad puede declarar esa policy con `audit = Audit`:
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "todos", schema = "todo", audit = Audit)]
+struct Todo {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(length = 200)]
+    title: String,
+}
+```
+
+Con esa declaracion, las columnas de `Audit` se expanden dentro de `Todo::metadata().columns` despues de las columnas propias de la entidad. Para migraciones y DDL se comportan como `ColumnMetadata` normales: aparecen en snapshots, diff y SQL Server DDL sin un pipeline paralelo.
+
+El ejemplo anterior esta respaldado por el fixture compilable `crates/mssql-orm/tests/ui/entity_audit_public_valid.rs`, que usa solo `mssql_orm::prelude::*`, `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`.
+
+Limites del MVP:
+
+- `audit = Audit` no agrega campos Rust visibles al entity.
+- Las columnas auditables no generan simbolos asociados como `Todo::created_at`.
+- `FromRow` materializa solo los campos reales de la entidad; ignora columnas auditables si vienen en la fila.
+- `DbSet::insert`, `DbSet::update`, Active Record y `save_changes` no autollenan `created_at`, `created_by`, `updated_at` ni `updated_by`.
+- Si una columna de `AuditFields` colisiona con una columna propia de la entidad, el derive falla en compile-time.
+
+## 3. Modelar payloads de escritura
 
 La entidad no se usa directamente para todas las escrituras. La forma publica actual separa inserciones y updates parciales.
 
@@ -93,8 +149,9 @@ Reglas practicas importantes:
 - `Changeset` requiere `Option<T>` en el nivel externo de cada campo para distinguir "no tocar" de "actualizar".
 - `Option<Option<T>>` sirve para expresar "actualizar a NULL".
 - columnas `rowversion` participan como token de concurrencia, pero no entran al `SET`.
+- columnas generadas por `audit = Audit` no se agregan automaticamente a `Insertable` ni `Changeset`; si necesitas valores runtime debes modelarlos explicitamente o esperar el futuro `AuditProvider`.
 
-## 3. Declarar el `DbContext`
+## 4. Declarar el `DbContext`
 
 El contexto publico actual se define con `#[derive(DbContext)]` sobre una struct con campos `DbSet<T>`.
 
@@ -119,7 +176,7 @@ Ese derive genera la surface operativa minima para consumidores:
 
 Cada `DbSet<T>` mantiene la entrada tipada hacia CRUD, query builder y tracking experimental.
 
-## 4. Usar `DbSet<T>` como frontera tipada
+## 5. Usar `DbSet<T>` como frontera tipada
 
 `DbSet<T>` es la pieza publica que conecta el modelo con las operaciones de lectura y escritura.
 
@@ -175,7 +232,7 @@ La surface publica actual ya incluye:
 - `remove_tracked`
 - `save_changes` desde `DbContext`
 
-## 5. Modelar relaciones en metadata
+## 6. Modelar relaciones en metadata
 
 Las relaciones uno-a-muchos actuales se declaran sobre la entidad dependiente con `foreign_key`.
 
@@ -206,16 +263,17 @@ Hoy esa metadata sirve para:
 
 No existe todavia una API publica de navigation properties ni eager loading estilo ORM clasico.
 
-## 6. Flujo real de trabajo `code-first`
+## 7. Flujo real de trabajo `code-first`
 
 El flujo recomendado hoy queda asi:
 
 1. Declarar entidades con `#[derive(Entity)]`.
-2. Declarar `Insertable` y `Changeset` para cada forma de escritura publica que necesite tu app.
-3. Declarar un `DbContext` con `DbSet<T>` para cada tabla expuesta.
-4. Conectar con `DbContext::connect(...)` o con opciones/config explicitas.
-5. Usar `DbSet<T>` y `DbSetQuery<T>` para CRUD y consultas.
-6. Cuando el modelo cambie, usar la pipeline de migraciones `code-first` de la CLI y del crate `migrate`.
+2. Declarar policies reutilizables como `AuditFields` cuando quieras columnas transversales de metadata/schema.
+3. Declarar `Insertable` y `Changeset` para cada forma de escritura publica que necesite tu app.
+4. Declarar un `DbContext` con `DbSet<T>` para cada tabla expuesta.
+5. Conectar con `DbContext::connect(...)` o con opciones/config explicitas.
+6. Usar `DbSet<T>` y `DbSetQuery<T>` para CRUD y consultas.
+7. Cuando el modelo cambie, usar la pipeline de migraciones `code-first` de la CLI y del crate `migrate`.
 
 El quickstart cubre el caso mas corto. Esta guia fija el modelo conceptual y las piezas publicas que componen ese flujo.
 
@@ -226,6 +284,7 @@ Para esta etapa del release, conviene asumir estos limites:
 - SQL Server es el unico backend objetivo.
 - La API `code-first` publica vive en atributos y derives; no existe todavia una capa de fluent configuration estilo `EntityConfiguration`.
 - La sintaxis publica de relaciones sigue centrada en foreign keys declaradas por atributo.
+- `audit = Audit` solo genera columnas de metadata/schema; el autollenado runtime queda fuera del MVP.
 - `DbSet::find`, `update` y `delete` estan pensados para primary key simple.
 - `entity.save(&db)` y `entity.delete(&db)` existen, pero esta guia se centra en la ruta explicita `DbSet` porque es la surface base mas estable.
 - El change tracking sigue siendo experimental aunque ya este disponible.
