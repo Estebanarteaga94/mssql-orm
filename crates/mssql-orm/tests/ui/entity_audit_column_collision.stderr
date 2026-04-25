@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: audit policy column `created_at` collides with an entity column; rename the entity field with #[orm(column = "...")] or the AuditFields field with #[orm(column = "...")]
+  --> tests/ui/entity_audit_column_collision.rs:10:10
+   |
+10 | #[derive(Entity, Debug, Clone)]
+   |          ^^^^^^ evaluation of `_` failed here

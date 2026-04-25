@@ -119,6 +119,7 @@ mod tests {
 
     impl EntityPolicy for PublicPolicy {
         const POLICY_NAME: &'static str = "public_policy";
+        const COLUMN_NAMES: &'static [&'static str] = &[];
 
         fn columns() -> &'static [super::core::ColumnMetadata] {
             &[]
@@ -186,6 +187,10 @@ mod tests {
         assert_eq!(metadata.columns[1].sql_type, SqlServerType::BigInt);
         assert_eq!(metadata.columns[2].max_length, Some(120));
         assert!(metadata.columns[2].updatable);
+        assert_eq!(
+            <PublicAudit as EntityPolicy>::COLUMN_NAMES,
+            &["created_at", "created_by_user_id", "updated_by"]
+        );
     }
 
     #[test]

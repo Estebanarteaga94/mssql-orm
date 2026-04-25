@@ -32,4 +32,5 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/audit_fields_unsupported_attr.rs");
     tests.compile_fail("tests/ui/audit_fields_empty_column.rs");
     tests.compile_fail("tests/ui/audit_fields_unsupported_type.rs");
+    tests.compile_fail("tests/ui/entity_audit_column_collision.rs");
 }

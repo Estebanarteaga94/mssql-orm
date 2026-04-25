@@ -68,6 +68,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
     };
 
     let mut columns = Vec::new();
+    let mut column_names = Vec::new();
 
     for field in fields.iter() {
         let field_ident = field
@@ -82,6 +83,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
         validate_non_empty_lit_str(&column_name, "column no puede estar vacío")?;
+        column_names.push(column_name.clone());
         let renamed_from = option_lit_str(config.renamed_from);
         let sql_type = config.sql_type.map_or_else(
             || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::SQL_SERVER_TYPE },
@@ -128,6 +130,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
     Ok(quote! {
         impl ::mssql_orm::core::EntityPolicy for #ident {
             const POLICY_NAME: &'static str = "audit";
+            const COLUMN_NAMES: &'static [&'static str] = &[#(#column_names),*];
 
             fn columns() -> &'static [::mssql_orm::core::ColumnMetadata] {
                 const COLUMNS: &[::mssql_orm::core::ColumnMetadata] = &[
@@ -181,6 +184,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
     let mut field_columns = BTreeMap::<String, LitStr>::new();
+    let mut entity_column_names = Vec::new();
 
     let has_explicit_primary_key = has_explicit_primary_key(&fields)?;
 
@@ -194,6 +198,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         let column_name = config
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+        entity_column_names.push(column_name.clone());
         field_columns.insert(field_ident.to_string(), column_name.clone());
         let type_info = analyze_type(&field.ty)?;
 
@@ -499,6 +504,29 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             Ok(None)
         }
     });
+    let audit_collision_checks = entity_audit
+        .as_ref()
+        .map(|audit| {
+            entity_column_names
+                .iter()
+                .map(|column_name| {
+                    quote! {
+                        const _: () = assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                <#audit as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES,
+                                #column_name,
+                            ),
+                            concat!(
+                                "audit policy column `",
+                                #column_name,
+                                "` collides with an entity column; rename the entity field with #[orm(column = \"...\")] or the AuditFields field with #[orm(column = \"...\")]",
+                            ),
+                        );
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
 
     let (metadata_static, metadata_expr) = if let Some(audit) = entity_audit {
         (
@@ -557,6 +585,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     };
 
     Ok(quote! {
+        #(#audit_collision_checks)*
+
         #metadata_static
 
         #[allow(non_upper_case_globals)]

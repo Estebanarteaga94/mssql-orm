@@ -61,6 +61,7 @@ pub struct EntityPolicyMetadata {
 
 pub trait EntityPolicy: Sized + Send + Sync + 'static {
     const POLICY_NAME: &'static str;
+    const COLUMN_NAMES: &'static [&'static str] = &[];
 
     fn columns() -> &'static [ColumnMetadata];
 
@@ -70,13 +71,13 @@ pub trait EntityPolicy: Sized + Send + Sync + 'static {
 }
 ```
 
-La responsabilidad del contrato es minima: una policy reusable expone un nombre estable y un slice estatico de `ColumnMetadata`. La expansion dentro de una entidad sigue siendo responsabilidad de `mssql-orm-macros`.
+La responsabilidad del contrato es minima: una policy reusable expone un nombre estable, un slice estatico de nombres de columna para validaciones `const` y un slice estatico de `ColumnMetadata`. La expansion dentro de una entidad sigue siendo responsabilidad de `mssql-orm-macros`.
 
 El contrato no agrega una coleccion de policies a `EntityMetadata` en esta etapa. Esa decision es intencional: el dato que debe circular por snapshots, diff y DDL es la columna resultante, no la policy que la produjo.
 
 Las siguientes tareas deben definir como se validan colisiones entre columnas propias y columnas generadas, y como se cubre el pipeline de snapshots, diff y DDL con esas columnas ordinarias.
 
-Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]` y expande esas columnas dentro de `EntityMetadata.columns`.
+Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el struct de auditoria y expone sus campos como `ColumnMetadata` reutilizable, ademas de `COLUMN_NAMES` para validacion compile-time. `#[derive(Entity)]` ya acepta `#[orm(audit = Audit)]`, valida colisiones entre columnas propias y columnas auditables mediante aserciones constantes y expande esas columnas dentro de `EntityMetadata.columns`.
 
 ## Forma Publica Esperada
 
@@ -201,7 +202,8 @@ Para el MVP, eso significa:
 - cada columna generada tiene `rust_field`, `column_name`, tipo SQL, nullability, defaults y flags `insertable`/`updatable`
 - el orden de columnas en `EntityMetadata.columns` es estable: primero columnas propias de la entidad en orden de declaracion Rust, despues columnas aportadas por `AuditFields` en orden de declaracion Rust
 - las columnas generadas participan en snapshots, diff y DDL sin rutas especiales
-- las colisiones con campos propios o con otras policies deben fallar en compile-time
+- las colisiones con campos propios fallan en compile-time con un mensaje que nombra la columna duplicada
+- las colisiones entre varias policies quedan como tarea futura antes de introducir `timestamps` u otras policies simultaneas
 - las columnas generadas no implican autollenado de valores en operaciones de escritura
 
 Esta definicion permite validar la feature en migraciones antes de introducir comportamiento runtime.

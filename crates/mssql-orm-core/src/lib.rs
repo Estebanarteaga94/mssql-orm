@@ -71,12 +71,41 @@ impl EntityPolicyMetadata {
 /// Stable contract for reusable code-first policies that contribute normal columns.
 pub trait EntityPolicy: Sized + Send + Sync + 'static {
     const POLICY_NAME: &'static str;
+    const COLUMN_NAMES: &'static [&'static str] = &[];
 
     fn columns() -> &'static [ColumnMetadata];
 
     fn metadata() -> EntityPolicyMetadata {
         EntityPolicyMetadata::new(Self::POLICY_NAME, Self::columns())
     }
+}
+
+pub const fn column_name_exists(columns: &[&'static str], column_name: &'static str) -> bool {
+    let mut index = 0;
+    while index < columns.len() {
+        if column_name_eq(columns[index], column_name) {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+const fn column_name_eq(left: &str, right: &str) -> bool {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    if left.len() != right.len() {
+        return false;
+    }
+
+    let mut index = 0;
+    while index < left.len() {
+        if left[index] != right[index] {
+            return false;
+        }
+        index += 1;
+    }
+    true
 }
 
 /// Base Rust <-> SQL Server mapping contract used by row readers and persistence models.
@@ -591,6 +620,7 @@ mod tests {
         EntityMetadata, EntityPolicy, EntityPolicyMetadata, ForeignKeyMetadata, FromRow,
         IdentityMetadata, IndexColumnMetadata, IndexMetadata, Insertable, OrmError,
         PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlTypeMapping, SqlValue,
+        column_name_exists,
     };
     use chrono::{NaiveDate, NaiveDateTime};
     use rust_decimal::Decimal;
@@ -746,6 +776,7 @@ mod tests {
 
     impl EntityPolicy for AuditPolicy {
         const POLICY_NAME: &'static str = "audit";
+        const COLUMN_NAMES: &'static [&'static str] = &["created_at", "updated_at"];
 
         fn columns() -> &'static [ColumnMetadata] {
             &AUDIT_POLICY_COLUMNS
@@ -849,6 +880,8 @@ mod tests {
         assert!(!metadata.columns[0].primary_key);
         assert!(metadata.columns[1].nullable);
         assert!(metadata.columns[1].updatable);
+        assert!(column_name_exists(AuditPolicy::COLUMN_NAMES, "created_at"));
+        assert!(!column_name_exists(AuditPolicy::COLUMN_NAMES, "missing"));
     }
 
     #[test]

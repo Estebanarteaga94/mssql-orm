@@ -2,6 +2,43 @@
 
 ## 2026-04-25
 
+### Sesión: validar colisiones entre columnas auditables y columnas propias
+
+- Se ejecutó la subtarea `Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable`.
+- El plan maestro requerido por la sesión está en `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz.
+- `EntityPolicy` ahora expone `COLUMN_NAMES` como contrato constante y conserva compatibilidad mediante valor por defecto `&[]`.
+- `mssql-orm-core` agregó `column_name_exists(...)` como helper `const fn` para permitir validaciones de nombres de columna durante compilación.
+- `#[derive(AuditFields)]` ahora genera `COLUMN_NAMES` a partir de los nombres finales de columna, respetando `#[orm(column = "...")]`.
+- `#[derive(Entity)]` ahora emite aserciones constantes para entidades con `#[orm(audit = Audit)]`; si una columna propia colisiona con una columna auditable, la compilación falla nombrando la columna duplicada y sugiriendo renombrar mediante `#[orm(column = "...")]`.
+- Se agregó el fixture `trybuild` inválido `entity_audit_column_collision.rs` y su `.stderr` esperado.
+- Se actualizó `docs/entity-policies.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- Las colisiones entre columnas propias de una entidad y columnas aportadas por `AuditFields` ya fallan en compile-time antes de construir `EntityMetadata`.
+- La validación de colisiones entre varias policies queda pendiente para la siguiente subtarea antes de introducir policies simultáneas como `timestamps`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm-macros`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero reportó advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+- Se detectó que `crates/mssql-orm/wip/` ya contenía archivos previos no relacionados (`.gitignore` y `dbcontext_invalid_field_type.stderr`); no se modificaron.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de audit + timestamps`.
+
 ### Sesión: expandir columnas auditables en metadata de entidad
 
 - Se ejecutó la subtarea `Etapa 16: Hacer que #[orm(audit = Audit)] expanda las columnas auditables dentro de EntityMetadata.columns en orden estable y documentado`.
