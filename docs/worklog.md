@@ -2,6 +2,38 @@
 
 ## 2026-04-25
 
+### Sesión: diseño conceptual de `AuditProvider`
+
+- Se ejecutó la subtarea `Etapa 16+: Diseñar AuditProvider para autollenado futuro, incluyendo now, usuario actual, valores por request, integración con DbContext y comportamiento dentro de transacciones`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md`, `docs/entity-policies.md`, `docs/code-first.md`, `docs/api.md`, `README.md` y el plan maestro.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó en `docs/entity-policies.md` la sección `Diseno futuro de AuditProvider`.
+- El diseño separa metadata y runtime: `audit = Audit` sigue declarando columnas, mientras `AuditProvider` solo resolvería valores para columnas auditables existentes.
+- Se documentó un shape conceptual con `AuditContext`, `AuditOperation`, `AuditRequestValues` y `AuditProvider`.
+- Se definieron reglas esperadas para `now`, usuario actual, valores por request, integración con `DbContext` y herencia dentro de `db.transaction(...)`.
+- Se dejó explícito que no se implementa autollenado runtime en esta sesión y que la mutación de `Vec<ColumnValue>` queda para la siguiente tarea.
+- Se actualizó `docs/context.md` con el nuevo entendimiento operativo y el próximo foco recomendado.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- `AuditProvider` queda diseñado a nivel conceptual para autollenado futuro, sin cambios de código ni modificación de rutas runtime de persistencia.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y no cambió código ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Definir cómo AuditProvider debe modificar Vec<ColumnValue> en insert/update sin duplicar la lógica existente de Insertable, Changeset, EntityPersist, Active Record ni change tracking`.
+
 ### Sesión: validación local mínima de cierre de Etapa 16
 
 - Se ejecutó la subtarea `Etapa 16: Ejecutar validación local mínima antes de cerrar: cargo fmt --all --check, cargo check --workspace, tests trybuild afectados y pruebas unitarias de core, macros, migrate y sqlserver relacionadas`.

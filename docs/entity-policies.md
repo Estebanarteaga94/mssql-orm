@@ -362,6 +362,106 @@ Estas capacidades quedan explicitamente fuera del MVP aunque sean parte del conc
 
 Cada una de esas capacidades necesita su propia tarea, pruebas y contrato publico antes de entrar al codigo.
 
+## Diseno futuro de `AuditProvider`
+
+`AuditProvider` es el contrato runtime futuro para calcular valores auditables en operaciones de escritura. No forma parte del MVP implementado de Etapa 16 y no debe activar autollenado mientras no exista una tarea de implementacion dedicada.
+
+La responsabilidad del provider debe ser producir valores para columnas auditables ya declaradas por `#[derive(AuditFields)]`. No debe crear columnas, modificar metadata ni participar en snapshots, diff o DDL. La metadata sigue viniendo de `audit = Audit`; el provider solo resuelve valores runtime para columnas existentes.
+
+Shape conceptual esperado:
+
+```rust
+pub struct AuditContext<'a> {
+    pub operation: AuditOperation,
+    pub entity: &'static EntityMetadata,
+    pub audit_columns: &'static [ColumnMetadata],
+    pub request_values: &'a AuditRequestValues,
+    pub transaction_id: Option<&'a str>,
+}
+
+pub enum AuditOperation {
+    Insert,
+    Update,
+}
+
+pub trait AuditProvider: Send + Sync + 'static {
+    fn now(&self, ctx: &AuditContext<'_>) -> chrono::NaiveDateTime;
+    fn current_user(&self, ctx: &AuditContext<'_>) -> Option<SqlValue>;
+    fn value_for(&self, column: &ColumnMetadata, ctx: &AuditContext<'_>) -> Option<SqlValue>;
+}
+```
+
+Este shape es deliberadamente conceptual. Antes de llevarlo a codigo se debe decidir si `now` debe usar `chrono::NaiveDateTime`, un tipo propio, o una abstraccion que permita preservar precision SQL Server `datetime2`. Tambien se debe decidir si `current_user` devuelve `SqlValue` directamente o un tipo dedicado que pueda mapearse con seguridad a columnas `String`, `i64`, `Uuid` u otros identificadores.
+
+### Tiempo actual
+
+`AuditProvider::now(...)` debe ser la unica fuente runtime de tiempo para autollenado desde Rust. Esto evita mezclar relojes de sistema, defaults SQL y valores ad hoc dentro de `Insertable`, `Changeset`, Active Record o change tracking.
+
+Reglas esperadas:
+
+- `created_at` se calcula en insert cuando la columna auditable existe y participa en insercion.
+- `updated_at` se calcula en insert y update solo si la policy/columna lo permite.
+- Si la columna usa `default_sql = "SYSUTCDATETIME()"` y no se autollena desde Rust, el valor puede quedar delegado a SQL Server.
+- No se deben mezclar valores generados por Rust y defaults SQL para la misma columna sin una regla explicita de precedencia.
+
+### Usuario actual y valores por request
+
+El provider no debe leer usuario actual desde variables globales implicitas. El usuario, tenant, correlation id u otros valores por request deben llegar a traves de un contenedor explicito asociado al contexto:
+
+```rust
+pub struct AuditRequestValues {
+    pub user_id: Option<SqlValue>,
+    pub user_name: Option<String>,
+    pub correlation_id: Option<String>,
+}
+```
+
+La forma concreta puede cambiar, pero el principio no: un `DbContext` debe poder cargar valores por request de forma explicita y clonable, y esos valores deben viajar con contextos transaccionales derivados.
+
+Reglas esperadas:
+
+- Si una columna auditable requiere usuario y no hay usuario activo, la operacion debe fallar cerrado o dejar la columna sin autollenar segun una politica explicita.
+- El provider debe poder mapear `created_by`/`updated_by` a columnas `String`, `i64`, `Uuid` u otros tipos soportados por `SqlTypeMapping`.
+- Los valores por request no deben vivir en estado global compartido porque eso rompe concurrencia async y tests paralelos.
+
+### Integracion con `DbContext`
+
+La integracion publica esperada es configurar el provider y los valores de request en el contexto, no en cada `DbSet` por separado.
+
+Forma conceptual:
+
+```rust
+let db = AppDb::connect(connection_string)
+    .await?
+    .with_audit_provider(provider)
+    .with_audit_values(values);
+```
+
+El derive `DbContext` no debe duplicar reglas de auditoria por entidad. Debe propagar un handle compartido a los `DbSet<T>` y a las rutas que ya existen:
+
+- `DbSet::insert(...)`
+- `DbSet::update(...)`
+- `entity.save(&db)`
+- `save_changes()`
+
+La integracion futura debe preservar que la API publica permanezca concentrada en `mssql-orm`; `core` solo deberia contener contratos neutrales si hacen falta, y `tiberius` no debe conocer `AuditProvider`.
+
+### Transacciones
+
+Dentro de `db.transaction(...)`, el contexto transaccional debe heredar el mismo `AuditProvider` y los mismos valores por request que tenia el contexto padre al abrir la transaccion.
+
+Reglas esperadas:
+
+- Todas las operaciones dentro de una transaccion deben ver el mismo provider y los mismos valores por request.
+- Si se desea un `now` estable por transaccion, debe modelarse de forma explicita, por ejemplo cacheando un instante en `AuditContext` o en un `TransactionAuditScope`.
+- Si se desea un `now` por operacion, cada insert/update puede invocar `provider.now(...)` de forma independiente.
+- La decision entre `now` estable por transaccion y `now` por operacion debe ser configurable o al menos documentada antes de implementar.
+- `db.transaction(...)` sobre pool sigue bloqueado hasta resolver pinning de conexion; `AuditProvider` no debe relajar ese limite.
+
+### Limites de esta tarea
+
+Este diseno no define todavia como se modifican los `Vec<ColumnValue>` producidos por `Insertable`, `Changeset` o `EntityPersist`. Esa responsabilidad queda para la siguiente tarea del backlog, porque toca deduplicacion de columnas, precedencia entre valores explicitos y generados, y rutas compartidas entre `DbSet`, Active Record y `save_changes()`.
+
 ## Limites Arquitectonicos
 
 Las tareas de implementacion deben respetar estos limites:

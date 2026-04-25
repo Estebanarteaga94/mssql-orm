@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [ ] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
 - [ ] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
 - [ ] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
@@ -18,6 +17,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
 - [x] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas
 - [x] Etapa 16: Actualizar `docs/context.md` al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública
 - [x] Etapa 16: Actualizar `README.md` y/o documentación de roadmap para presentar `Entity Policies` como evolución code-first, aclarando qué está implementado y qué queda diferido
