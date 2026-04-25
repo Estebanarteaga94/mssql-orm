@@ -5376,3 +5376,28 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Definir cómo soft_delete obtiene valores runtime para columnas como deleted_at, deleted_by o is_deleted sin acoplar core a contexto por request ni duplicar la lógica actual de update`.
+
+### Sesión: Diseño del contrato runtime para valores de `soft_delete`
+
+- Se confirmó nuevamente que el plan maestro real del repositorio está en `docs/plan_orm_sqlserver_tiberius_code_first.md`, y se usó esa ruta como fuente de verdad junto con `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+- Se movió en `docs/tasks.md` la tarea `Etapa 16+: Definir cómo soft_delete obtiene valores runtime para columnas como deleted_at, deleted_by o is_deleted sin acoplar core a contexto por request ni duplicar la lógica actual de update` a `En Progreso` antes de editar y luego a `Completadas` tras validarla.
+- Se revisaron las decisiones ya fijadas para `AuditProvider` y las rutas reales de persistencia en `crates/mssql-orm/src/context.rs` y `crates/mssql-orm/src/active_record.rs` para no introducir un segundo mecanismo incompatible de mutación de `Vec<ColumnValue>`.
+- La decisión principal quedó documentada en `docs/entity-policies.md`: `soft_delete` necesita un contrato runtime separado de su metadata, responsable de mutar un `Vec<ColumnValue>` ya normalizado dentro de `mssql-orm`.
+- También quedó explícito que ese provider/runtime contract no debe vivir en `mssql-orm-core`, no debe inferir columnas por nombres mágicos como `deleted_at` o `is_deleted`, y no debe generar SQL directo ni tocar el AST de `mssql-orm-query`.
+- Se fijó además que `DbSet::delete(...)`, `ActiveRecord::delete(&db)` y `save_tracked_deleted()` deben converger en un único punto interno de mutación de cambios antes de compilar el `UpdateQuery`, exactamente para evitar duplicación de lógica runtime.
+- La documentación deja alineado el principio de precedencia con `AuditProvider`: valores explícitos no se sobrescriben silenciosamente, duplicados fallan y la ausencia de un valor requerido debe detectarse antes de compilar SQL.
+- Se actualizó `docs/context.md` para reflejar que `soft_delete` ya tiene definido su contrato runtime a nivel conceptual y que el siguiente paso razonable pasa a ser cobertura e implementación con pruebas.
+- La validación ejecutada para cerrar esta sesión fue `cargo fmt --all --check` y `cargo check --workspace`.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión solo cerró decisiones de diseño y trazabilidad documental; no hubo cambios en código ejecutable.
+
+### Resultado
+
+- El repositorio ya documenta cómo debe resolverse en runtime el llenado de `deleted_at`, `deleted_by` o `is_deleted` para `soft_delete`, sin romper la separación entre metadata, AST, compilación SQL y ejecución.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Cubrir soft_delete con pruebas de SQL compilado, CRUD público, Active Record, change tracking y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente`.

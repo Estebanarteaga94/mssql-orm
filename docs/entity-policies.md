@@ -468,6 +468,117 @@ En esta etapa de diseno, `soft_delete` afecta por defecto la entidad raiz de `Db
 
 Ese limite debe quedar documentado cuando se implemente para no prometer una semantica de joins mas fuerte de la que el query builder actual puede sostener sin aliases y sin metadata adicional por tabla unida.
 
+## Valores runtime para `soft_delete = SoftDelete`
+
+La metadata de `SoftDelete` no alcanza por si sola para ejecutar el borrado logico. En runtime, la ruta de `delete` necesita construir assignments concretos para columnas como:
+
+- `deleted_at = ...`
+- `deleted_by = ...`
+- `is_deleted = true`
+
+Esos valores no deben salir de `mssql-orm-core`, ni del AST de `mssql-orm-query`, ni de heuristicas por nombre de columna.
+
+### Regla principal
+
+`soft_delete` necesita un contrato runtime propio, separado de la metadata de schema, igual que `audit = Audit` necesita `AuditProvider` para autollenado futuro.
+
+La division correcta es:
+
+- `SoftDelete` como policy declarativa: define que columnas existen
+- un provider/runtime contract separado: resuelve que valores se escriben cuando se ejecuta un borrado logico
+
+No debe intentarse resolver esta necesidad inyectando SQL crudo ad hoc en `DeleteQuery`, ni leyendo contexto HTTP/request desde `core`, ni duplicando la logica de `DbSet::update(...)` en cada ruta.
+
+### Punto unico de mutacion
+
+La mutacion de valores debe ocurrir en `mssql-orm`, sobre un `Vec<ColumnValue>` ya normalizado, de la misma forma conceptual ya fijada para `AuditProvider`.
+
+La regla es:
+
+- `DbSet::delete(...)` para entidades con `soft_delete` produce una lista base de cambios de borrado logico
+- `ActiveRecord::delete(&db)` reutiliza exactamente la misma ruta
+- `save_tracked_deleted()` reutiliza exactamente la misma ruta
+- antes de compilar `UpdateQuery`, una unica transformacion interna completa y valida esos `ColumnValue`
+
+Ese punto unico evita que cada caller tenga que saber como poblar `deleted_at`, `deleted_by` o `is_deleted`.
+
+### Shape conceptual del provider
+
+El shape no necesita quedar identico a `AuditProvider`, pero si alineado en principios. Conceptualmente, `soft_delete` necesita algo de esta forma:
+
+```rust
+pub struct SoftDeleteContext<'a> {
+    pub entity: &'static EntityMetadata,
+    pub operation: SoftDeleteOperation,
+    pub request_values: Option<&'a SoftDeleteRequestValues>,
+}
+
+pub enum SoftDeleteOperation {
+    Delete,
+}
+
+pub trait SoftDeleteProvider: Send + Sync {
+    fn apply(
+        &self,
+        context: SoftDeleteContext<'_>,
+        changes: &mut Vec<ColumnValue>,
+    ) -> Result<(), OrmError>;
+}
+```
+
+No es un contrato final de compilacion, pero fija la responsabilidad:
+
+- recibe metadata de la entidad
+- recibe la operacion de borrado logico
+- muta un `Vec<ColumnValue>` ya existente
+- no genera SQL directo
+- no toca `SelectQuery`, `UpdateQuery` ni `CompiledQuery`
+
+### Precedencia y validacion
+
+La transformacion runtime de `soft_delete` debe seguir reglas de precedencia equivalentes a las ya definidas para `AuditProvider`:
+
+- si el usuario o una ruta interna ya aporto un valor explicito valido para una columna de `SoftDelete`, el provider no debe sobrescribirlo silenciosamente
+- si aparecen dos valores para la misma columna de `SoftDelete`, debe fallar como error interno/contractual, no elegir uno de forma implicita
+- deben respetarse flags `updatable` y `nullable` de la columna resultante
+- la ausencia de un valor requerido para una columna no nullable sin `default_sql` debe resolverse antes de compilar el `UpdateQuery`, no dejar que falle de forma opaca aguas abajo
+
+### Sin inferencia por nombres magicos
+
+Igual que en auditoria, runtime no debe descubrir columnas por nombres como `deleted_at`, `deleted_by` o `is_deleted`.
+
+Razon:
+
+- `EntityMetadata.columns` no conserva por si sola el origen semantico de cada columna
+- una entidad podria tener una columna `deleted_at` no asociada a `soft_delete`
+- el usuario puede renombrar columnas via `#[orm(column = "...")]`
+
+Por eso, una implementacion posterior necesitara un contrato runtime auxiliar generado por `#[orm(soft_delete = SoftDelete)]` que exponga que columnas de la entidad pertenecen a la policy de borrado logico.
+
+Ese contrato auxiliar no debe alterar snapshots, diff ni DDL. Solo debe permitir que la crate publica sepa que columnas puede completar en runtime.
+
+### Integracion con contexto y transacciones
+
+El provider de `soft_delete` debe colgar de `DbContext` o de la infraestructura publica de runtime en `mssql-orm`, no de `SharedConnection`, `MssqlConnection` ni `mssql-orm-core`.
+
+Debe heredar el mismo principio ya aceptado para `AuditProvider`:
+
+- la configuracion runtime vive en la crate publica / contexto
+- una transaccion creada con `db.transaction(...)` debe seguir viendo el mismo provider y los mismos valores por request
+- `core` permanece libre de contexto operacional
+
+### Consecuencia de diseno
+
+La implementacion futura de `soft_delete` no debe empezar por “armar un `UpdateQuery` con literales” dentro de `delete_by_sql_value(...)`. Primero necesita este contrato runtime para producir assignments consistentes y compartidos.
+
+Sin ese contrato, cualquier implementacion de `deleted_at`, `deleted_by` o `is_deleted` quedaria duplicada entre:
+
+- `DbSet::delete(...)`
+- `ActiveRecord::delete(&db)`
+- `save_tracked_deleted()`
+
+y perderia coherencia con el resto del diseno de policies runtime.
+
 ## Que Significa Columnas Generadas
 
 Una policy de columnas generadas aporta metadata de columnas como si esas columnas hubieran sido declaradas manualmente en la entidad.
