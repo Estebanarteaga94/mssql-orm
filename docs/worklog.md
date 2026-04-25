@@ -2,6 +2,51 @@
 
 ## 2026-04-25
 
+### Sesión: validación final de release Etapa 15
+
+- Se ejecutó la subtarea `Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- La tarea ya estaba movida a `En Progreso` al iniciar la sesión, por lo que se continuó desde ese estado.
+- Se revisó la documentación operativa, el README principal, el índice de ejemplos y el `Cargo.toml` independiente de `examples/todo-app`.
+- La primera corrida de `cargo test --workspace` falló en tres fixtures `trybuild` válidos porque los binarios generados bajo `target/tests/trybuild` eran archivos de ceros y el sistema respondió `cannot execute binary file`.
+- Se limpió solo el directorio generado `target/tests/trybuild` y se repitió `cargo test -p mssql-orm --test trybuild`; el test pasó, confirmando que el fallo era un artefacto corrupto de build y no un problema de fuente.
+- Se aplicó `cargo fmt --manifest-path examples/todo-app/Cargo.toml --all` porque el ejemplo tenía un ajuste pendiente de formato en `examples/todo-app/src/lib.rs`.
+- Se validó el exportador `examples/todo-app` con `cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot`.
+- Se ejecutó `examples/todo-app/scripts/migration_e2e.sh`, que generó migración inicial, migración incremental no-op y `database_update.sql` en un directorio temporal.
+- El apply real con `sqlcmd` del script del ejemplo se omitió automáticamente porque `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER` y `MSSQL_ORM_SQLCMD_PASSWORD` no están configuradas.
+- Se actualizó `docs/tasks.md`, `docs/worklog.md` y `docs/context.md`.
+
+### Resultado
+
+- La validación final de release de Etapa 15 queda cerrada sobre el workspace y el ejemplo documentado `todo-app`.
+- No se introdujeron cambios funcionales; el único cambio de código fue formato en el ejemplo.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test trybuild` tras limpiar `target/tests/trybuild`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo fmt --manifest-path examples/todo-app/Cargo.toml --all --check`
+- `cargo check --manifest-path examples/todo-app/Cargo.toml`
+- `cargo test --manifest-path examples/todo-app/Cargo.toml`
+- `cargo clippy --manifest-path examples/todo-app/Cargo.toml --all-targets --all-features`
+- `cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot`
+- `examples/todo-app/scripts/migration_e2e.sh`
+
+### Bloqueos
+
+- No hubo bloqueos permanentes.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+- `cargo clippy --manifest-path examples/todo-app/Cargo.toml --all-targets --all-features` terminó con código 0, pero reportó advertencias no bloqueantes en el ejemplo (`manual_async_fn`, `bool_assert_comparison`, `iter_overeager_cloned`).
+- La prueba ignorada `smoke_preview_query_runs_against_sql_server_fixture` del ejemplo no se ejecutó porque requiere `DATABASE_URL` y fixture SQL Server explícitos.
+- `migration_e2e.sh` no aplicó el script contra SQL Server por falta de variables `MSSQL_ORM_SQLCMD_*`.
+
+### Próximo paso recomendado
+
+- Continuar con `Etapa 16: Actualizar el ejemplo todo-app o agregar fixture dedicado para mostrar al menos una entidad con #[orm(audit = Audit)] sin degradar el smoke existente`.
+
 ### Sesión: bloqueo de transacciones sobre pool
 
 - Se ejecutó la subtarea `Etapa 15+: Bloquear db.transaction(...) sobre SharedConnection::Pool hasta pinnear una conexión física durante todo el closure transaccional`.

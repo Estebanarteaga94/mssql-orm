@@ -677,7 +677,10 @@ mod tests {
 
         assert_eq!(items.len(), 2);
         assert_eq!(
-            items.iter().map(|item| item.title.as_str()).collect::<Vec<_>>(),
+            items
+                .iter()
+                .map(|item| item.title.as_str())
+                .collect::<Vec<_>>(),
             vec!["Ship release", "Review PR"]
         );
     }
