@@ -5445,3 +5445,28 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Implementar el contrato runtime de soft_delete en mssql-orm para producir y validar Vec<ColumnValue> de borrado lógico sin duplicar la lógica de update`.
+
+### Sesión: contrato runtime de `soft_delete` en `mssql-orm`
+
+- Se ejecutó la subtarea `Etapa 16+: Implementar el contrato runtime de soft_delete en mssql-orm para producir y validar Vec<ColumnValue> de borrado lógico sin duplicar la lógica de update`.
+- Se agregó `crates/mssql-orm/src/soft_delete_runtime.rs` con la surface pública `SoftDeleteProvider`, `SoftDeleteContext`, `SoftDeleteOperation` y `SoftDeleteRequestValues`, además del helper interno `apply_soft_delete_values::<E>(...)`.
+- El helper runtime valida duplicados de columna, respeta la ausencia de policy en entidades sin `soft_delete`, aplica el provider opcional y luego vuelve a validar el shape final antes de que una futura ruta de `delete` compile un `UpdateQuery`.
+- También quedaron cubiertas las reglas mínimas del contrato: una columna de `soft_delete` no puede mutarse si no es `updatable`, no puede recibir `NULL` si no es nullable y debe existir valor runtime para toda columna de la policy que sea `updatable`, no nullable y sin `default_sql`.
+- `mssql-orm::prelude::*` ahora reexporta también la surface runtime de `soft_delete`, para mantener la API pública consolidada en la crate raíz.
+- Se añadieron pruebas unitarias en el nuevo módulo para cubrir pass-through en entidades sin policy, aplicación del provider, detección de duplicados y ausencia de columnas requeridas.
+- Durante la primera corrida, el test dirigido falló porque las pruebas usaban `chrono` sin dependencia directa en la crate pública; se corrigió reemplazando esos valores por `SqlValue::String(...)`, suficiente para validar el contrato actual sin introducir dependencias nuevas.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo fmt --all --check`, `cargo check --workspace` y `cargo test -p mssql-orm soft_delete_runtime -- --nocapture`.
+- No se ejecutó `cargo test --workspace` completo ni `cargo clippy --workspace --all-targets --all-features` porque esta sesión quedó acotada a la surface runtime nueva de `mssql-orm`; la cobertura dirigida ya ejercita la superficie tocada.
+- Se actualizó `docs/tasks.md` para mover la subtarea a `Completadas` y `docs/context.md` para reflejar que el contrato runtime ya existe, aunque todavía no está cableado a `DbSet`, Active Record ni change tracking.
+
+### Resultado
+
+- `soft_delete` ya tiene contrato runtime real dentro de `mssql-orm`, listo para que la siguiente subtarea conecte las rutas públicas de borrado con `UpdateQuery` sin duplicar la validación de valores lógicos.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos después de corregir la dependencia accidental en pruebas.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Hacer que DbSet::delete(...), delete_by_sql_value(...), delete_tracked_by_sql_value(...), entity.delete(&db) y save_tracked_deleted() usen UpdateQuery cuando la entidad tenga soft_delete`.

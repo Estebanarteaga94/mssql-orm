@@ -9,6 +9,7 @@ mod page_request;
 mod predicate_composition;
 mod query_order;
 mod query_predicates;
+mod soft_delete_runtime;
 mod tracking;
 
 pub use mssql_orm_core as core;
@@ -39,6 +40,9 @@ pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
+pub use soft_delete_runtime::{
+    SoftDeleteContext, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+};
 pub use tracking::{EntityState, Tracked};
 #[doc(hidden)]
 pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
@@ -69,7 +73,8 @@ pub mod prelude {
         MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
         MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
         MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
-        PredicateCompositionExt, SoftDeleteEntity, Tracked, model_snapshot_from_source,
+        PredicateCompositionExt, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
+        SoftDeleteProvider, SoftDeleteRequestValues, Tracked, model_snapshot_from_source,
         model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]

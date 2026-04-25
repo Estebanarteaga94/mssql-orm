@@ -1,0 +1,362 @@
+use crate::SoftDeleteEntity;
+use mssql_orm_core::{ColumnMetadata, ColumnValue, EntityMetadata, OrmError, SqlValue};
+use std::collections::BTreeSet;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoftDeleteOperation {
+    Delete,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SoftDeleteRequestValues {
+    values: Vec<ColumnValue>,
+}
+
+impl SoftDeleteRequestValues {
+    pub fn new(values: Vec<ColumnValue>) -> Self {
+        Self { values }
+    }
+
+    pub fn values(&self) -> &[ColumnValue] {
+        &self.values
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SoftDeleteContext<'a> {
+    pub entity: &'static EntityMetadata,
+    pub operation: SoftDeleteOperation,
+    pub request_values: Option<&'a SoftDeleteRequestValues>,
+}
+
+pub trait SoftDeleteProvider: Send + Sync {
+    fn apply(
+        &self,
+        context: SoftDeleteContext<'_>,
+        changes: &mut Vec<ColumnValue>,
+    ) -> Result<(), OrmError>;
+}
+
+#[allow(dead_code)]
+pub(crate) fn apply_soft_delete_values<E: SoftDeleteEntity>(
+    operation: SoftDeleteOperation,
+    values: Vec<ColumnValue>,
+    soft_delete_provider: Option<&dyn SoftDeleteProvider>,
+    request_values: Option<&SoftDeleteRequestValues>,
+) -> Result<Vec<ColumnValue>, OrmError> {
+    validate_no_duplicate_columns(&values)?;
+
+    let Some(policy) = E::soft_delete_policy() else {
+        return Ok(values);
+    };
+
+    let mut values = values;
+    let context = SoftDeleteContext {
+        entity: E::metadata(),
+        operation,
+        request_values,
+    };
+
+    if let Some(provider) = soft_delete_provider {
+        provider.apply(context, &mut values)?;
+    }
+
+    validate_no_duplicate_columns(&values)?;
+
+    for value in &values {
+        let Some(column) = policy
+            .columns
+            .iter()
+            .find(|column| column.column_name == value.column_name)
+        else {
+            continue;
+        };
+
+        validate_soft_delete_column_value(column, &value.value)?;
+    }
+
+    for column in policy.columns {
+        if !column.updatable {
+            continue;
+        }
+
+        if column.default_sql.is_some() {
+            continue;
+        }
+
+        if column.nullable {
+            continue;
+        }
+
+        if !values
+            .iter()
+            .any(|value| value.column_name == column.column_name)
+        {
+            return Err(OrmError::new(format!(
+                "soft_delete requires a runtime value for non-nullable column `{}`",
+                column.column_name
+            )));
+        }
+    }
+
+    Ok(values)
+}
+
+#[allow(dead_code)]
+fn validate_no_duplicate_columns(values: &[ColumnValue]) -> Result<(), OrmError> {
+    let mut seen = BTreeSet::new();
+
+    for value in values {
+        if !seen.insert(value.column_name) {
+            return Err(OrmError::new(format!(
+                "duplicate column `{}` in soft_delete values",
+                value.column_name
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(dead_code)]
+fn validate_soft_delete_column_value(
+    column: &ColumnMetadata,
+    value: &SqlValue,
+) -> Result<(), OrmError> {
+    if !column.updatable {
+        return Err(OrmError::new(format!(
+            "soft_delete column `{}` is not updatable",
+            column.column_name
+        )));
+    }
+
+    if matches!(value, SqlValue::Null) && !column.nullable {
+        return Err(OrmError::new(format!(
+            "soft_delete column `{}` is not nullable",
+            column.column_name
+        )));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        SoftDeleteContext, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+        apply_soft_delete_values,
+    };
+    use crate::SoftDeleteEntity;
+    use mssql_orm_core::{
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, OrmError,
+        PrimaryKeyMetadata, SqlServerType, SqlValue,
+    };
+
+    struct TestSoftDeleteEntity;
+
+    static TEST_ENTITY_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TestSoftDeleteEntity",
+        schema: "dbo",
+        table: "test_soft_delete_entities",
+        renamed_from: None,
+        columns: &TEST_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata::new(None, &["id"]),
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    static TEST_SOFT_DELETE_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_by",
+            column_name: "deleted_by",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    impl Entity for TestSoftDeleteEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &TEST_ENTITY_METADATA
+        }
+    }
+
+    impl SoftDeleteEntity for TestSoftDeleteEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &TEST_SOFT_DELETE_COLUMNS,
+            ))
+        }
+    }
+
+    struct TestSoftDeleteProvider;
+
+    impl SoftDeleteProvider for TestSoftDeleteProvider {
+        fn apply(
+            &self,
+            context: SoftDeleteContext<'_>,
+            changes: &mut Vec<ColumnValue>,
+        ) -> Result<(), OrmError> {
+            assert_eq!(context.entity.rust_name, "TestSoftDeleteEntity");
+            assert_eq!(context.operation, SoftDeleteOperation::Delete);
+            assert!(context.request_values.is_some());
+
+            changes.push(ColumnValue::new(
+                "deleted_at",
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+            ));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn apply_soft_delete_values_returns_input_for_entities_without_policy() {
+        struct PlainEntity;
+
+        impl Entity for PlainEntity {
+            fn metadata() -> &'static EntityMetadata {
+                &TEST_ENTITY_METADATA
+            }
+        }
+
+        impl SoftDeleteEntity for PlainEntity {
+            fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+                None
+            }
+        }
+
+        let values = vec![ColumnValue::new(
+            "status",
+            SqlValue::String("x".to_string()),
+        )];
+
+        let result = apply_soft_delete_values::<PlainEntity>(
+            SoftDeleteOperation::Delete,
+            values.clone(),
+            None,
+            None,
+        )
+        .expect("plain entity should pass through");
+
+        assert_eq!(result, values);
+    }
+
+    #[test]
+    fn apply_soft_delete_values_applies_provider_and_validates_required_columns() {
+        let request_values =
+            SoftDeleteRequestValues::new(vec![ColumnValue::new("deleted_by", SqlValue::Null)]);
+
+        let values = apply_soft_delete_values::<TestSoftDeleteEntity>(
+            SoftDeleteOperation::Delete,
+            vec![],
+            Some(&TestSoftDeleteProvider),
+            Some(&request_values),
+        )
+        .expect("provider should populate required soft delete columns");
+
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].column_name, "deleted_at");
+    }
+
+    #[test]
+    fn apply_soft_delete_values_rejects_duplicate_columns() {
+        let error = apply_soft_delete_values::<TestSoftDeleteEntity>(
+            SoftDeleteOperation::Delete,
+            vec![
+                ColumnValue::new("deleted_at", SqlValue::String("first".to_string())),
+                ColumnValue::new("deleted_at", SqlValue::String("second".to_string())),
+            ],
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("duplicate column `deleted_at` in soft_delete values")
+        );
+    }
+
+    #[test]
+    fn apply_soft_delete_values_rejects_missing_required_column_without_default() {
+        let error = apply_soft_delete_values::<TestSoftDeleteEntity>(
+            SoftDeleteOperation::Delete,
+            vec![ColumnValue::new("deleted_by", SqlValue::Null)],
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new(
+                "soft_delete requires a runtime value for non-nullable column `deleted_at`"
+            )
+        );
+    }
+}

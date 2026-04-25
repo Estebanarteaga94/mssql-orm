@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Implementar el contrato runtime de `soft_delete` en `mssql-orm` para producir y validar `Vec<ColumnValue>` de borrado lógico sin duplicar la lógica de `update`
 - [ ] Etapa 16+: Hacer que `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` usen `UpdateQuery` cuando la entidad tenga `soft_delete`
 - [ ] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
 - [ ] Etapa 16+: Agregar rutas internas sin filtro implícito de `soft_delete` para comprobaciones de existencia y `ConcurrencyConflict` sin exponer bypass público accidental
@@ -13,9 +12,8 @@
 - [ ] Etapa 16+: Garantizar que inserts de entidades con `tenant = TenantScope` reciban automáticamente `tenant_id` desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
 
-## En Progreso
-
 ## Completadas
+- [x] Etapa 16+: Implementar el contrato runtime de `soft_delete` en `mssql-orm` para producir y validar `Vec<ColumnValue>` de borrado lógico sin duplicar la lógica de `update`
 - [x] Etapa 16+: Extender `#[derive(Entity)]` para aceptar `#[orm(soft_delete = SoftDelete)]`, generar metadata/runtime contract auxiliar de la policy y rechazar configuraciones inválidas en compile-time
 - [x] Operativo: Descomponer la implementación de `soft_delete` en subtareas ejecutables antes de intentar cobertura integral
 - [x] Etapa 16+: Definir cómo `soft_delete` obtiene valores runtime para columnas como `deleted_at`, `deleted_by` o `is_deleted` sin acoplar `core` a contexto por request ni duplicar la lógica actual de `update`
