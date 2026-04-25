@@ -19,6 +19,7 @@ Hoy el flujo de migraciones del repo es `code-first` en intencion arquitectonica
 - el workspace ya tiene snapshots, diff y DDL SQL Server en crates internas
 - la CLI publica actual scaffolda migraciones, genera un script SQL acumulado y puede aplicarlo explicitamente con `--execute`
 - `up.sql` se autogenera cuando entregas un snapshot actual real; sigue siendo un artefacto revisable y editable antes de aplicar la migracion
+- `down.sql` tambien puede autogenerarse cuando todas las operaciones del diff conservan payload suficiente para invertirlas de forma segura; si no, queda como rollback manual
 
 Lo importante es no trabajar como si la CLI ya resolviera todo el ciclo de vida por ti: aun debes exportar el snapshot actual, revisar el SQL generado y aplicar el script conscientemente.
 
@@ -29,7 +30,7 @@ El flujo mas seguro hoy es este:
 1. Cambia primero tus entidades y metadata Rust.
 2. Crea una migracion con nombre pequeno y concreto.
 3. Genera y revisa `up.sql`; editalo si el cambio requiere ajustes manuales.
-4. Escribe `down.sql` aunque hoy no exista un comando publico que lo ejecute.
+4. Revisa `down.sql`; completalo manualmente cuando la CLI indique que no pudo invertir todo el plan.
 5. Genera el script acumulado de `database update`.
 6. Revisalo antes de aplicarlo en SQL Server.
 7. Aplicalo explicitamente con `database update --execute` o con una herramienta externa como `sqlcmd`.
@@ -94,13 +95,15 @@ Detalles operativos relevantes:
 - el `id` incluye timestamp con resolucion de nanosegundos para reducir colisiones y preservar orden lexico
 - el nombre visible se deriva del slug del directorio
 - la salida de `migration add` lista las rutas de `up.sql`, `down.sql` y `model_snapshot.json`, y marca `migration.rs` como diferido para el MVP
-- `up.sql` se genera automaticamente cuando `migration add` dispone de snapshot actual real; `down.sql` nace como plantilla manual de rollback
+- `up.sql` se genera automaticamente cuando `migration add` dispone de snapshot actual real
+- `down.sql` se genera automaticamente solo cuando todas las operaciones son reversibles con el payload disponible; para operaciones sin payload suficiente conserva la plantilla manual de rollback
 - sin `--model-snapshot`, `model_snapshot.json` se scaffolda con un snapshot vacio valido
 - con `--model-snapshot`, la CLI lee ese JSON y lo versiona como `model_snapshot.json` de la migracion
 - con `--snapshot-bin`, la CLI ejecuta `cargo run --bin <bin>` sobre el manifest indicado, captura `stdout` y valida que sea un `ModelSnapshot` JSON valido
 - el exportador del consumidor sigue siendo explicito: la CLI no resuelve sola el nombre del `DbContext`, sino que delega esa seleccion al binario que uses para exportar el snapshot
 - cuando existe una migracion local previa y `migration add` recibe un snapshot actual real, la CLI carga el `model_snapshot.json` de la ultima migracion y reporta ambos lados (`Previous snapshot` y `Current snapshot`) como base del siguiente paso de diff
 - en ese mismo caso, la CLI ejecuta internamente `snapshot -> diff -> MigrationOperation -> DDL SQL Server`, reporta `Planned operations` y `Compiled SQL statements`, y escribe ese SQL compilado en `up.sql`
+- cuando puede invertir el plan completo, la CLI reporta `down.sql: generated`; cuando no puede, reporta `down.sql: manual (...)` con la primera operacion no reversible
 - si el diff detecta un cambio destructivo, `migration add` falla por defecto antes de crear la nueva migracion; usa `--allow-destructive` solo cuando hayas revisado el impacto y quieras generar igualmente el artefacto editable
 
 Actualmente se consideran destructivos estos cambios:
@@ -158,13 +161,15 @@ Buenas practicas:
 
 ## 5. Para que sirve `down.sql` hoy
 
-Debes seguir escribiendolo, pero con una expectativa correcta:
+Debes revisarlo siempre, pero con una expectativa correcta:
 
 - sirve como rollback documentado y material de revision
+- se autogenera para planes compuestos solo por operaciones reversibles con payload suficiente, por ejemplo `CreateSchema`, `CreateTable`, `AddColumn`, `AlterColumn`, `RenameTable`, `RenameColumn`, `CreateIndex` y `AddForeignKey`
+- queda manual cuando el plan contiene operaciones sin payload para reconstruir el estado anterior, por ejemplo `DropTable`, `DropColumn`, `DropIndex` o `DropForeignKey`
 - hoy la CLI publica no expone un comando para ejecutar `down.sql`
 - por eso no debes confiar en rollback automatico desde la herramienta
 
-En otras palabras: `down.sql` sigue siendo valioso, pero hoy es soporte operativo manual, no flujo automatizado.
+En otras palabras: `down.sql` puede nacer con una inversion util del diff, pero sigue siendo soporte operativo revisable, no flujo automatizado.
 
 ## 6. Listar migraciones locales
 
@@ -298,7 +303,7 @@ Conviene asumir estos limites hoy:
 - no hay baselining automatico para objetos existentes sin historial de migracion
 - la CLI actual no expone `database downgrade`
 - `down.sql` no se consume automaticamente
-- `down.sql` no se genera como inversion completa del diff; queda como rollback manual revisable hasta que las operaciones conserven payload suficiente para invertir cambios de forma segura
+- `down.sql` solo se genera como inversion completa del diff cuando todas las operaciones conservan payload suficiente; si no, queda como rollback manual revisable
 - `migration.rs` queda fuera del MVP actual y no se genera
 - `model_snapshot.json` se scaffolda, pero no se mantiene solo
 - la separacion por sentencias del `up.sql` es deliberadamente simple; conviene escribir migraciones SQL Server limpias y bien delimitadas
@@ -309,7 +314,7 @@ Para cambios pequenos y seguros:
 
 1. Cambia la entidad Rust.
 2. Crea migracion: `migration add AddPhoneToCustomers`.
-3. Revisa `up.sql` generado o escribelo manualmente si no usaste snapshot actual real; completa `down.sql`.
+3. Revisa `up.sql` generado o escribelo manualmente si no usaste snapshot actual real; revisa y completa `down.sql` si la CLI lo dejo manual.
 4. Genera script con `database update`.
 5. Revisa el SQL generado.
 6. Aplícalo en `tempdb`.

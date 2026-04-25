@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 7+: Evaluar generación reversible de `down.sql` cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura
 - [ ] Etapa 15: Preparar guía del query builder público (`filter`, `order_by`, joins, `take`, `paginate`, `count`)
 - [ ] Etapa 15: Preparar guía de transacciones y límites operativos de `db.transaction(...)`
 - [ ] Etapa 15: Preparar guía de relaciones y joins explícitos con foreign keys derivadas
@@ -43,6 +42,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 7+: Evaluar generación reversible de `down.sql` cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura
 - [x] Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable
 - [x] Etapa 16: Hacer que `#[orm(audit = Audit)]` expanda las columnas auditables dentro de `EntityMetadata.columns` en orden estable y documentado
 - [x] Etapa 16: Extender `#[derive(Entity)]` para aceptar `#[orm(audit = Audit)]` a nivel de entidad sin afectar entidades existentes que no declaran auditoría

@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: generar `down.sql` reversible cuando el payload lo permite
+
+- Se completó la subtarea `Etapa 7+: Evaluar generación reversible de down.sql cuando las operaciones de migración conserven payload suficiente para invertir cambios de forma segura`.
+- La tarea ya estaba en `En Progreso` al iniciar esta sesión y existían cambios parciales en `mssql-orm-cli` y `mssql-orm-migrate`; se continuó sobre ese trabajo sin revertirlo.
+- `mssql-orm-cli migration add` ahora calcula operaciones inversas en orden inverso del plan y compila esas operaciones con `SqlServerCompiler` para poblar `down.sql` cuando todo el plan es reversible.
+- Las operaciones reversibles actuales son `CreateSchema`, `DropSchema`, `CreateTable`, `RenameTable`, `RenameColumn`, `AddColumn`, `AlterColumn`, `CreateIndex` y `AddForeignKey`.
+- Las operaciones que eliminan objetos sin conservar payload de reconstrucción (`DropTable`, `DropColumn`, `DropIndex`, `DropForeignKey`) dejan `down.sql` como plantilla manual y la salida de la CLI reporta `down.sql: manual (...)` con la primera operación no reversible.
+- `mssql-orm-migrate` expone `write_migration_down_sql(...)` con el mismo formato de statements que `up.sql`.
+- Se agregó cobertura en `mssql-orm-cli` para `down.sql` generado en una migración reversible y para rollback manual al permitir un cambio destructivo con `--allow-destructive`.
+- Se agregó cobertura en `mssql-orm-migrate` para escribir `down.sql` generado.
+- Se actualizó `docs/migrations.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- `migration add` ya produce `down.sql` útil para planes reversibles, sin prometer ejecución automática de rollback.
+- Los casos sin payload suficiente siguen siendo explícitamente manuales y revisables.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm-cli`
+- `cargo test -p mssql-orm-migrate filesystem`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` ni `cargo clippy --workspace --all-targets --all-features` en esta sesión para mantener la validación proporcional al alcance; el cambio afecta CLI, filesystem de migraciones y documentación.
+
+### Próximo paso recomendado
+
+- Continuar con las tareas pendientes de Etapa 15 de documentación pública o volver a Etapa 16 para validar colisiones entre varias policies antes de introducir `timestamps`.
+
 ### Sesión: validar colisiones entre columnas auditables y columnas propias
 
 - Se ejecutó la subtarea `Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable`.

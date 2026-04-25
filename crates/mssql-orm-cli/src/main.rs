@@ -2,7 +2,7 @@ use mssql_orm_migrate::{
     MigrationOperation, ModelSnapshot, build_database_update_script, create_migration_scaffold,
     create_migration_scaffold_with_snapshot, diff_column_operations, diff_relational_operations,
     diff_schema_and_table_operations, list_migrations, read_latest_model_snapshot,
-    read_model_snapshot, write_migration_up_sql,
+    read_model_snapshot, write_migration_down_sql, write_migration_up_sql,
 };
 use mssql_orm_query::CompiledQuery;
 use mssql_orm_sqlserver::SqlServerCompiler;
@@ -50,6 +50,13 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
             if let Some(plan) = migration_plan.as_ref() {
                 write_migration_up_sql(&scaffold.directory.join("up.sql"), &plan.sql_statements)
                     .map_err(|error| error.to_string())?;
+                if let Some(down_sql_statements) = &plan.down_sql_statements {
+                    write_migration_down_sql(
+                        &scaffold.directory.join("down.sql"),
+                        down_sql_statements,
+                    )
+                    .map_err(|error| error.to_string())?;
+                }
             }
 
             let mut output = format!(
@@ -93,6 +100,18 @@ fn run(args: Vec<String>, root: &Path) -> Result<String, String> {
                     plan.sql_statements.len()
                 ));
                 output.push_str("\nup.sql: generated");
+                match &plan.down_sql_statements {
+                    Some(statements) => output.push_str(&format!(
+                        "\ndown.sql: generated ({} statements)",
+                        statements.len()
+                    )),
+                    None => output.push_str(&format!(
+                        "\ndown.sql: manual ({})",
+                        plan.down_sql_reason
+                            .as_deref()
+                            .unwrap_or("migration includes non-reversible operations")
+                    )),
+                }
             }
 
             Ok(output)
@@ -184,11 +203,107 @@ fn build_migration_plan(
 
     let sql_statements = SqlServerCompiler::compile_migration_operations(&operations)
         .map_err(|error| error.to_string())?;
+    let (down_operations, down_sql_reason) = reverse_migration_operations(&operations);
+    let down_sql_statements = match down_operations {
+        Some(operations) => Some(
+            SqlServerCompiler::compile_migration_operations(&operations)
+                .map_err(|error| error.to_string())?,
+        ),
+        None => None,
+    };
 
     Ok(Some(MigrationPlan {
         operations,
         sql_statements,
+        down_sql_statements,
+        down_sql_reason,
     }))
+}
+
+fn reverse_migration_operations(
+    operations: &[MigrationOperation],
+) -> (Option<Vec<MigrationOperation>>, Option<String>) {
+    let mut reversed = Vec::with_capacity(operations.len());
+
+    for operation in operations.iter().rev() {
+        let Some(reverse_operation) = reverse_migration_operation(operation) else {
+            return (
+                None,
+                Some(format!(
+                    "{} cannot be reversed automatically because its operation payload is incomplete",
+                    operation_label(operation)
+                )),
+            );
+        };
+        reversed.push(reverse_operation);
+    }
+
+    (Some(reversed), None)
+}
+
+fn reverse_migration_operation(operation: &MigrationOperation) -> Option<MigrationOperation> {
+    match operation {
+        MigrationOperation::CreateSchema(operation) => Some(MigrationOperation::DropSchema(
+            mssql_orm_migrate::DropSchema::new(operation.schema_name.clone()),
+        )),
+        MigrationOperation::DropSchema(operation) => Some(MigrationOperation::CreateSchema(
+            mssql_orm_migrate::CreateSchema::new(operation.schema_name.clone()),
+        )),
+        MigrationOperation::CreateTable(operation) => Some(MigrationOperation::DropTable(
+            mssql_orm_migrate::DropTable::new(
+                operation.schema_name.clone(),
+                operation.table.name.clone(),
+            ),
+        )),
+        MigrationOperation::DropTable(_) => None,
+        MigrationOperation::RenameTable(operation) => Some(MigrationOperation::RenameTable(
+            mssql_orm_migrate::RenameTable::new(
+                operation.schema_name.clone(),
+                operation.next_table_name.clone(),
+                operation.previous_table_name.clone(),
+            ),
+        )),
+        MigrationOperation::RenameColumn(operation) => Some(MigrationOperation::RenameColumn(
+            mssql_orm_migrate::RenameColumn::new(
+                operation.schema_name.clone(),
+                operation.table_name.clone(),
+                operation.next_column_name.clone(),
+                operation.previous_column_name.clone(),
+            ),
+        )),
+        MigrationOperation::AddColumn(operation) => Some(MigrationOperation::DropColumn(
+            mssql_orm_migrate::DropColumn::new(
+                operation.schema_name.clone(),
+                operation.table_name.clone(),
+                operation.column.name.clone(),
+            ),
+        )),
+        MigrationOperation::DropColumn(_) => None,
+        MigrationOperation::AlterColumn(operation) => Some(MigrationOperation::AlterColumn(
+            mssql_orm_migrate::AlterColumn::new(
+                operation.schema_name.clone(),
+                operation.table_name.clone(),
+                operation.next.clone(),
+                operation.previous.clone(),
+            ),
+        )),
+        MigrationOperation::CreateIndex(operation) => Some(MigrationOperation::DropIndex(
+            mssql_orm_migrate::DropIndex::new(
+                operation.schema_name.clone(),
+                operation.table_name.clone(),
+                operation.index.name.clone(),
+            ),
+        )),
+        MigrationOperation::DropIndex(_) => None,
+        MigrationOperation::AddForeignKey(operation) => Some(MigrationOperation::DropForeignKey(
+            mssql_orm_migrate::DropForeignKey::new(
+                operation.schema_name.clone(),
+                operation.table_name.clone(),
+                operation.foreign_key.name.clone(),
+            ),
+        )),
+        MigrationOperation::DropForeignKey(_) => None,
+    }
 }
 
 fn first_destructive_migration_operation(operations: &[MigrationOperation]) -> Option<String> {
@@ -248,10 +363,74 @@ fn destructive_operation_label(operation: &MigrationOperation) -> Option<String>
     }
 }
 
+fn operation_label(operation: &MigrationOperation) -> String {
+    match operation {
+        MigrationOperation::CreateSchema(operation) => {
+            format!("CreateSchema {}", operation.schema_name)
+        }
+        MigrationOperation::DropSchema(operation) => {
+            format!("DropSchema {}", operation.schema_name)
+        }
+        MigrationOperation::CreateTable(operation) => {
+            format!(
+                "CreateTable {}.{}",
+                operation.schema_name, operation.table.name
+            )
+        }
+        MigrationOperation::DropTable(operation) => {
+            format!(
+                "DropTable {}.{}",
+                operation.schema_name, operation.table_name
+            )
+        }
+        MigrationOperation::RenameTable(operation) => format!(
+            "RenameTable {}.{} -> {}",
+            operation.schema_name, operation.previous_table_name, operation.next_table_name
+        ),
+        MigrationOperation::RenameColumn(operation) => format!(
+            "RenameColumn {}.{}.{} -> {}",
+            operation.schema_name,
+            operation.table_name,
+            operation.previous_column_name,
+            operation.next_column_name
+        ),
+        MigrationOperation::AddColumn(operation) => format!(
+            "AddColumn {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.column.name
+        ),
+        MigrationOperation::DropColumn(operation) => format!(
+            "DropColumn {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.column_name
+        ),
+        MigrationOperation::AlterColumn(operation) => format!(
+            "AlterColumn {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.next.name
+        ),
+        MigrationOperation::CreateIndex(operation) => format!(
+            "CreateIndex {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.index.name
+        ),
+        MigrationOperation::DropIndex(operation) => format!(
+            "DropIndex {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.index_name
+        ),
+        MigrationOperation::AddForeignKey(operation) => format!(
+            "AddForeignKey {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.foreign_key.name
+        ),
+        MigrationOperation::DropForeignKey(operation) => format!(
+            "DropForeignKey {}.{}.{}",
+            operation.schema_name, operation.table_name, operation.foreign_key_name
+        ),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MigrationPlan {
     operations: Vec<MigrationOperation>,
     sql_statements: Vec<String>,
+    down_sql_statements: Option<Vec<String>>,
+    down_sql_reason: Option<String>,
 }
 
 fn run_snapshot_exporter(
@@ -708,6 +887,7 @@ mod tests {
         assert!(output.contains("Planned operations: 1"));
         assert!(output.contains("Compiled SQL statements: 1"));
         assert!(output.contains("up.sql: generated"));
+        assert!(output.contains("down.sql: generated (1 statements)"));
 
         let migration_path = output
             .lines()
@@ -716,12 +896,14 @@ mod tests {
             .unwrap();
         let snapshot = read_model_snapshot(&migration_path.join("model_snapshot.json")).unwrap();
         let up_sql = fs::read_to_string(migration_path.join("up.sql")).unwrap();
+        let down_sql = fs::read_to_string(migration_path.join("down.sql")).unwrap();
 
         assert!(snapshot.schema("sales").is_some());
         assert_eq!(
             up_sql,
             "IF SCHEMA_ID(N'sales') IS NULL EXEC(N'CREATE SCHEMA [sales]');\n"
         );
+        assert_eq!(down_sql, "DROP SCHEMA [sales];\n");
     }
 
     #[test]
@@ -914,6 +1096,7 @@ mod tests {
 
         assert!(output.contains("Planned operations: 1"));
         assert!(output.contains("up.sql: generated"));
+        assert!(output.contains("down.sql: manual (DropColumn sales.customers.phone cannot be reversed automatically because its operation payload is incomplete)"));
 
         let migration_path = output
             .lines()
@@ -921,7 +1104,9 @@ mod tests {
             .map(PathBuf::from)
             .unwrap();
         let up_sql = fs::read_to_string(migration_path.join("up.sql")).unwrap();
+        let down_sql = fs::read_to_string(migration_path.join("down.sql")).unwrap();
         assert!(up_sql.contains("ALTER TABLE [sales].[customers] DROP COLUMN [phone]"));
+        assert!(down_sql.contains("Manual rollback SQL for this editable migration"));
     }
 
     #[test]
@@ -1010,6 +1195,13 @@ mod tests {
         assert_eq!(plan.operations.len(), 2);
         assert!(plan.sql_statements[0].contains("CREATE SCHEMA"));
         assert!(plan.sql_statements[1].contains("CREATE TABLE"));
+        assert_eq!(
+            plan.down_sql_statements.unwrap(),
+            vec![
+                "DROP TABLE [sales].[customers]".to_string(),
+                "DROP SCHEMA [sales]".to_string(),
+            ]
+        );
     }
 
     #[test]

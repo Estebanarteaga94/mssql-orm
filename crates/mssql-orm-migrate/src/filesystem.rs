@@ -99,6 +99,18 @@ pub fn write_migration_up_sql(path: &Path, sql_statements: &[String]) -> Result<
     fs::write(path, sql).map_err(|_| OrmError::new("failed to write migration up.sql"))
 }
 
+pub fn write_migration_down_sql(path: &Path, sql_statements: &[String]) -> Result<(), OrmError> {
+    let sql = if sql_statements.is_empty() {
+        String::from("-- No reversible schema changes detected.\n")
+    } else {
+        let mut sql = sql_statements.join(";\n\n");
+        sql.push_str(";\n");
+        sql
+    };
+
+    fs::write(path, sql).map_err(|_| OrmError::new("failed to write migration down.sql"))
+}
+
 pub fn read_model_snapshot(path: &Path) -> Result<ModelSnapshot, OrmError> {
     let json = fs::read_to_string(path)
         .map_err(|_| OrmError::new("failed to read migration model snapshot"))?;
@@ -265,8 +277,8 @@ mod tests {
     use super::{
         build_database_update_script, create_migration_scaffold,
         create_migration_scaffold_with_snapshot, latest_migration, list_migrations,
-        read_latest_model_snapshot, read_model_snapshot, write_migration_up_sql,
-        write_model_snapshot,
+        read_latest_model_snapshot, read_model_snapshot, write_migration_down_sql,
+        write_migration_up_sql, write_model_snapshot,
     };
     use crate::{ModelSnapshot, SchemaSnapshot};
     use std::fs;
@@ -323,6 +335,26 @@ mod tests {
         write_model_snapshot(&snapshot_path, &snapshot).unwrap();
 
         assert_eq!(read_model_snapshot(&snapshot_path).unwrap(), snapshot);
+    }
+
+    #[test]
+    fn writes_generated_down_sql_artifact() {
+        let root = temp_project_root();
+        let down_sql_path = root.join("down.sql");
+
+        write_migration_down_sql(
+            &down_sql_path,
+            &[
+                "DROP TABLE [sales].[customers]".to_string(),
+                "DROP SCHEMA [sales]".to_string(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(down_sql_path).unwrap(),
+            "DROP TABLE [sales].[customers];\n\nDROP SCHEMA [sales];\n"
+        );
     }
 
     #[test]
