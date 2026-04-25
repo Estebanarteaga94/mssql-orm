@@ -1,0 +1,5 @@
+error: AuditFields no permite columnas duplicadas
+ --> tests/ui/audit_fields_duplicate_column.rs:7:20
+  |
+7 |     #[orm(column = "created_at")]
+  |                    ^^^^^^^^^^^^

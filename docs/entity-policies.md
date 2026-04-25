@@ -81,6 +81,8 @@ Estado actual: `#[derive(AuditFields)]` ya implementa `EntityPolicy` para el str
 
 La surface publica necesaria para el caso valido esta reexportada desde `mssql_orm::prelude::*`. Existe cobertura `trybuild` desde la perspectiva de un consumidor para derivar `AuditFields`, declarar `#[orm(audit = Audit)]`, consultar metadata, acceder al contrato `EntityPolicy` y compilar `FromRow` sin importar rutas internas.
 
+La cobertura negativa de `trybuild` ya fija estos errores de auditoria: tipo de policy inexistente en `#[orm(audit = ...)]`, `AuditFields` sobre struct sin campos nombrados, atributo no soportado, `column = ""`, columna duplicada y campo con tipo sin `SqlTypeMapping`.
+
 ## Forma Publica Esperada
 
 El concepto publico se expresa en atributos sobre la entidad. Para el MVP de auditoria, la sintaxis canónica soportada sera:

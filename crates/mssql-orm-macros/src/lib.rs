@@ -69,6 +69,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
 
     let mut columns = Vec::new();
     let mut column_names = Vec::new();
+    let mut seen_column_names = std::collections::BTreeSet::new();
 
     for field in fields.iter() {
         let field_ident = field
@@ -83,6 +84,12 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
         validate_non_empty_lit_str(&column_name, "column no puede estar vacío")?;
+        if !seen_column_names.insert(column_name.value()) {
+            return Err(Error::new_spanned(
+                &column_name,
+                "AuditFields no permite columnas duplicadas",
+            ));
+        }
         column_names.push(column_name.clone());
         let renamed_from = option_lit_str(config.renamed_from);
         let sql_type = config.sql_type.map_or_else(

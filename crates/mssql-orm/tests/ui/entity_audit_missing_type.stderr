@@ -1,0 +1,5 @@
+error[E0412]: cannot find type `MissingAudit` in this scope
+ --> tests/ui/entity_audit_missing_type.rs:4:61
+  |
+4 | #[orm(table = "audited_entities", schema = "audit", audit = MissingAudit)]
+  |                                                             ^^^^^^^^^^^^ not found in this scope

@@ -32,7 +32,9 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/audit_fields_tuple_struct.rs");
     tests.compile_fail("tests/ui/audit_fields_unsupported_attr.rs");
     tests.compile_fail("tests/ui/audit_fields_empty_column.rs");
+    tests.compile_fail("tests/ui/audit_fields_duplicate_column.rs");
     tests.compile_fail("tests/ui/audit_fields_unsupported_type.rs");
+    tests.compile_fail("tests/ui/entity_audit_missing_type.rs");
     tests.compile_fail("tests/ui/entity_audit_column_collision.rs");
     tests.compile_fail("tests/ui/entity_duplicate_audit_policy.rs");
     tests.compile_fail("tests/ui/entity_audit_column_symbol_unavailable.rs");

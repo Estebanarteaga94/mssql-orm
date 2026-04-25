@@ -7,7 +7,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Cubrir errores `trybuild` para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado
 - [ ] Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable
 - [ ] Etapa 16: Confirmar que `ModelSnapshot::from_entities(...)` incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista
 - [ ] Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con `audit = Audit` genere `CREATE TABLE` con columnas auditables
@@ -38,6 +37,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Cubrir errores `trybuild` para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado
 - [x] Etapa 16: Cubrir `#[orm(audit = Audit)]` con tests `trybuild` válidos en la crate pública usando únicamente la API reexportada por `mssql-orm::prelude`
 - [x] Etapa 16: Asegurar que `FromRow` generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa
 - [x] Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como `Todo::created_at`

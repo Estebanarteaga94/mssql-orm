@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: cobertura `trybuild` de auditoría inválida
+
+- Se ejecutó la subtarea `Etapa 16: Cubrir errores trybuild para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado`.
+- Ya existía cobertura para `AuditFields` sobre struct sin campos nombrados, atributo no soportado, `column = ""` y tipo sin `SqlTypeMapping`.
+- Se agregó validación explícita en `#[derive(AuditFields)]` para rechazar columnas duplicadas dentro del struct de auditoría.
+- Se agregó el fixture inválido `audit_fields_duplicate_column.rs` y su `.stderr` esperado.
+- Se agregó el fixture inválido `entity_audit_missing_type.rs` y su `.stderr` esperado para `#[orm(audit = MissingAudit)]`.
+- Se registraron los nuevos fixtures en `crates/mssql-orm/tests/trybuild.rs`.
+- Se actualizó `docs/entity-policies.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- Los errores de auditoría inválida enumerados en el backlog quedan cubiertos por `trybuild`: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna vacía/duplicada y tipo sin mapping SQL.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable`.
+
 ### Sesión: fixture público válido para `#[orm(audit = Audit)]`
 
 - Se ejecutó la subtarea `Etapa 16: Cubrir #[orm(audit = Audit)] con tests trybuild válidos en la crate pública usando únicamente la API reexportada por mssql-orm::prelude`.

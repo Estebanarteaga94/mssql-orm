@@ -73,7 +73,9 @@ El shape objetivo de `#[derive(AuditFields)]` también quedó definido en `docs/
 
 `mssql-orm-macros` ya implementa `#[derive(AuditFields)]`. El derive genera una implementación de `EntityPolicy` con `POLICY_NAME = "audit"`, `COLUMN_NAMES` y expone los campos del struct como `ColumnMetadata` estático. La crate pública reexporta `AuditFields` desde `mssql_orm::prelude`.
 
-`AuditFields` ya cuenta con cobertura `trybuild` para el camino válido y para errores de struct sin campos nombrados, atributo no soportado, `column = ""` y tipo sin `SqlTypeMapping`. El rechazo de tipo no mapeable se apoya en el bound generado contra `SqlTypeMapping`, por lo que también permite tipos custom siempre que implementen ese trait.
+`AuditFields` ya cuenta con cobertura `trybuild` para el camino válido y para errores de struct sin campos nombrados, atributo no soportado, `column = ""`, columna duplicada y tipo sin `SqlTypeMapping`. El rechazo de tipo no mapeable se apoya en el bound generado contra `SqlTypeMapping`, por lo que también permite tipos custom siempre que implementen ese trait.
+
+`#[orm(audit = Audit)]` también cuenta con cobertura `trybuild` para el caso de tipo de policy inexistente.
 
 `#[orm(audit = Audit)]` ya cuenta con fixture `trybuild` válido desde la crate pública usando únicamente `mssql_orm::prelude::*`. Ese fixture cubre `AuditFields`, `Entity`, consulta de metadata, contrato `EntityPolicy`, `Row`, `SqlValue`, `OrmError` y `FromRow` sin importar módulos internos.
 
