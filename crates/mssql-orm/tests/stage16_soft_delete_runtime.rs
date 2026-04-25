@@ -114,11 +114,14 @@ async fn public_dbcontext_soft_delete_provider_routes_delete_through_update() ->
         let deleted = db.users.delete(inserted.id).await?;
         assert!(deleted);
 
-        // Query visibility is still pending, so the row remains visible until
-        // DbSetQuery gains the implicit soft_delete filter.
         let found = db.users.find(inserted.id).await?;
-        assert_eq!(found, Some(inserted.clone()));
-        assert_eq!(db.users.query().count().await?, 1);
+        assert_eq!(found, None);
+        assert_eq!(db.users.query().count().await?, 0);
+        assert_eq!(db.users.query().with_deleted().count().await?, 1);
+        assert_eq!(
+            db.users.query().only_deleted().first().await?,
+            Some(inserted.clone())
+        );
 
         let mut connection = MssqlConnection::connect(&connection_string).await?;
         let row = connection

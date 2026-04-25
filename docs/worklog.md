@@ -5518,3 +5518,27 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Implementar visibilidad de lectura para soft_delete en DbSetQuery con modo por defecto ActiveOnly y APIs públicas with_deleted() / only_deleted()`.
+
+### Sesión: visibilidad de lectura para `soft_delete`
+
+- Se ejecutó la subtarea `Etapa 16+: Implementar visibilidad de lectura para soft_delete en DbSetQuery con modo por defecto ActiveOnly y APIs públicas with_deleted() / only_deleted()`.
+- En `crates/mssql-orm/src/dbset_query.rs` se agregó estado interno de visibilidad para `soft_delete` dentro de `DbSetQuery<E>`, manteniendo `SelectQuery` como AST neutral.
+- `DbSetQuery<E>` ahora expone `with_deleted()` y `only_deleted()`. La visibilidad se materializa solo al ejecutar `all()`, `first()` y `count()`, no al construir el AST base.
+- La convención implementada es explícita y mínima: la primera columna de la policy `soft_delete` controla visibilidad; si es nullable se usa `IS NULL` / `IS NOT NULL`, y si es `BIT` se usa `false` / `true`.
+- `DbSet::find(...)` y `find_tracked(...)` ahora respetan esa visibilidad por defecto, mientras que `find_by_sql_value(...)` pasó a usar una ruta interna sin filtro implícito para preservar checks de existencia reales.
+- También se ajustaron los bounds de `DbSet::update(...)`, `update_entity_by_sql_value(...)`, Active Record y `save_changes()` derivado para mantener consistencia con la nueva ruta interna que depende de `SoftDeleteEntity`.
+- Se actualizó el smoke opcional `crates/mssql-orm/tests/stage16_soft_delete_runtime.rs`: después de `delete`, `find()` y `query().count()` ya ocultan la fila, mientras `with_deleted()` y `only_deleted()` siguen viéndola.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo check --workspace`, `cargo test -p mssql-orm dbset_query_ --lib -- --nocapture`, `cargo test -p mssql-orm active_record_find_reuses_dbset_error_contract --lib -- --nocapture` y `cargo test -p mssql-orm public_dbcontext_soft_delete_provider_routes_delete_through_update -- --nocapture`.
+- La última validación no pudo ejecutar SQL Server real en esta sesión porque `MSSQL_ORM_TEST_CONNECTION_STRING` no estaba definido; el smoke quedó compilado y se auto-saltó según diseño.
+
+### Resultado
+
+- `soft_delete` ya afecta tanto escritura como lectura pública de la entidad raíz: las queries normales esconden filas borradas lógicamente y el usuario puede recuperarlas de forma explícita con `with_deleted()` u `only_deleted()`.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos; solo fue necesario propagar los bounds de `SoftDeleteEntity` a rutas que reutilizan búsquedas internas sin filtro.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental`.

@@ -34,7 +34,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn find<C, K>(db: &C, key: K) -> impl Future<Output = Result<Option<Self>, OrmError>> + Send
     where
         C: DbContextEntitySet<Self>,
-        Self: FromRow + Send,
+        Self: FromRow + Send + SoftDeleteEntity,
         K: SqlTypeMapping + Send,
     {
         db.db_set().find(key)
@@ -58,7 +58,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn save<C>(&mut self, db: &C) -> impl Future<Output = Result<(), OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
-        Self: EntityPersist + FromRow + Send,
+        Self: EntityPersist + FromRow + Send + SoftDeleteEntity,
     {
         async move {
             match <Self as EntityPersist>::persist_mode(self)? {

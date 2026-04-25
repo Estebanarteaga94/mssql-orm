@@ -872,6 +872,7 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #entity_type: ::core::clone::Clone
                     + ::mssql_orm::EntityPersist
                     + ::mssql_orm::EntityPrimaryKey
+                    + ::mssql_orm::SoftDeleteEntity
                     + ::mssql_orm::core::FromRow
                     + ::core::marker::Send
             })

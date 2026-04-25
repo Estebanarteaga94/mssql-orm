@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
 - [ ] Etapa 16+: Agregar rutas internas sin filtro implícito de `soft_delete` para comprobaciones de existencia y `ConcurrencyConflict` sin exponer bypass público accidental
 - [ ] Etapa 16+: Integrar `soft_delete` en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema
 - [ ] Etapa 16+: Cubrir `soft_delete` con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, `ConcurrencyConflict` y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente
@@ -12,6 +11,7 @@
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
 
 ## Completadas
+- [x] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
 - [x] Etapa 16+: Integrar `SoftDeleteProvider` y/o `SoftDeleteRequestValues` al `DbContext`/`DbSet` para que `delete`, Active Record y change tracking puedan poblar columnas como `deleted_at`, `deleted_by` o `is_deleted` sin wiring manual interno
 - [x] Etapa 16+: Hacer que `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` usen `UpdateQuery` cuando la entidad tenga `soft_delete`
 - [x] Etapa 16+: Implementar el contrato runtime de `soft_delete` en `mssql-orm` para producir y validar `Vec<ColumnValue>` de borrado lógico sin duplicar la lógica de `update`

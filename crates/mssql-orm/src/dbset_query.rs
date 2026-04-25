@@ -1,14 +1,25 @@
+use crate::SoftDeleteEntity;
 use crate::context::SharedConnection;
 use crate::page_request::PageRequest;
-use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlValue};
-use mssql_orm_query::{CountQuery, Join, OrderBy, Pagination, Predicate, SelectQuery};
+use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlServerType, SqlValue};
+use mssql_orm_query::{
+    ColumnRef, CountQuery, Expr, Join, OrderBy, Pagination, Predicate, SelectQuery, TableRef,
+};
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[derive(Clone)]
 pub struct DbSetQuery<E: Entity> {
     connection: Option<SharedConnection>,
     select_query: SelectQuery,
+    visibility: SoftDeleteVisibility,
     _entity: core::marker::PhantomData<fn() -> E>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SoftDeleteVisibility {
+    Default,
+    WithDeleted,
+    OnlyDeleted,
 }
 
 impl<E: Entity> DbSetQuery<E> {
@@ -16,6 +27,7 @@ impl<E: Entity> DbSetQuery<E> {
         Self {
             connection,
             select_query,
+            visibility: SoftDeleteVisibility::Default,
             _entity: core::marker::PhantomData,
         }
     }
@@ -68,15 +80,25 @@ impl<E: Entity> DbSetQuery<E> {
         &self.select_query
     }
 
+    pub fn with_deleted(mut self) -> Self {
+        self.visibility = SoftDeleteVisibility::WithDeleted;
+        self
+    }
+
+    pub fn only_deleted(mut self) -> Self {
+        self.visibility = SoftDeleteVisibility::OnlyDeleted;
+        self
+    }
+
     pub fn into_select_query(self) -> SelectQuery {
         self.select_query
     }
 
     pub async fn all(self) -> Result<Vec<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
     {
-        let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         connection.fetch_all(compiled).await
@@ -84,15 +106,18 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub async fn first(self) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
     {
-        let compiled = SqlServerCompiler::compile_select(&self.select_query)?;
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         connection.fetch_one(compiled).await
     }
 
-    pub async fn count(self) -> Result<i64, OrmError> {
+    pub async fn count(self) -> Result<i64, OrmError>
+    where
+        E: SoftDeleteEntity,
+    {
         let compiled = SqlServerCompiler::compile_count(&self.count_query())?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
@@ -102,11 +127,76 @@ impl<E: Entity> DbSetQuery<E> {
             .ok_or_else(|| OrmError::new("count query did not return a row"))
     }
 
-    fn count_query(&self) -> CountQuery {
+    fn count_query(&self) -> CountQuery
+    where
+        E: SoftDeleteEntity,
+    {
+        let effective = self
+            .effective_select_query()
+            .expect("count_query should materialize soft_delete visibility");
         CountQuery {
-            from: self.select_query.from,
-            predicate: self.select_query.predicate.clone(),
+            from: effective.from,
+            predicate: effective.predicate.clone(),
         }
+    }
+
+    fn effective_select_query(&self) -> Result<SelectQuery, OrmError>
+    where
+        E: SoftDeleteEntity,
+    {
+        let Some(predicate) = self.soft_delete_visibility_predicate()? else {
+            return Ok(self.select_query.clone());
+        };
+
+        Ok(self.select_query.clone().filter(predicate))
+    }
+
+    fn soft_delete_visibility_predicate(&self) -> Result<Option<Predicate>, OrmError>
+    where
+        E: SoftDeleteEntity,
+    {
+        let Some(policy) = E::soft_delete_policy() else {
+            return Ok(None);
+        };
+
+        let visibility = match self.visibility {
+            SoftDeleteVisibility::Default => SoftDeleteVisibility::Default,
+            SoftDeleteVisibility::WithDeleted => return Ok(None),
+            SoftDeleteVisibility::OnlyDeleted => SoftDeleteVisibility::OnlyDeleted,
+        };
+
+        let indicator = policy.columns.first().ok_or_else(|| {
+            OrmError::new("soft_delete query visibility requires at least one policy column")
+        })?;
+        let column = Expr::Column(ColumnRef::new(
+            TableRef::for_entity::<E>(),
+            indicator.rust_field,
+            indicator.column_name,
+        ));
+
+        if indicator.sql_type == SqlServerType::Bit {
+            return Ok(Some(match visibility {
+                SoftDeleteVisibility::Default => {
+                    Predicate::eq(column, Expr::Value(SqlValue::Bool(false)))
+                }
+                SoftDeleteVisibility::OnlyDeleted => {
+                    Predicate::eq(column, Expr::Value(SqlValue::Bool(true)))
+                }
+                SoftDeleteVisibility::WithDeleted => unreachable!(),
+            }));
+        }
+
+        if indicator.nullable {
+            return Ok(Some(match visibility {
+                SoftDeleteVisibility::Default => Predicate::is_null(column),
+                SoftDeleteVisibility::OnlyDeleted => Predicate::is_not_null(column),
+                SoftDeleteVisibility::WithDeleted => unreachable!(),
+            }));
+        }
+
+        Err(OrmError::new(
+            "soft_delete query visibility requires the first policy column to be nullable or bit",
+        ))
     }
 
     fn require_connection(&self) -> Result<SharedConnection, OrmError> {
@@ -149,10 +239,12 @@ impl FromRow for CountRow {
 #[cfg(test)]
 mod tests {
     use super::DbSetQuery;
+    use crate::SoftDeleteEntity;
     use crate::context::DbSet;
     use crate::page_request::PageRequest;
     use mssql_orm_core::{
-        Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata, Row, SqlValue,
+        ColumnMetadata, Entity, EntityMetadata, EntityPolicyMetadata, FromRow, OrmError,
+        PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
     };
     use mssql_orm_query::{
         Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
@@ -160,6 +252,8 @@ mod tests {
 
     struct TestEntity;
     struct JoinedEntity;
+    struct SoftDeleteEntityUnderTest;
+    struct BoolSoftDeleteEntity;
 
     static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "TestEntity",
@@ -198,6 +292,131 @@ mod tests {
     impl Entity for JoinedEntity {
         fn metadata() -> &'static EntityMetadata {
             &JOINED_ENTITY_METADATA
+        }
+    }
+
+    static SOFT_DELETE_POLICY_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_by",
+            column_name: "deleted_by",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static BOOL_SOFT_DELETE_POLICY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
+        rust_field: "is_deleted",
+        column_name: "is_deleted",
+        renamed_from: None,
+        sql_type: SqlServerType::Bit,
+        nullable: false,
+        primary_key: false,
+        identity: None,
+        default_sql: Some("0"),
+        computed_sql: None,
+        rowversion: false,
+        insertable: false,
+        updatable: true,
+        max_length: None,
+        precision: None,
+        scale: None,
+    }];
+
+    static SOFT_DELETE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "SoftDeleteEntityUnderTest",
+        schema: "dbo",
+        table: "soft_delete_entities",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    static BOOL_SOFT_DELETE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "BoolSoftDeleteEntity",
+        schema: "dbo",
+        table: "bool_soft_delete_entities",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    impl Entity for SoftDeleteEntityUnderTest {
+        fn metadata() -> &'static EntityMetadata {
+            &SOFT_DELETE_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for BoolSoftDeleteEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &BOOL_SOFT_DELETE_ENTITY_METADATA
+        }
+    }
+
+    impl SoftDeleteEntity for TestEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for JoinedEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for SoftDeleteEntityUnderTest {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &SOFT_DELETE_POLICY_COLUMNS,
+            ))
+        }
+    }
+
+    impl SoftDeleteEntity for BoolSoftDeleteEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &BOOL_SOFT_DELETE_POLICY_COLUMNS,
+            ))
         }
     }
 
@@ -240,6 +459,97 @@ mod tests {
             SelectQuery::from_entity::<TestEntity>().filter(Predicate::eq(
                 Expr::value(SqlValue::Bool(true)),
                 Expr::value(SqlValue::Bool(true)),
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_applies_active_only_visibility_for_nullable_indicator() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+
+        let query = dbset.query().effective_select_query().unwrap();
+
+        assert_eq!(
+            query,
+            SelectQuery::from_entity::<SoftDeleteEntityUnderTest>().filter(Predicate::is_null(
+                Expr::Column(mssql_orm_query::ColumnRef::new(
+                    TableRef::new("dbo", "soft_delete_entities"),
+                    "deleted_at",
+                    "deleted_at",
+                )),
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_with_deleted_removes_soft_delete_filter() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+
+        let query = dbset
+            .query()
+            .with_deleted()
+            .effective_select_query()
+            .unwrap();
+
+        assert_eq!(
+            query,
+            SelectQuery::from_entity::<SoftDeleteEntityUnderTest>()
+        );
+    }
+
+    #[test]
+    fn dbset_query_only_deleted_filters_nullable_indicator() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+
+        let query = dbset
+            .query()
+            .only_deleted()
+            .effective_select_query()
+            .unwrap();
+
+        assert_eq!(
+            query,
+            SelectQuery::from_entity::<SoftDeleteEntityUnderTest>().filter(Predicate::is_not_null(
+                Expr::Column(mssql_orm_query::ColumnRef::new(
+                    TableRef::new("dbo", "soft_delete_entities"),
+                    "deleted_at",
+                    "deleted_at",
+                ))
+            ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_uses_bool_indicator_when_soft_delete_column_is_bit() {
+        let dbset = DbSet::<BoolSoftDeleteEntity>::disconnected();
+
+        let active = dbset.query().effective_select_query().unwrap();
+        let deleted = dbset
+            .query()
+            .only_deleted()
+            .effective_select_query()
+            .unwrap();
+
+        assert_eq!(
+            active,
+            SelectQuery::from_entity::<BoolSoftDeleteEntity>().filter(Predicate::eq(
+                Expr::Column(mssql_orm_query::ColumnRef::new(
+                    TableRef::new("dbo", "bool_soft_delete_entities"),
+                    "is_deleted",
+                    "is_deleted",
+                )),
+                Expr::Value(SqlValue::Bool(false)),
+            ))
+        );
+        assert_eq!(
+            deleted,
+            SelectQuery::from_entity::<BoolSoftDeleteEntity>().filter(Predicate::eq(
+                Expr::Column(mssql_orm_query::ColumnRef::new(
+                    TableRef::new("dbo", "bool_soft_delete_entities"),
+                    "is_deleted",
+                    "is_deleted",
+                )),
+                Expr::Value(SqlValue::Bool(true)),
             ))
         );
     }

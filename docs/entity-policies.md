@@ -404,6 +404,14 @@ La regla de composicion debe ser simple y estable:
 
 No debe haber combinaciones acumulativas ni flags ambiguos. La ultima seleccion de visibilidad gana.
 
+Estado implementado actual:
+
+- `DbSetQuery<E>` ya expone `with_deleted()` y `only_deleted()`
+- para entidades con `soft_delete`, `query()`, `find()`, `find_tracked()`, `all()`, `first()` y `count()` nacen en modo `ActiveOnly`
+- `query_with(select_query)` conserva ese mismo modo por defecto
+- `with_deleted()` elimina el filtro implicito para la entidad raiz
+- `only_deleted()` invierte el filtro para devolver solo filas borradas logicamente
+
 ### Donde vive el estado de visibilidad
 
 El estado de visibilidad de `soft_delete` debe vivir en `DbSetQuery<E>`, no en `SelectQuery`.
@@ -415,6 +423,24 @@ Razon:
 - el filtro implicito puede materializarse en el `SelectQuery` final antes de compilar a SQL Server, sin contaminar el AST base
 
 En otras palabras: el AST sigue representando filtros SQL ordinarios; la decision de agregar el filtro por borrado logico pertenece a la capa publica que hoy ya encapsula `SelectQuery`.
+
+### Convencion minima para la columna de visibilidad
+
+La implementacion actual necesita una regla observable para derivar el predicate desde metadata sin introducir nombres magicos como `deleted_at` o `is_deleted`.
+
+La convencion vigente es:
+
+- la **primera** columna declarada por la policy `soft_delete` controla la visibilidad
+- si esa columna es `BIT`, `ActiveOnly` compila `col = false` y `OnlyDeleted` compila `col = true`
+- si esa columna es nullable y no `BIT`, `ActiveOnly` compila `col IS NULL` y `OnlyDeleted` compila `col IS NOT NULL`
+- si la primera columna no es `BIT` ni nullable, la query falla con error explicito antes de compilar SQL
+
+Esto permite soportar los dos shapes mas comunes del roadmap sin inferencia por nombre:
+
+- `deleted_at: Option<DateTime>`
+- `is_deleted: bool`
+
+Cuando la policy tiene columnas auxiliares como `deleted_by`, esas columnas no controlan visibilidad en esta etapa; la semantica observable vive en la primera columna de la policy.
 
 ### `query_with(...)` y queries custom
 

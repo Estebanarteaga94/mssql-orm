@@ -265,9 +265,13 @@ impl<E: Entity> DbSet<E> {
         DbSetQuery::new(self.connection.as_ref().cloned(), select_query)
     }
 
+    fn query_with_unfiltered(&self, select_query: SelectQuery) -> DbSetQuery<E> {
+        DbSetQuery::new(self.connection.as_ref().cloned(), select_query).with_deleted()
+    }
+
     pub async fn find<K>(&self, key: K) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
         K: SqlTypeMapping,
     {
         self.query_with(self.find_select_query(key)?).first().await
@@ -277,7 +281,7 @@ impl<E: Entity> DbSet<E> {
     /// experimental snapshot-based tracking container.
     pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
     where
-        E: Clone + FromRow + Send,
+        E: Clone + FromRow + Send + SoftDeleteEntity,
         K: SqlTypeMapping,
     {
         let mut tracked = self
@@ -374,7 +378,7 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_modified(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send,
+        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send + SoftDeleteEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -417,7 +421,7 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn update<K, C>(&self, key: K, changeset: C) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
@@ -494,9 +498,9 @@ impl<E: Entity> DbSet<E> {
 
     pub(crate) async fn find_by_sql_value(&self, key: SqlValue) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
     {
-        self.query_with(self.find_select_query_sql_value(key)?)
+        self.query_with_unfiltered(self.find_select_query_sql_value(key)?)
             .first()
             .await
     }
@@ -530,7 +534,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
     {
         let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
             key.clone(),
@@ -559,7 +563,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: EntityPersist + FromRow + Send,
+        E: EntityPersist + FromRow + Send + SoftDeleteEntity,
     {
         self.update_entity_values_by_sql_value(key, entity.update_changes(), concurrency_token)
             .await
