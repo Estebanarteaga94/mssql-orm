@@ -502,6 +502,13 @@ La regla es:
 
 Ese punto unico evita que cada caller tenga que saber como poblar `deleted_at`, `deleted_by` o `is_deleted`.
 
+Estado implementado actual:
+
+- la crate publica ya expone `SoftDeleteProvider`, `SoftDeleteContext`, `SoftDeleteOperation` y `SoftDeleteRequestValues`
+- `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)`, `entity.delete(&db)` y `save_tracked_deleted()` ya ramifican hacia `UpdateQuery` cuando la entidad declara `soft_delete`
+- la validacion de duplicados, nullability, `updatable` y columnas runtime requeridas ya ocurre antes de compilar SQL
+- todavia no existe wiring publico del provider en `DbContext`, por lo que una entidad `soft_delete` que necesite valores runtime reales falla de forma explicita hasta que ese provider quede integrado al contexto
+
 ### Shape conceptual del provider
 
 El shape no necesita quedar identico a `AuditProvider`, pero si alineado en principios. Conceptualmente, `soft_delete` necesita algo de esta forma:

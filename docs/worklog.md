@@ -5470,3 +5470,28 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Hacer que DbSet::delete(...), delete_by_sql_value(...), delete_tracked_by_sql_value(...), entity.delete(&db) y save_tracked_deleted() usen UpdateQuery cuando la entidad tenga soft_delete`.
+
+### Sesión: rutas de borrado con `soft_delete`
+
+- Se ejecutó la subtarea `Etapa 16+: Hacer que DbSet::delete(...), delete_by_sql_value(...), delete_tracked_by_sql_value(...), entity.delete(&db) y save_tracked_deleted() usen UpdateQuery cuando la entidad tenga soft_delete`.
+- En `crates/mssql-orm/src/context.rs` se centralizó la decisión de borrado en un helper compartido que ahora compila `DELETE` físico para entidades normales y `UPDATE ... OUTPUT INSERTED.*` para entidades que declaran `soft_delete`.
+- `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)` y `save_tracked_deleted()` ya convergen en esa misma ruta; `ActiveRecord::delete(&db)` quedó alineado sobre `DbSet` sin duplicar semántica.
+- La ruta compartida preserva el predicate por primary key y añade `rowversion` cuando existe `concurrency_token`; si la operación no afecta filas y el registro sigue existiendo, retorna `OrmError::ConcurrencyConflict`.
+- Para no introducir inferencia mágica, la compilación del `UPDATE` lógico usa el contrato runtime ya agregado (`SoftDeleteProvider`, `SoftDeleteContext`, `SoftDeleteRequestValues`) y falla explícitamente si la entidad soft-deleted necesita valores runtime que todavía no están disponibles.
+- Se añadió cobertura unitaria en `crates/mssql-orm/src/context.rs` para fijar cuatro casos: `DELETE` físico en entidades normales, `UPDATE` lógico en entidades con `soft_delete`, preservación de `rowversion` en ese `UPDATE` y error explícito cuando falta un provider/valor runtime.
+- También se ajustó `crates/mssql-orm/src/active_record.rs` para que la prueba unitaria local siga compilando bajo el nuevo bound de `SoftDeleteEntity`.
+- Se actualizó `docs/tasks.md`, `docs/context.md` y `docs/entity-policies.md` para dejar explícito que el branching de borrado ya existe, pero que sigue faltando integrar `SoftDeleteProvider` al contexto público.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo fmt --all --check`, `cargo check --workspace`, `cargo test -p mssql-orm dbset_delete_compiled_query --lib -- --nocapture`, `cargo test -p mssql-orm active_record_delete_reuses_dbset_error_contract --lib -- --nocapture` y `cargo test -p mssql-orm public_active_record_respects_rowversion_on_save_and_delete -- --nocapture`.
+- La última validación no pudo ejecutar la integración real de SQL Server porque `MSSQL_ORM_TEST_CONNECTION_STRING` no estaba definido; el test quedó compilado y se auto-saltó, lo cual se considera esperado para esta sesión.
+
+### Resultado
+
+- El ORM ya no decide el tipo de borrado solo por el método llamado: para entidades con `soft_delete`, las rutas públicas de delete y change tracking ya entran al camino de `UpdateQuery` y preservan `rowversion`/`ConcurrencyConflict`.
+
+### Bloqueos
+
+- Falta wiring público de `SoftDeleteProvider`/valores por request en `DbContext`, así que una policy que necesite `deleted_at`, `deleted_by` o `is_deleted` todavía no puede completarse automáticamente desde esas rutas.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Integrar SoftDeleteProvider y/o SoftDeleteRequestValues al DbContext/DbSet para que delete, Active Record y change tracking puedan poblar columnas como deleted_at, deleted_by o is_deleted sin wiring manual interno`.

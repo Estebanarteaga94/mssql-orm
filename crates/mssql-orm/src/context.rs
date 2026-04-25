@@ -1,5 +1,8 @@
 use crate::dbset_query::DbSetQuery;
-use crate::{Tracked, TrackingRegistry, TrackingRegistryHandle};
+use crate::soft_delete_runtime::{
+    SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
+};
+use crate::{SoftDeleteEntity, Tracked, TrackingRegistry, TrackingRegistryHandle};
 use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -292,7 +295,7 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_deleted(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send,
+        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send + SoftDeleteEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -395,29 +398,38 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn delete<K>(&self, key: K) -> Result<bool, OrmError>
     where
+        E: FromRow + Send + SoftDeleteEntity,
         K: SqlTypeMapping,
     {
-        let compiled = SqlServerCompiler::compile_delete(&self.delete_query(key)?)?;
-        let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await?;
-        let result = connection.execute(compiled).await?;
-
-        Ok(result.total() > 0)
+        self.delete_by_sql_value(key.to_sql_value(), None).await
     }
 
     pub(crate) async fn delete_by_sql_value(
         &self,
         key: SqlValue,
         concurrency_token: Option<SqlValue>,
-    ) -> Result<bool, OrmError> {
-        let compiled = SqlServerCompiler::compile_delete(
-            &self.delete_query_sql_value(key, concurrency_token)?,
+    ) -> Result<bool, OrmError>
+    where
+        E: FromRow + Send + SoftDeleteEntity,
+    {
+        let compiled = self.delete_compiled_query_sql_value(
+            key.clone(),
+            concurrency_token.clone(),
+            None,
+            None,
         )?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         let result = connection.execute(compiled).await?;
+        let deleted = result.total() > 0;
 
-        Ok(result.total() > 0)
+        drop(connection);
+
+        if !deleted && concurrency_token.is_some() && self.find_by_sql_value(key).await?.is_some() {
+            return Err(OrmError::concurrency_conflict());
+        }
+
+        Ok(deleted)
     }
 
     pub(crate) async fn delete_tracked_by_sql_value(
@@ -426,17 +438,9 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<bool, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + SoftDeleteEntity,
     {
-        let deleted = self
-            .delete_by_sql_value(key.clone(), concurrency_token.clone())
-            .await?;
-
-        if !deleted && concurrency_token.is_some() && self.find_by_sql_value(key).await?.is_some() {
-            return Err(OrmError::concurrency_conflict());
-        }
-
-        Ok(deleted)
+        self.delete_by_sql_value(key, concurrency_token).await
     }
 
     pub(crate) async fn find_by_sql_value(&self, key: SqlValue) -> Result<Option<E>, OrmError>
@@ -596,6 +600,7 @@ impl<E: Entity> DbSet<E> {
         Ok(query)
     }
 
+    #[cfg(test)]
     fn delete_query<K>(&self, key: K) -> Result<DeleteQuery, OrmError>
     where
         K: SqlTypeMapping,
@@ -616,6 +621,54 @@ impl<E: Entity> DbSet<E> {
         }
 
         Ok(query)
+    }
+
+    fn soft_delete_query_sql_value(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+        soft_delete_provider: Option<&dyn SoftDeleteProvider>,
+        request_values: Option<&SoftDeleteRequestValues>,
+    ) -> Result<UpdateQuery, OrmError>
+    where
+        E: SoftDeleteEntity,
+    {
+        let changes = apply_soft_delete_values::<E>(
+            SoftDeleteOperation::Delete,
+            Vec::new(),
+            soft_delete_provider,
+            request_values,
+        )?;
+
+        if changes.is_empty() {
+            return Err(OrmError::new(
+                "soft_delete delete requires at least one runtime change",
+            ));
+        }
+
+        self.update_query_sql_value(key, changes, concurrency_token)
+    }
+
+    fn delete_compiled_query_sql_value(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+        soft_delete_provider: Option<&dyn SoftDeleteProvider>,
+        request_values: Option<&SoftDeleteRequestValues>,
+    ) -> Result<mssql_orm_query::CompiledQuery, OrmError>
+    where
+        E: SoftDeleteEntity,
+    {
+        if E::soft_delete_policy().is_some() {
+            SqlServerCompiler::compile_update(&self.soft_delete_query_sql_value(
+                key,
+                concurrency_token,
+                soft_delete_provider,
+                request_values,
+            )?)
+        } else {
+            SqlServerCompiler::compile_delete(&self.delete_query_sql_value(key, concurrency_token)?)
+        }
     }
 
     fn primary_key_predicate<K>(&self, key: K) -> Result<Predicate, OrmError>
@@ -711,10 +764,12 @@ mod tests {
     #[cfg(feature = "pool-bb8")]
     use super::ensure_transactions_supported;
     use super::{DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
-    use crate::Tracked;
+    use crate::{
+        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, Tracked,
+    };
     use mssql_orm_core::{
-        ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
-        Row, SqlServerType, SqlValue,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
+        OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
     };
     use mssql_orm_query::{
         ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
@@ -723,6 +778,8 @@ mod tests {
     #[derive(Debug, Clone)]
     struct TestEntity;
     struct VersionedEntity;
+    struct SoftDeleteEntityUnderTest;
+    struct SoftDeleteVersionedEntity;
     struct CompositeKeyEntity;
     struct DummyContext {
         entities: DbSet<TestEntity>,
@@ -739,6 +796,7 @@ mod tests {
         name: Option<String>,
         version: Option<Vec<u8>>,
     }
+    struct TestSoftDeleteProvider;
 
     static TEST_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
         ColumnMetadata {
@@ -927,6 +985,177 @@ mod tests {
         foreign_keys: &[],
     };
 
+    static SOFT_DELETE_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static SOFT_DELETE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "SoftDeleteEntityUnderTest",
+        schema: "dbo",
+        table: "soft_delete_entities",
+        renamed_from: None,
+        columns: &SOFT_DELETE_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    static SOFT_DELETE_VERSIONED_ENTITY_COLUMNS: [ColumnMetadata; 4] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "version",
+            column_name: "version",
+            renamed_from: None,
+            sql_type: SqlServerType::RowVersion,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: true,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static SOFT_DELETE_VERSIONED_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "SoftDeleteVersionedEntity",
+        schema: "dbo",
+        table: "soft_delete_versioned_entities",
+        renamed_from: None,
+        columns: &SOFT_DELETE_VERSIONED_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    static SOFT_DELETE_POLICY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
+        rust_field: "deleted_at",
+        column_name: "deleted_at",
+        renamed_from: None,
+        sql_type: SqlServerType::DateTime2,
+        nullable: true,
+        primary_key: false,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: false,
+        updatable: true,
+        max_length: None,
+        precision: None,
+        scale: None,
+    }];
+
     impl Entity for TestEntity {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
@@ -942,6 +1171,54 @@ mod tests {
     impl Entity for VersionedEntity {
         fn metadata() -> &'static EntityMetadata {
             &VERSIONED_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for SoftDeleteEntityUnderTest {
+        fn metadata() -> &'static EntityMetadata {
+            &SOFT_DELETE_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for SoftDeleteVersionedEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &SOFT_DELETE_VERSIONED_ENTITY_METADATA
+        }
+    }
+
+    impl SoftDeleteEntity for TestEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for CompositeKeyEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for VersionedEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for SoftDeleteEntityUnderTest {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &SOFT_DELETE_POLICY_COLUMNS,
+            ))
+        }
+    }
+
+    impl SoftDeleteEntity for SoftDeleteVersionedEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &SOFT_DELETE_POLICY_COLUMNS,
+            ))
         }
     }
 
@@ -1015,6 +1292,21 @@ mod tests {
 
         fn concurrency_token(&self) -> Result<Option<SqlValue>, mssql_orm_core::OrmError> {
             Ok(self.version.clone().map(SqlValue::Bytes))
+        }
+    }
+
+    impl SoftDeleteProvider for TestSoftDeleteProvider {
+        fn apply(
+            &self,
+            context: SoftDeleteContext<'_>,
+            changes: &mut Vec<ColumnValue>,
+        ) -> Result<(), OrmError> {
+            assert_eq!(context.operation, SoftDeleteOperation::Delete);
+            changes.push(ColumnValue::new(
+                "deleted_at",
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+            ));
+            Ok(())
         }
     }
 
@@ -1332,6 +1624,85 @@ mod tests {
                     Expr::Value(SqlValue::Bytes(vec![9, 8, 7])),
                 ),
             ]))
+        );
+    }
+
+    #[test]
+    fn dbset_delete_compiled_query_uses_physical_delete_for_plain_entities() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let compiled = dbset
+            .delete_compiled_query_sql_value(SqlValue::I64(7), None, None, None)
+            .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "DELETE FROM [dbo].[test_entities] WHERE ([dbo].[test_entities].[id] = @P1)"
+        );
+        assert_eq!(compiled.params, vec![SqlValue::I64(7)]);
+    }
+
+    #[test]
+    fn dbset_delete_compiled_query_uses_update_for_soft_delete_entities() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+
+        let provider = TestSoftDeleteProvider;
+        let compiled = dbset
+            .delete_compiled_query_sql_value(SqlValue::I64(7), None, Some(&provider), None)
+            .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[soft_delete_entities] SET [deleted_at] = @P1 OUTPUT INSERTED.* WHERE ([dbo].[soft_delete_entities].[id] = @P2)"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+                SqlValue::I64(7),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_delete_compiled_query_appends_rowversion_for_soft_delete_entities() {
+        let dbset = DbSet::<SoftDeleteVersionedEntity>::disconnected();
+
+        let provider = TestSoftDeleteProvider;
+        let compiled = dbset
+            .delete_compiled_query_sql_value(
+                SqlValue::I64(7),
+                Some(SqlValue::Bytes(vec![9, 8, 7])),
+                Some(&provider),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[soft_delete_versioned_entities] SET [deleted_at] = @P1 OUTPUT INSERTED.* WHERE (([dbo].[soft_delete_versioned_entities].[id] = @P2) AND ([dbo].[soft_delete_versioned_entities].[version] = @P3))"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+                SqlValue::I64(7),
+                SqlValue::Bytes(vec![9, 8, 7]),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_delete_compiled_query_rejects_soft_delete_without_runtime_values() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+
+        let error = dbset
+            .delete_compiled_query_sql_value(SqlValue::I64(7), None, None, None)
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("soft_delete delete requires at least one runtime change")
         );
     }
 

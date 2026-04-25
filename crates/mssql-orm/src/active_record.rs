@@ -1,4 +1,4 @@
-use crate::{DbContextEntitySet, DbSetQuery};
+use crate::{DbContextEntitySet, DbSetQuery, SoftDeleteEntity};
 use core::future::Future;
 use mssql_orm_core::{ColumnValue, Entity, FromRow, OrmError, SqlTypeMapping, SqlValue};
 
@@ -43,7 +43,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn delete<C>(&self, db: &C) -> impl Future<Output = Result<bool, OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
-        Self: EntityPrimaryKey + EntityPersist,
+        Self: EntityPrimaryKey + EntityPersist + FromRow + Send + SoftDeleteEntity,
     {
         let key = <Self as EntityPrimaryKey>::primary_key_value(self);
         let concurrency_token = <Self as EntityPersist>::concurrency_token(self);
@@ -118,10 +118,10 @@ impl<E: Entity> ActiveRecord for E {}
 #[cfg(test)]
 mod tests {
     use super::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
-    use crate::{DbContext, DbContextEntitySet, DbSet};
+    use crate::{DbContext, DbContextEntitySet, DbSet, SoftDeleteEntity};
     use mssql_orm_core::{
-        ColumnMetadata, ColumnValue, Entity, EntityMetadata, FromRow, OrmError, PrimaryKeyMetadata,
-        Row, SqlServerType,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
+        OrmError, PrimaryKeyMetadata, Row, SqlServerType,
     };
     use mssql_orm_query::SelectQuery;
 
@@ -185,6 +185,12 @@ mod tests {
     impl Entity for TestEntity {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
+        }
+    }
+
+    impl SoftDeleteEntity for TestEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
         }
     }
 
