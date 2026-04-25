@@ -14,13 +14,13 @@
 - [ ] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
 - [ ] Etapa 16+: Garantizar que inserts de entidades con `tenant = TenantScope` reciban automáticamente `tenant_id` desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
-- [ ] Etapa 16: Actualizar `README.md` y/o documentación de roadmap para presentar `Entity Policies` como evolución code-first, aclarando qué está implementado y qué queda diferido
 - [ ] Etapa 16: Actualizar `docs/context.md` al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública
 - [ ] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Actualizar `README.md` y/o documentación de roadmap para presentar `Entity Policies` como evolución code-first, aclarando qué está implementado y qué queda diferido
 - [x] Etapa 16: Actualizar `docs/code-first.md` con la sintaxis `#[orm(audit = Audit)]`, límites del MVP y ejemplo compilable respaldado por fixture `trybuild`
 - [x] Etapa 16: Mantener fuera del MVP el autollenado de `created_by`, `updated_by`, `created_at` y `updated_at` desde `DbSet::insert`, `DbSet::update`, Active Record y `save_changes`
 - [x] Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que `migration add --snapshot-bin ...` capture columnas auditables en `model_snapshot.json`

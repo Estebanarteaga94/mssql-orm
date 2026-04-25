@@ -2,6 +2,36 @@
 
 ## 2026-04-25
 
+### Sesión: README y roadmap de Entity Policies
+
+- Se ejecutó la subtarea `Etapa 16: Actualizar README.md y/o documentación de roadmap para presentar Entity Policies como evolución code-first, aclarando qué está implementado y qué queda diferido`.
+- Se confirmó que el plan maestro no está en la raíz; la ruta operativa usada como fuente de verdad fue `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisó `README.md`, `docs/entity-policies.md`, `docs/context.md`, `docs/tasks.md`, `docs/worklog.md` y el plan maestro.
+- Se actualizó `README.md` para incluir `Entity Policies` dentro de la surface disponible, enlazar `docs/entity-policies.md`, agregar una sección dedicada y corregir el estado real: Etapa 15 cerrada y Etapa 16 en cierre.
+- La sección nueva aclara que `#[derive(AuditFields)]` y `#[orm(audit = Audit)]` ya están implementados como columnas de metadata/schema, integradas con snapshots, diff, DDL y migraciones.
+- También deja explícitamente diferidos el autollenado runtime, campos Rust visibles, símbolos como `Todo::created_at`, `timestamps`, `soft_delete`, `tenant` y `AuditProvider`.
+- Se actualizó `docs/entity-policies.md` para retirar la advertencia obsoleta de que la feature no estaba disponible todavía.
+- Se actualizó `docs/context.md` con el estado operativo posterior a esta documentación pública.
+- Se actualizó `docs/tasks.md` moviendo la tarea a `Completadas`.
+
+### Resultado
+
+- El README y la documentación de roadmap ya presentan `Entity Policies` como evolución code-first disponible para auditoría de metadata/schema, sin prometer comportamiento runtime fuera del MVP.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó `cargo test --workspace` porque la tarea fue documental y no modificó código ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Actualizar docs/context.md al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública`.
+
 ### Sesión: documentar auditoría en code-first
 
 - Se ejecutó la subtarea `Etapa 16: Actualizar docs/code-first.md con la sintaxis #[orm(audit = Audit)], límites del MVP y ejemplo compilable respaldado por fixture trybuild`.

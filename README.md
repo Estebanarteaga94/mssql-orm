@@ -34,6 +34,7 @@ Hoy el repositorio ya tiene soporte funcional para:
 - compilación de AST a SQL Server parametrizado
 - adaptador Tiberius para conexión, ejecución, transacciones, health checks, retry, tracing, slow query logs y pool opcional
 - migraciones `code-first` con snapshots, diff, DDL SQL Server y CLI mínima
+- Entity Policies iniciales con `#[derive(AuditFields)]` y `#[orm(audit = Audit)]` como columnas reutilizables de metadata/schema
 - validación real contra SQL Server en pruebas de integración y en el ejemplo `todo_app`
 
 ## Ejemplo Rápido
@@ -82,6 +83,7 @@ async fn main() -> Result<(), OrmError> {
 
 Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD base y query builder público, revisa [docs/quickstart.md](docs/quickstart.md).
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
+Si quieres reutilizar columnas transversales con `Entity Policies`, revisa [docs/entity-policies.md](docs/entity-policies.md).
 Si quieres ver el inventario de API publicada por la crate raíz, revisa [docs/api.md](docs/api.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
 Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
@@ -153,6 +155,26 @@ Inventario de la surface expuesta por la crate raíz:
 - módulos avanzados reexportados y exclusiones explícitas
 
 Documento: [docs/api.md](docs/api.md)
+
+### Entity Policies
+
+Evolución conservadora del modelo `code-first` para reutilizar columnas transversales sin crear un segundo pipeline de esquema.
+
+Lo implementado hoy:
+
+- `#[derive(AuditFields)]` para definir un struct reusable de auditoría
+- `#[orm(audit = Audit)]` sobre entidades derivadas con `Entity`
+- expansión de columnas auditables dentro de `EntityMetadata.columns`
+- participación normal de esas columnas en snapshots, diff, DDL SQL Server y migraciones
+- cobertura `trybuild`, pruebas de metadata, snapshot/diff, DDL y ejemplo `todo-app`
+
+Lo que queda deliberadamente diferido:
+
+- autollenado runtime de `created_at`, `created_by`, `updated_at` o `updated_by`
+- campos Rust visibles y símbolos asociados como `Todo::created_at` cuando la columna viene de una policy
+- `timestamps = Timestamps`, `soft_delete = SoftDelete`, `tenant = TenantScope` y `AuditProvider`
+
+Documento: [docs/entity-policies.md](docs/entity-policies.md)
 
 ### Guía del query builder
 
@@ -230,7 +252,8 @@ Estado resumido:
 - Etapa 12 cerrada: change tracking experimental
 - Etapa 13 cerrada: migraciones avanzadas
 - Etapa 14 cerrada: surface operativa de producción y ejemplo web `todo_app`
-- Etapa 15 en curso: release, documentación pública, quickstart y changelog
+- Etapa 15 cerrada: release, documentación pública, quickstart, guías y changelog
+- Etapa 16 en cierre: `Entity Policies` con auditoría como metadata/schema; quedan pendientes la validación final de etapa y diseño de extensiones diferidas
 
 La fuente de verdad del roadmap técnico sigue siendo [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md).
 
@@ -240,9 +263,10 @@ Este repo todavía no pretende vender humo. Hay límites explícitos en esta fas
 
 - SQL Server es el único backend objetivo
 - la API de change tracking sigue siendo experimental
+- `audit = Audit` no autollena valores en runtime ni agrega campos Rust visibles a las entidades
+- `soft_delete`, `tenant`, `timestamps` y `AuditProvider` siguen como diseño futuro
 - no se está intentando soportar múltiples motores de base de datos
-- el release público todavía está en consolidación
-- algunas decisiones de UX todavía se están afinando alrededor de ejemplos, quickstart y documentación de entrada
+- algunas decisiones de UX futura siguen abiertas alrededor de policies con comportamiento runtime
 
 ## Validación
 

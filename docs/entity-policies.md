@@ -2,7 +2,7 @@
 
 Diseno publico inicial de `Entity Policies` para `mssql-orm`.
 
-Este documento fija el concepto de producto y las fronteras arquitectonicas de la Etapa 16. No declara la feature como disponible todavia; las tareas siguientes deben convertir este diseno en contratos de `core`, derives, tests y documentacion publica de uso.
+Este documento fija el concepto de producto, las fronteras arquitectonicas y el estado publico de `Entity Policies` en la Etapa 16. El MVP disponible cubre auditoria como metadata/schema mediante `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`; las policies con comportamiento runtime siguen diferidas.
 
 ## Objetivo
 
