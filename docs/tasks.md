@@ -8,10 +8,51 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
+- [ ] Etapa 16: Documentar explícitamente el alcance inicial de `Entity Policies`: `audit` y `timestamps` como columnas generadas; `soft_delete`, `tenant` y comportamiento automático quedan diferidos hasta tener contrato estable
+- [ ] Etapa 16: Definir el contrato de metadata para políticas reutilizables en `mssql-orm-core`, preservando que snapshots, diff y DDL sigan consumiendo columnas normales (`ColumnMetadata`) sin crear un segundo pipeline de esquema
+- [ ] Etapa 16: Decidir y documentar la sintaxis MVP soportada para auditoría a nivel de entidad, priorizando `#[orm(audit = Audit)]` sobre alternativas implícitas o runtime
+- [ ] Etapa 16: Definir el shape esperado de un struct de auditoría de usuario, incluyendo columnas, tipos soportados, nullability, defaults SQL y reglas para campos no insertables/updatables
+- [ ] Etapa 16: Implementar `#[derive(AuditFields)]` o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable
+- [ ] Etapa 16: Agregar validaciones compile-time para `AuditFields`: solo structs con campos nombrados, tipos con `SqlTypeMapping`, atributos `#[orm(...)]` permitidos, nombres de columnas no vacíos y errores claros en casos inválidos
+- [ ] Etapa 16: Extender `#[derive(Entity)]` para aceptar `#[orm(audit = Audit)]` a nivel de entidad sin afectar entidades existentes que no declaran auditoría
+- [ ] Etapa 16: Hacer que `#[orm(audit = Audit)]` expanda las columnas auditables dentro de `EntityMetadata.columns` en orden estable y documentado
+- [ ] Etapa 16: Validar colisiones entre columnas generadas por auditoría y campos propios de la entidad, fallando en compile-time con un mensaje accionable
+- [ ] Etapa 16: Validar que una entidad no pueda declarar dos políticas que generen la misma columna, dejando preparado el caso futuro de `audit` + `timestamps`
+- [ ] Etapa 16: Generar símbolos de columna asociados para columnas auditables cuando sea posible, o documentar claramente si el MVP no los expone como `Todo::created_at`
+- [ ] Etapa 16: Asegurar que `FromRow` generado pueda materializar entidades con auditoría; si el MVP no agrega campos Rust visibles al entity, documentar que esas columnas son solo metadata/schema en esta etapa
+- [ ] Etapa 16: Cubrir `#[orm(audit = Audit)]` con tests `trybuild` válidos en la crate pública usando únicamente la API reexportada por `mssql-orm::prelude`
+- [ ] Etapa 16: Cubrir errores `trybuild` para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado
+- [ ] Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable
+- [ ] Etapa 16: Confirmar que `ModelSnapshot::from_entities(...)` incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista
+- [ ] Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con `audit = Audit` genere `CREATE TABLE` con columnas auditables
+- [ ] Etapa 16: Agregar pruebas de diff donde activar `audit = Audit` sobre una tabla existente genere `AddColumn` para cada columna auditable esperada
+- [ ] Etapa 16: Agregar pruebas de diff donde quitar `audit = Audit` sea detectado como destructivo por la CLI cuando produzca `DropColumn`
+- [ ] Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como `SYSUTCDATETIME()`, longitudes `nvarchar`, nullability y tipos fecha compatibles
+- [ ] Etapa 16: Actualizar el ejemplo `todo-app` o agregar fixture dedicado para mostrar al menos una entidad con `#[orm(audit = Audit)]` sin degradar el smoke existente
+- [ ] Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que `migration add --snapshot-bin ...` capture columnas auditables en `model_snapshot.json`
+- [ ] Etapa 16: Mantener fuera del MVP el autollenado de `created_by`, `updated_by`, `created_at` y `updated_at` desde `DbSet::insert`, `DbSet::update`, Active Record y `save_changes`
+- [ ] Etapa 16+: Diseñar `AuditProvider` para autollenado futuro, incluyendo `now`, usuario actual, valores por request, integración con `DbContext` y comportamiento dentro de transacciones
+- [ ] Etapa 16+: Definir cómo `AuditProvider` debe modificar `Vec<ColumnValue>` en insert/update sin duplicar la lógica existente de `Insertable`, `Changeset`, `EntityPersist`, Active Record ni change tracking
+- [ ] Etapa 16+: Evaluar `timestamps = Timestamps` como política separada o alias simplificado de `audit`, evitando solapamientos de columnas con `audit`
+- [ ] Etapa 16+: Evaluar `concurrency = RowVersion` como política declarativa sobre el soporte existente de `#[orm(rowversion)]`, sin romper `ConcurrencyConflict`
+- [ ] Etapa 16+: Evaluar `soft_delete = SoftDelete` como cambio semántico explícito de `delete`, `entity.delete(&db)`, queries por defecto y migraciones, documentando sus riesgos antes de implementarlo
+- [ ] Etapa 16+: Diseñar `soft_delete = SoftDelete` para que `DbSet::delete(...)`, `entity.delete(&db)`, `remove_tracked(...)` y `save_changes()` no emitan `DELETE` físico cuando la entidad tenga esa política; deben emitir `UPDATE` sobre columnas como `deleted_at`/`deleted_by` y respetar `rowversion`/`ConcurrencyConflict`
+- [ ] Etapa 16+: Definir cómo consultar entidades con `soft_delete`: por defecto las queries de entidades con la política deben excluir filas borradas lógicamente, y debe existir una API explícita para incluir o consultar solo eliminadas sin afectar entidades que no declaran `soft_delete`
+- [ ] Etapa 16+: Cubrir `soft_delete` con pruebas de SQL compilado, CRUD público, Active Record, change tracking y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente
+- [ ] Etapa 16+: Evaluar `tenant = TenantScope` como feature de seguridad con filtros obligatorios, inserción automática de `tenant_id` y validación de que no existan rutas de query que omitan el tenant por accidente
+- [ ] Etapa 16+: Diseñar `tenant = TenantScope` para que toda query, `find`, `update`, `delete`, Active Record y `save_changes()` sobre entidades tenant-scoped agregue automáticamente el filtro `tenant_id = current_tenant` cuando exista un tenant activo en el contexto
+- [ ] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
+- [ ] Etapa 16+: Garantizar que inserts de entidades con `tenant = TenantScope` reciban automáticamente `tenant_id` desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
+- [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
+- [ ] Etapa 16: Actualizar `docs/code-first.md` con la sintaxis `#[orm(audit = Audit)]`, límites del MVP y ejemplo compilable respaldado por fixture `trybuild`
+- [ ] Etapa 16: Actualizar `README.md` y/o documentación de roadmap para presentar `Entity Policies` como evolución code-first, aclarando qué está implementado y qué queda diferido
+- [ ] Etapa 16: Actualizar `docs/context.md` al cerrar la etapa con decisiones reales, límites, tests ejecutados y cualquier tradeoff de API pública
+- [ ] Etapa 16: Ejecutar validación local mínima antes de cerrar: `cargo fmt --all --check`, `cargo check --workspace`, tests `trybuild` afectados y pruebas unitarias de `core`, `macros`, `migrate` y `sqlserver` relacionadas
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Diseñar el concepto público de `Entity Policies` para reutilizar columnas y comportamiento transversal sin romper el enfoque code-first actual
 - [x] Etapa 7+: Aplicar contra SQL Server real las migraciones generadas desde `examples/todo-app` mediante `mssql-orm-cli database update --execute` y validar historial idempotente con `DATABASE_URL`
 - [x] Etapa 7+: Preparar validación reproducible de generación automática con `examples/todo-app` usando snapshot exportado, migración inicial y migración incremental no-op
 - [x] Etapa 7+: Consolidar el artefacto editable MVP de `migration add` con `up.sql`, `down.sql`, `model_snapshot.json` y `migration.rs` explícitamente diferido

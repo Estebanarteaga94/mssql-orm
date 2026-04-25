@@ -18,6 +18,55 @@ La metadata base fue re-alineada contra el plan maestro para preservar el orden 
 
 La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites documentados para el change tracking experimental. La Etapa 13 ya quedó cerrada también en migraciones avanzadas: índices compuestos, `computed columns`, foreign keys avanzadas, scripts idempotentes, `RenameColumn` explícito y `RenameTable` explícito ya están soportados dentro del pipeline de migraciones. La Etapa 14 también quedó cerrada: además de la surface operativa de producción (`timeouts`, `retry`, `tracing`, slow query, health, pool y wiring público desde pool`), el ejemplo web async `todo_app` ya tiene dominio, queries públicas, endpoints mínimos, wiring real con `MssqlPool` y validación reproducible contra SQL Server real. La Etapa 15 sigue en curso: ya quedaron cerradas la documentación pública base (`README.md`), el quickstart reproducible, la consolidación de ejemplos/guías operativas, la guía `code-first` (`docs/code-first.md`) y la guía de migraciones (`docs/migrations.md`). A raíz de la desalineación previa con el plan maestro se añadió backlog técnico nuevo para cerrar el gap; ya quedaron implementadas diez piezas fundacionales: `mssql-orm` expone `MigrationModelSource` con `entity_metadata()` derivado desde `DbContext`, `mssql-orm-migrate` puede serializar/deserializar `ModelSnapshot` en JSON, `mssql-orm-cli migration add` puede consumir un snapshot actual explícito con `--model-snapshot <Path>`, la CLI puede invocar un binario exportador del consumidor con `--snapshot-bin <BinName> --manifest-path <Path>`, `migration add` ya carga además el `model_snapshot.json` de la última migración local cuando dispone de snapshot actual para dejar explícito el par `previous/current`, la propia CLI ya ejecuta internamente `snapshot -> diff -> MigrationOperation -> DDL SQL Server` para calcular el plan observable de la migración, escribe automáticamente ese SQL compilado en `up.sql` dejando `model_snapshot.json` versionado con el estado actual, bloquea por defecto cambios destructivos salvo `--allow-destructive`, `examples/todo-app` ya cuenta con exportador de snapshot y script reproducible para generar migración inicial, migración incremental no-op y `database_update.sql`, y `mssql-orm-cli database update --execute` ya puede aplicar el script acumulado contra SQL Server usando `--connection-string`, `DATABASE_URL` o `MSSQL_ORM_TEST_CONNECTION_STRING`. El backlog de release sigue pendiente de las guías de query builder, transacciones, relaciones, API docs, changelog y validación final.
 
+## Etapa 16 Propuesta: Entity Policies
+
+Después de revisar el modelo actual y el dominio del ejemplo `todo_app`, quedó identificada una evolución natural del enfoque `code-first`: permitir que el usuario defina structs reutilizables para columnas transversales y que cada entidad declare qué políticas aplica. El caso inicial deseado es auditoría:
+
+```rust
+#[derive(Entity)]
+#[orm(table = "todos", schema = "todo", audit = Audit)]
+struct Todo {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    title: String,
+}
+```
+
+La motivación viene de campos que hoy se repiten manualmente en entidades reales del repo, especialmente `created_at`, `created_by_user_id`, `version` y otros campos similares en `examples/todo-app/src/domain.rs`. La dirección correcta no es crear un sistema paralelo al modelo existente, sino extender la metadata `code-first`: las columnas generadas por una política deben terminar como `ColumnMetadata` normales dentro de `EntityMetadata.columns`. Así snapshots, diff, DDL SQL Server, migraciones y `DbContext` pueden seguir usando el pipeline existente sin rutas especiales.
+
+El nombre conceptual elegido para esta línea es `Entity Policies`. Una policy representa una preocupación transversal de modelo que puede aportar columnas y, más adelante, comportamiento automático. Ejemplos candidatos:
+
+- `audit = Audit`: columnas de auditoría como `created_at`, `created_by`, `updated_at`, `updated_by`.
+- `timestamps = Timestamps`: variante reducida para `created_at` y `updated_at`.
+- `concurrency = RowVersion`: forma declarativa sobre el soporte existente de `#[orm(rowversion)]`.
+- `soft_delete = SoftDelete`: columnas y semántica de borrado lógico; cuando una entidad tenga esta policy, las rutas de borrado deben actualizar columnas como `deleted_at`/`deleted_by` en vez de emitir `DELETE` físico.
+- `tenant = TenantScope`: columna `tenant_id` y filtros obligatorios de seguridad; cuando una entidad tenga esta policy, las rutas públicas de lectura y escritura deben aplicar automáticamente `tenant_id = current_tenant`.
+
+El MVP de Etapa 16 debe ser conservador: implementar primero `audit = Audit` como generación de columnas y metadata. No debe autollenar valores todavía en `DbSet::insert`, `DbSet::update`, Active Record ni `save_changes`. Ese comportamiento futuro requiere un contrato separado tipo `AuditProvider`, porque toca rutas de persistencia, contexto por request, transacciones, tracking experimental y seguridad de datos.
+
+La sintaxis preferida para el MVP es `#[orm(audit = Audit)]` a nivel de entidad. El usuario debería poder definir un struct de auditoría reutilizable con un derive o contrato explícito, por ejemplo `#[derive(AuditFields)]`, y ese struct debería usar atributos `#[orm(...)]` compatibles con columnas actuales: `column`, `length`, `nullable`, `default_sql`, `sql_type`, `precision`, `scale` y reglas equivalentes cuando apliquen. La implementación debe validar en compile-time que el struct tenga campos nombrados, tipos mapeables por `SqlTypeMapping`, columnas no duplicadas y atributos soportados.
+
+Puntos de integración esperados:
+
+- `mssql-orm-core`: contrato mínimo para que una policy exponga columnas reutilizables sin duplicar `ColumnMetadata`.
+- `mssql-orm-macros`: parser de `#[orm(audit = Audit)]`, derive/contrato `AuditFields`, validaciones y expansión de columnas dentro del `EntityMetadata` generado.
+- `mssql-orm-migrate`: idealmente no debería requerir cambios estructurales si las columnas auditables llegan como `ColumnMetadata`; sí requiere pruebas de snapshot/diff.
+- `mssql-orm-sqlserver`: debería compilar DDL sin lógica especial si las columnas auditables son `ColumnSnapshot` normales; sí requiere snapshots SQL para defaults, tipos y nullability.
+- `mssql-orm`: debe reexportar la surface pública necesaria en `prelude` y cubrirla con `trybuild` desde la perspectiva del consumidor.
+- `examples/todo-app` o un fixture dedicado: debe mostrar una entidad real con `#[orm(audit = Audit)]` y validar que el exportador de snapshot captura esas columnas.
+
+Hay una decisión sensible sobre si las columnas auditables deben existir como campos Rust visibles dentro del entity. Para el MVP se acepta que puedan ser solo metadata/schema si eso reduce el riesgo, pero debe quedar documentado explícitamente. Si se decide materializarlas en el struct Rust, entonces `FromRow`, símbolos de columna como `Todo::created_at`, inserciones, updates y ergonomía del usuario deben diseñarse con más cuidado. No conviene mezclar ambas decisiones sin pruebas.
+
+La Etapa 16 ya fue agregada en `docs/tasks.md` con tareas pequeñas y verificables para evitar que una sesión futura deje la feature a medias. Las tareas separan diseño público, metadata, macros, validaciones compile-time, migraciones, DDL, ejemplo, documentación y validación local. También quedaron marcadas como `Etapa 16+` las extensiones que no deben colarse en el MVP: `AuditProvider`, autollenado, `timestamps`, `concurrency`, `soft_delete` y `tenant`.
+
+El concepto público inicial de esta línea quedó documentado en `docs/entity-policies.md`. Ese documento fija que una `Entity Policy` es una pieza reutilizable de modelo `code-first`, declarada en compile-time sobre una entidad, que debe producir columnas normales dentro de `EntityMetadata.columns`. También deja explícito que el primer criterio técnico es evitar un segundo pipeline de esquema: snapshots, diff y DDL deben seguir consumiendo `ColumnMetadata`/`ColumnSnapshot` ordinarios.
+
+Para `soft_delete`, el comportamiento esperado futuro debe quedar claro desde el diseño: si una entidad declara `#[orm(soft_delete = SoftDelete)]`, entonces `DbSet::delete(...)`, `entity.delete(&db)`, `DbSet::remove_tracked(...)` y `save_changes()` no deberían compilar ni ejecutar un `DELETE FROM ...` normal para esa entidad. En su lugar deben construir un `UPDATE` que marque la fila como eliminada lógicamente, por ejemplo asignando `deleted_at`, `deleted_by` o los campos definidos por el struct `SoftDelete`. Esta ruta debe seguir respetando primary key simple/compuesta según soporte vigente, `rowversion`, `ConcurrencyConflict`, transacciones y el pipeline existente de compilación SQL Server. También debe existir una decisión explícita sobre queries: por defecto las entidades con `soft_delete` deberían excluir filas con borrado lógico, y cualquier acceso a eliminadas debe requerir una API visible como `with_deleted()` o `only_deleted()`, no un bypass accidental.
+
+Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodidad. Si una entidad declara `#[orm(tenant = TenantScope)]`, toda ruta pública que lea o modifique esa entidad debe aplicar el tenant activo: `query().all()`, `first`, `count`, `find`, `update`, `delete`, Active Record y `save_changes()`. En ausencia de tenant activo, la política debe fallar cerrado por defecto para entidades tenant-scoped, en vez de ejecutar una consulta sin filtro. Los inserts deben recibir `tenant_id` desde el contexto o rechazar la operación si el usuario intenta insertar con un tenant distinto. Esta policy necesita pruebas dedicadas para asegurar que joins, query builder manual, tracking y helpers internos no puedan omitir el filtro por accidente.
+
 ## Dirección Arquitectónica Vigente
 
 - El proyecto apunta a un workspace Rust con múltiples crates.

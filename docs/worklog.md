@@ -1,5 +1,35 @@
 # Worklog
 
+## 2026-04-25
+
+### Sesión: diseñar concepto público de `Entity Policies`
+
+- Se ejecutó la subtarea `Etapa 16: Diseñar el concepto público de Entity Policies para reutilizar columnas y comportamiento transversal sin romper el enfoque code-first actual`.
+- El plan maestro se confirmó en su ruta real `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz del repositorio.
+- Se revisó el shape real de `ColumnMetadata`, `EntityMetadata` y `ColumnSnapshot` para mantener el diseño alineado con el pipeline existente.
+- Se agregó `docs/entity-policies.md` como documento de diseño público inicial de Etapa 16.
+- El documento define `Entity Policies` como piezas reutilizables de modelo `code-first`, declaradas en compile-time sobre entidades, cuyo primer objetivo es aportar columnas transversales sin crear un segundo pipeline de esquema.
+- Quedó fijado que las columnas generadas por una policy deben terminar como `ColumnMetadata` normales dentro de `EntityMetadata.columns`, para que snapshots, diff, DDL SQL Server y CLI sigan usando las rutas existentes.
+- Se dejaron explícitamente fuera del primer corte los comportamientos runtime como autollenado de auditoría, filtros de `soft_delete`, reemplazo de `DELETE` físico, filtros obligatorios de tenant e inserción automática de `tenant_id`.
+- Se actualizó `docs/context.md` con la ubicación del documento y la decisión conceptual principal.
+
+### Resultado
+
+- La Etapa 16 ya tiene un concepto público documentado y verificable para `Entity Policies`, sin introducir todavía cambios de código ni prometer como implementada una API que aún está en diseño.
+
+### Validación
+
+- `cargo fmt --all --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Esta sesión fue documental por diseño; no se ejecutaron pruebas Rust porque no hubo cambios de código.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Documentar explícitamente el alcance inicial de Entity Policies: audit y timestamps como columnas generadas; soft_delete, tenant y comportamiento automático quedan diferidos hasta tener contrato estable`.
+
 ## 2026-04-24
 
 ### Sesión: limpiar `todo-app` y ejecutar migraciones desde cero
