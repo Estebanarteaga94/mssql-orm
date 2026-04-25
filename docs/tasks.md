@@ -7,7 +7,6 @@
 - [ ] Etapa 15: Consolidar API docs mínimas y surface pública publicada por la crate raíz
 - [ ] Etapa 15: Preparar changelog inicial del release con surface disponible y exclusiones explícitas
 - [ ] Etapa 15: Ejecutar validación final de release sobre workspace y ejemplos documentados
-- [ ] Etapa 16: Agregar pruebas de diff donde quitar `audit = Audit` sea detectado como destructivo por la CLI cuando produzca `DropColumn`
 - [ ] Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como `SYSUTCDATETIME()`, longitudes `nvarchar`, nullability y tipos fecha compatibles
 - [ ] Etapa 16: Actualizar el ejemplo `todo-app` o agregar fixture dedicado para mostrar al menos una entidad con `#[orm(audit = Audit)]` sin degradar el smoke existente
 - [ ] Etapa 16: Agregar binario/exportador de snapshot del ejemplo actualizado y validar que `migration add --snapshot-bin ...` capture columnas auditables en `model_snapshot.json`
@@ -33,6 +32,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16: Agregar pruebas de diff donde quitar `audit = Audit` sea detectado como destructivo por la CLI cuando produzca `DropColumn`
 - [x] Etapa 16: Agregar pruebas de diff donde activar `audit = Audit` sobre una tabla existente genere `AddColumn` para cada columna auditable esperada
 - [x] Etapa 16: Agregar pruebas de migraciones donde una entidad nueva con `audit = Audit` genere `CREATE TABLE` con columnas auditables
 - [x] Etapa 16: Confirmar que `ModelSnapshot::from_entities(...)` incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista

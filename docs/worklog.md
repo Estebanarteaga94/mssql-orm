@@ -2,6 +2,41 @@
 
 ## 2026-04-25
 
+### Sesión: bloqueo destructivo al quitar auditoría
+
+- Se ejecutó la subtarea `Etapa 16: Agregar pruebas de diff donde quitar audit = Audit sea detectado como destructivo por la CLI cuando produzca DropColumn`.
+- Se amplió `crates/mssql-orm/tests/stage16_audit_migrations.rs` con una prueba que compara `AuditedEntity` como snapshot previo contra `PlainEntity` como snapshot actual.
+- La prueba valida que `diff_column_operations(...)` emite exactamente cuatro `DropColumn`: `created_at`, `created_by_user_id`, `updated_at` y `updated_by`.
+- Se agregó en `crates/mssql-orm-cli/src/main.rs` el helper de test `audited_entity_snapshot(...)` para modelar una tabla auditada/sin auditar con `ModelSnapshot` serializable.
+- Se agregó la prueba CLI `run_migration_add_blocks_removing_audit_policy_by_default`, que carga el snapshot previo auditado desde `model_snapshot.json`, usa un snapshot actual sin auditoría y verifica que `migration add` falle antes de crear migración.
+- El bloqueo observado es el existente de cambios destructivos: `Error: destructive migration detected` con `Operation: DropColumn audit.audited_entities.created_at`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Quitar `#[orm(audit = Audit)]` de una tabla existente queda cubierto como cambio destructivo: el diff genera `DropColumn` y la CLI lo bloquea por defecto salvo uso explícito de `--allow-destructive`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_audit_migrations`
+- `cargo test -p mssql-orm-cli run_migration_add_blocks_removing_audit_policy_by_default`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-cli`
+- `cargo test -p mssql-orm-migrate diff`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Validar el SQL Server DDL generado para columnas auditables con defaults como SYSUTCDATETIME(), longitudes nvarchar, nullability y tipos fecha compatibles`.
+
 ### Sesión: diff al activar auditoría sobre tabla existente
 
 - Se ejecutó la subtarea `Etapa 16: Agregar pruebas de diff donde activar audit = Audit sobre una tabla existente genere AddColumn para cada columna auditable esperada`.

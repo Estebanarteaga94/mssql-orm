@@ -142,3 +142,34 @@ fn enabling_audit_on_existing_entity_emits_add_column_for_each_audit_column() {
     assert!(updated_by.insertable);
     assert!(updated_by.updatable);
 }
+
+#[test]
+fn removing_audit_from_existing_entity_emits_drop_column_for_each_audit_column() {
+    let previous = ModelSnapshot::from_entities(&[AuditedEntity::metadata()]);
+    let current = ModelSnapshot::from_entities(&[PlainEntity::metadata()]);
+    let operations = diff_column_operations(&previous, &current);
+
+    assert_eq!(operations.len(), 4);
+
+    let dropped_columns = operations
+        .iter()
+        .map(|operation| match operation {
+            MigrationOperation::DropColumn(operation) => {
+                assert_eq!(operation.schema_name, "audit");
+                assert_eq!(operation.table_name, "audited_entities");
+                operation.column_name.as_str()
+            }
+            other => panic!("expected DropColumn operation, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        dropped_columns,
+        vec![
+            "created_at",
+            "created_by_user_id",
+            "updated_at",
+            "updated_by",
+        ]
+    );
+}

@@ -718,6 +718,93 @@ mod tests {
         )])
     }
 
+    fn audited_entity_snapshot(include_audit: bool) -> ModelSnapshot {
+        let mut columns = vec![
+            ColumnSnapshot::new(
+                "id",
+                SqlServerType::BigInt,
+                false,
+                true,
+                None,
+                None,
+                None,
+                false,
+                false,
+                false,
+                None,
+                None,
+                None,
+            ),
+            test_column("name", SqlServerType::NVarChar, false, None, Some(120)),
+            test_column(
+                "status",
+                SqlServerType::NVarChar,
+                true,
+                Some("'new'"),
+                Some(40),
+            ),
+        ];
+
+        if include_audit {
+            columns.push(ColumnSnapshot::new(
+                "created_at",
+                SqlServerType::DateTime2,
+                false,
+                false,
+                None,
+                Some("SYSUTCDATETIME()".to_string()),
+                None,
+                false,
+                false,
+                false,
+                None,
+                None,
+                None,
+            ));
+            columns.push(test_column(
+                "created_by_user_id",
+                SqlServerType::BigInt,
+                true,
+                None,
+                None,
+            ));
+            columns.push(ColumnSnapshot::new(
+                "updated_at",
+                SqlServerType::DateTime2,
+                true,
+                false,
+                None,
+                Some("SYSUTCDATETIME()".to_string()),
+                None,
+                false,
+                false,
+                true,
+                None,
+                None,
+                None,
+            ));
+            columns.push(test_column(
+                "updated_by",
+                SqlServerType::NVarChar,
+                true,
+                None,
+                Some(120),
+            ));
+        }
+
+        ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "audit",
+            vec![TableSnapshot::new(
+                "audited_entities",
+                columns,
+                None,
+                vec!["id".to_string()],
+                Vec::new(),
+                Vec::new(),
+            )],
+        )])
+    }
+
     #[test]
     fn parses_minimal_cli_commands() {
         assert_eq!(
@@ -1057,6 +1144,51 @@ mod tests {
                 .file_name()
                 .to_string_lossy()
                 .contains("dropcustomerphone")
+        }));
+    }
+
+    #[test]
+    fn run_migration_add_blocks_removing_audit_policy_by_default() {
+        let root = temp_project_root();
+        let previous_dir = root.join("migrations/100_create_audited_entities");
+        let current_snapshot_path = root.join("current_model_snapshot.json");
+
+        fs::create_dir_all(&previous_dir).unwrap();
+        fs::write(previous_dir.join("up.sql"), "-- noop").unwrap();
+        fs::write(previous_dir.join("down.sql"), "-- noop").unwrap();
+        fs::write(
+            previous_dir.join("model_snapshot.json"),
+            audited_entity_snapshot(true).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            &current_snapshot_path,
+            audited_entity_snapshot(false).to_json_pretty().unwrap(),
+        )
+        .unwrap();
+
+        let error = run(
+            vec![
+                "mssql-orm-cli".to_string(),
+                "migration".to_string(),
+                "add".to_string(),
+                "RemoveAudit".to_string(),
+                "--model-snapshot".to_string(),
+                "current_model_snapshot.json".to_string(),
+            ],
+            &root,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("Error: destructive migration detected."));
+        assert!(error.contains("Operation: DropColumn audit.audited_entities.created_at"));
+        assert!(error.contains("Use --allow-destructive or edit migration manually."));
+        assert!(!root.join("migrations").read_dir().unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("removeaudit")
         }));
     }
 
