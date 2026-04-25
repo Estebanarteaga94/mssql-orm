@@ -15,6 +15,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/code_first_public_valid.rs");
     tests.pass("tests/ui/query_builder_public_valid.rs");
     tests.pass("tests/ui/query_builder_todo_app_valid.rs");
+    tests.pass("tests/ui/audit_fields_valid.rs");
     tests.compile_fail("tests/ui/entity_missing_primary_key.rs");
     tests.compile_fail("tests/ui/entity_identity_invalid_type.rs");
     tests.compile_fail("tests/ui/entity_foreign_key_empty_segment.rs");
@@ -26,4 +27,8 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/changeset_field_not_option.rs");
     tests.compile_fail("tests/ui/dbcontext_invalid_field_type.rs");
     tests.compile_fail("tests/ui/dbcontext_duplicate_entity_set.rs");
+    tests.compile_fail("tests/ui/audit_fields_tuple_struct.rs");
+    tests.compile_fail("tests/ui/audit_fields_unsupported_attr.rs");
+    tests.compile_fail("tests/ui/audit_fields_empty_column.rs");
+    tests.compile_fail("tests/ui/audit_fields_unsupported_type.rs");
 }

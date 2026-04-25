@@ -1,0 +1,5 @@
+error: atributo orm no soportado en campos de AuditFields
+ --> tests/ui/audit_fields_unsupported_attr.rs:5:11
+  |
+5 |     #[orm(primary_key)]
+  |           ^^^^^^^^^^^

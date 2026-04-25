@@ -1,0 +1,5 @@
+error: AuditFields solo soporta structs con campos nombrados
+ --> tests/ui/audit_fields_tuple_struct.rs:4:8
+  |
+4 | struct Audit(String);
+  |        ^^^^^

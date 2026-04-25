@@ -1,0 +1,5 @@
+error: column no puede estar vacío
+ --> tests/ui/audit_fields_empty_column.rs:5:20
+  |
+5 |     #[orm(column = "")]
+  |                    ^^

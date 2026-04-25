@@ -2,6 +2,37 @@
 
 ## 2026-04-25
 
+### Sesión: validar compile-time `AuditFields`
+
+- Se ejecutó la subtarea `Etapa 16: Agregar validaciones compile-time para AuditFields: solo structs con campos nombrados, tipos con SqlTypeMapping, atributos #[orm(...)] permitidos, nombres de columnas no vacíos y errores claros en casos inválidos`.
+- Se agregó validación explícita para rechazar `#[orm(column = "")]` en campos de `AuditFields`.
+- Se agregó fixture válido `tests/ui/audit_fields_valid.rs` usando únicamente `mssql_orm::prelude::*`.
+- Se agregaron fixtures `trybuild` inválidos para struct tuple, atributo no soportado, columna vacía y tipo sin `SqlTypeMapping`.
+- Se versionaron los `.stderr` esperados de esos cuatro casos inválidos.
+- El caso de tipo no soportado se valida por el bound generado contra `SqlTypeMapping`, preservando soporte para tipos custom que implementen el trait.
+- Se actualizó `docs/context.md` con la cobertura compile-time actual.
+
+### Resultado
+
+- `AuditFields` ya tiene cobertura compile-time mínima para el contrato documentado antes de integrarse con `#[derive(Entity)]`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test trybuild`
+- `cargo test -p mssql-orm-macros`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Los casos de auditoría inválida ligados a `#[orm(audit = Audit)]` sobre entidades quedan para las tareas posteriores donde se implemente esa integración.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Extender #[derive(Entity)] para aceptar #[orm(audit = Audit)] a nivel de entidad sin afectar entidades existentes que no declaran auditoría`.
+
 ### Sesión: implementar `#[derive(AuditFields)]`
 
 - Se ejecutó la subtarea `Etapa 16: Implementar #[derive(AuditFields)] o contrato equivalente para convertir un struct de auditoría definido por el usuario en metadata reutilizable`.

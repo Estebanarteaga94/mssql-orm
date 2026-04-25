@@ -81,6 +81,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
         let column_name = config
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+        validate_non_empty_lit_str(&column_name, "column no puede estar vacío")?;
         let renamed_from = option_lit_str(config.renamed_from);
         let sql_type = config.sql_type.map_or_else(
             || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::SQL_SERVER_TYPE },
@@ -1254,6 +1255,14 @@ fn parse_lit_str(expr: Expr) -> Result<LitStr> {
         }) => Ok(value),
         other => Err(Error::new_spanned(other, "se esperaba un string literal")),
     }
+}
+
+fn validate_non_empty_lit_str(value: &LitStr, message: &str) -> Result<()> {
+    if value.value().is_empty() {
+        return Err(Error::new_spanned(value, message));
+    }
+
+    Ok(())
 }
 
 fn parse_bool_expr(expr: Expr) -> Result<bool> {
