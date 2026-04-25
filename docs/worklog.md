@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: cobertura unitaria de metadata de auditoría
+
+- Se ejecutó la subtarea `Etapa 16: Agregar pruebas unitarias de metadata para confirmar schema, table, columnas propias, columnas auditables, defaults, nullability, insertable/updatable y orden estable`.
+- El plan maestro requerido por la sesión está en `docs/plan_orm_sqlserver_tiberius_code_first.md`; no existe el archivo homónimo en la raíz.
+- Se amplió `crates/mssql-orm/tests/stage16_entity_policies.rs` para fijar explícitamente `rust_name`, `schema`, `table`, primary key, ausencia de índices/foreign keys y orden completo de columnas.
+- La fixture auditada ahora cubre columnas propias `id`, `name`, `status` y columnas de policy `created_at`, `created_by_user_id`, `updated_at`, `updated_by`.
+- La prueba confirma tipos SQL, defaults, nullability, longitud, identity, `insertable` y `updatable` tanto en columnas propias como en columnas generadas por `AuditFields`.
+- Se preservó el límite MVP: no hubo cambios productivos ni autollenado runtime; la sesión solo reforzó cobertura observable de metadata.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La metadata generada por `#[orm(audit = Audit)]` queda cubierta por pruebas unitarias/integración pública para el contrato pedido por el backlog: schema, table, columnas propias, columnas auditables, defaults, nullability, flags de persistencia y orden estable.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_entity_policies`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-core`
+- `cargo test -p mssql-orm-macros`
+- `cargo clippy --workspace --all-targets --all-features`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero reportó advertencias preexistentes no relacionadas en `mssql-orm-migrate/src/diff.rs` (`collapsible_if`) y `mssql-orm/src/context.rs` (`large_enum_variant`).
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16: Confirmar que ModelSnapshot::from_entities(...) incluye columnas auditables sin cambios especiales en snapshot, serialización JSON ni orden determinista`.
+
 ### Sesión: cobertura `trybuild` de auditoría inválida
 
 - Se ejecutó la subtarea `Etapa 16: Cubrir errores trybuild para auditoría inválida: tipo inexistente, struct sin campos nombrados, atributo no soportado, columna duplicada y tipo sin mapping SQL soportado`.
