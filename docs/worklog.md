@@ -2,6 +2,38 @@
 
 ## 2026-04-25
 
+### Sesión: cobertura runtime de alto riesgo para `soft_delete`
+
+- Se descompuso la tarea amplia `Etapa 16+: Cubrir soft_delete con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, ConcurrencyConflict y migraciones...` en una subtarea runtime concreta y una tarea paraguas final de seguridad.
+- Se movió a `En Progreso` la subtarea `Etapa 16+: Cubrir soft_delete en rutas runtime públicas de alto riesgo: DbSet::delete, Active Record delete, change tracking save_changes() con Deleted y ConcurrencyConflict con rowversion`.
+- Se extendió `crates/mssql-orm/tests/stage16_soft_delete_runtime.rs` con una entidad `VersionedSoftDeleteUser` que combina `soft_delete` y `#[orm(rowversion)]`.
+- El smoke opcional contra SQL Server real ahora cubre cuatro rutas públicas: `DbSet::delete(...)`, `entity.delete(&db)` por Active Record, `remove_tracked(...)` + `save_changes()` en estado `Deleted`, y conflicto de concurrencia al intentar soft-delete con un `rowversion` stale.
+- Las pruebas verifican que la fila sigue existiendo físicamente con `deleted_at` poblado cuando el borrado lógico procede, que las lecturas públicas normales la ocultan y que un `ConcurrencyConflict` no marca la fila como eliminada.
+- Se mantuvo el comportamiento de auto-skip cuando `MSSQL_ORM_TEST_CONNECTION_STRING` no está definido, consistente con las pruebas reales existentes del repositorio.
+- Se movió la subtarea runtime a `Completadas` tras validar.
+
+### Resultado
+
+- Las rutas públicas de mayor riesgo de `soft_delete` ya tienen cobertura compilable y ejecutable contra SQL Server real cuando el entorno aporta connection string.
+- La tarea paraguas final queda pendiente para agregar una prueba o checklist de seguridad agregada que reúna metadata, SQL compilado, migraciones y runtime, evitando que la cobertura quede dispersa.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test stage16_soft_delete_runtime -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm dbset_delete_compiled_query --lib -- --nocapture`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutó SQL Server real porque `MSSQL_ORM_TEST_CONNECTION_STRING` no está definido en este entorno; los cuatro tests de integración compilaron y se auto-saltaron según el patrón existente.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Cubrir soft_delete con prueba de seguridad final agregada que reúna metadata, SQL compilado y migraciones ya cubiertas, más rutas runtime públicas, para evitar regresiones de borrado físico accidental`.
+
 ### Sesión: `soft_delete` en snapshots, diff y DDL
 
 - Se ejecutó la subtarea `Etapa 16+: Integrar soft_delete en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema`.

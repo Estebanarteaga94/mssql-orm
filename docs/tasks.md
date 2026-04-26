@@ -1,7 +1,7 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Cubrir `soft_delete` con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, `ConcurrencyConflict` y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente
+- [ ] Etapa 16+: Cubrir `soft_delete` con prueba de seguridad final agregada que reúna metadata, SQL compilado y migraciones ya cubiertas, más rutas runtime públicas, para evitar regresiones de borrado físico accidental
 - [ ] Etapa 16+: Evaluar `tenant = TenantScope` como feature de seguridad con filtros obligatorios, inserción automática de `tenant_id` y validación de que no existan rutas de query que omitan el tenant por accidente
 - [ ] Etapa 16+: Diseñar `tenant = TenantScope` para que toda query, `find`, `update`, `delete`, Active Record y `save_changes()` sobre entidades tenant-scoped agregue automáticamente el filtro `tenant_id = current_tenant` cuando exista un tenant activo en el contexto
 - [ ] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
@@ -11,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Cubrir `soft_delete` en rutas runtime públicas de alto riesgo: `DbSet::delete`, Active Record `delete`, change tracking `save_changes()` con `Deleted` y `ConcurrencyConflict` con `rowversion`
 - [x] Etapa 16+: Integrar `soft_delete` en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema
 - [x] Etapa 16+: Agregar rutas internas sin filtro implícito de `soft_delete` para comprobaciones de existencia y `ConcurrencyConflict` sin exponer bypass público accidental
 - [x] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
