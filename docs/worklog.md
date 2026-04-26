@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: verificación solicitada de rutas internas para `soft_delete`
+
+- Se revisó nuevamente la tarea `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental`.
+- Se confirmó que el plan maestro no está en la raíz con el nombre solicitado; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- `docs/tasks.md` ya mantiene la tarea en `Completadas`, por lo que no se movió de estado.
+- La implementación actual sostiene el cierre: `DbSet::query_with_internal_visibility(...)` construye `DbSetQuery` con `with_deleted()`, `find_by_sql_value_internal(...)` y `exists_by_sql_value_internal(...)` quedan encapsulados como helpers internos, y los checks de `ConcurrencyConflict` en update/delete/update por valores crudos usan esa existencia física real.
+- `ActiveRecord::save(...)` también usa `exists_by_sql_value_internal(...)` para decidir insert-or-update sin abrir un bypass público.
+- La surface pública conserva el comportamiento esperado: `DbSet::find(...)` usa la query pública con filtro implícito de `soft_delete`; `DbSetQuery` solo expone los escapes explícitos `with_deleted()` y `only_deleted()`.
+
+### Resultado
+
+- La tarea está completada y validada en el estado actual del repositorio.
+
+### Validación
+
+- `cargo test -p mssql-orm dbset_internal_query_visibility_bypasses_soft_delete_filter --lib -- --nocapture`
+- `cargo test -p mssql-orm active_record_find_reuses_dbset_error_contract --lib -- --nocapture`
+- `cargo test -p mssql-orm --test stage16_soft_delete_runtime public_soft_delete_with_rowversion_reports_concurrency_conflict_without_deleting -- --nocapture`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- La prueba runtime de SQL Server se compiló y se auto-saltó porque `MSSQL_ORM_TEST_CONNECTION_STRING` no está definido en este entorno.
+
+### Próximo paso recomendado
+
+- Continuar con `Etapa 16+: Diseñar tenant = TenantScope para que toda query, find, update, delete, Active Record y save_changes() sobre entidades tenant-scoped agregue automáticamente el filtro tenant_id = current_tenant cuando exista un tenant activo en el contexto`.
+
 ### Sesión: evaluación de `tenant = TenantScope`
 
 - Se ejecutó la tarea `Etapa 16+: Evaluar tenant = TenantScope como feature de seguridad con filtros obligatorios, inserción automática de tenant_id y validación de que no existan rutas de query que omitan el tenant por accidente`.
