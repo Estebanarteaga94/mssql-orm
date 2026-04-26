@@ -1112,7 +1112,7 @@ Quedan fuera de este contrato:
 
 El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
 
-Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. Faltan todavia filtros automaticos, cierre del bypass publico de `DbSetQuery::into_select_query()` e inserts tenant-scoped.
+Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. `DbSetQuery::select_query()` e `into_select_query()` ya no son API publica y solo quedan disponibles en pruebas internas, evitando entregar un AST base sin filtros runtime. Faltan todavia filtros automaticos e inserts tenant-scoped.
 
 El comportamiento esperado para inserts debe ser estricto:
 
@@ -1166,9 +1166,8 @@ Lecturas:
 
 Riesgo de AST publico:
 
-- `DbSetQuery::into_select_query()` hoy devuelve el AST base sin materializar filtros runtime. Para entidades con `#[orm(tenant = CurrentTenant)]`, esa API no puede seguir siendo una salida publica que prometa una query ejecutable segura.
-- Antes de implementar tenant debe cambiarse una de estas dos cosas: hacer `into_select_query()` solo interna/testing, o reemplazarla por una API falible que materialice filtros runtime obligatorios antes de entregar el AST.
-- Mientras `mssql-orm-sqlserver` siga reexportado como modulo avanzado, entregar un `SelectQuery` sin tenant desde una entidad tenant-scoped seria un bypass publico accidental.
+- `DbSetQuery::select_query()` e `into_select_query()` ya no son publicos; quedan compilados solo en tests internos de `mssql-orm`.
+- Mientras `mssql-orm-sqlserver` siga reexportado como modulo avanzado, no debe existir una API publica que entregue un `SelectQuery` base sin filtros runtime desde una entidad tenant-scoped.
 
 Updates:
 

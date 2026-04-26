@@ -45,4 +45,5 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/entity_soft_delete_missing_type.rs");
     tests.compile_fail("tests/ui/entity_duplicate_soft_delete_policy.rs");
     tests.compile_fail("tests/ui/entity_soft_delete_column_collision.rs");
+    tests.compile_fail("tests/ui/dbset_query_ast_bypass_unavailable.rs");
 }

@@ -1,5 +1,42 @@
 # Worklog
 
+## 2026-04-26
+
+### Sesión: cierre del bypass público de AST en `DbSetQuery`
+
+- Se ejecutó la tarea `Etapa 16+: Cerrar el bypass público de DbSetQuery::into_select_query() antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se detectó que `select_query(&self)` era un bypass equivalente porque exponía una referencia clonable al `SelectQuery` base.
+- En `crates/mssql-orm/src/dbset_query.rs`, `select_query()` e `into_select_query()` dejaron de ser API pública y ahora quedan disponibles solo en builds de test internos de la crate.
+- Las rutas públicas de ejecución (`all`, `first`, `count`) siguen materializando la consulta efectiva mediante `effective_select_query()` antes de compilar.
+- Se agregó el fixture negativo `crates/mssql-orm/tests/ui/dbset_query_ast_bypass_unavailable.rs` para fijar que un consumidor externo no puede llamar `select_query()` ni `into_select_query()`.
+- Se actualizó `docs/query-builder.md` para retirar la guía pública de extracción de AST desde `DbSetQuery` y dirigir pruebas de bajo nivel a construir `SelectQuery` directamente desde `mssql_orm::query`.
+- Se actualizó `docs/context.md`, `docs/entity-policies.md` y `docs/tasks.md`.
+
+### Resultado
+
+- El bypass público directo de AST queda cerrado antes de aplicar filtros tenant obligatorios.
+- Todavía falta implementar el filtro tenant en lecturas, escrituras e inserts tenant-scoped.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo test -p mssql-orm dbset_query_ --lib -- --nocapture`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs` bajo `pool-bb8`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: query(), query_with(...), all(), first(), count(), find, Active Record query/find y find_tracked`.
+
 ## 2026-04-25
 
 ### Sesión: transporte runtime de tenant activo

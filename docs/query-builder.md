@@ -179,18 +179,9 @@ let total_active = db.users.query().filter(User::active.eq(true)).count().await?
 
 ## Inspeccion del AST
 
-Para pruebas o integracion avanzada, `DbSetQuery<T>` permite inspeccionar o extraer el `SelectQuery`.
+`DbSetQuery<T>` ya no expone publicamente el `SelectQuery` interno. La consulta efectiva puede incorporar filtros runtime obligatorios antes de compilar o ejecutar, por ejemplo visibilidad de `soft_delete` y filtros de seguridad por tenant.
 
-```rust
-let ast = db
-    .users
-    .query()
-    .filter(User::active.eq(true))
-    .order_by(User::id.asc())
-    .into_select_query();
-```
-
-El AST sigue sin ser SQL. Si necesitas validar el SQL generado en tests de bajo nivel, compila ese AST desde la capa SQL Server.
+Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQuery` directamente desde `mssql_orm::query` y compílalo con la capa SQL Server. Para codigo de aplicacion, usa `all()`, `first()` y `count()` sobre `DbSetQuery<T>`.
 
 ## Limites actuales
 

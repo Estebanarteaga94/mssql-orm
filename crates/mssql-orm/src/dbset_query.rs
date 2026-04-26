@@ -76,7 +76,8 @@ impl<E: Entity> DbSetQuery<E> {
         self
     }
 
-    pub fn select_query(&self) -> &SelectQuery {
+    #[cfg(test)]
+    pub(crate) fn select_query(&self) -> &SelectQuery {
         &self.select_query
     }
 
@@ -90,7 +91,8 @@ impl<E: Entity> DbSetQuery<E> {
         self
     }
 
-    pub fn into_select_query(self) -> SelectQuery {
+    #[cfg(test)]
+    pub(crate) fn into_select_query(self) -> SelectQuery {
         self.select_query
     }
 
