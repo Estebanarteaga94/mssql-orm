@@ -2,6 +2,38 @@
 
 ## 2026-04-26
 
+### Sesión: revisión de claims públicos y `Pending verification`
+
+- Se ejecutó la tarea `Documentation prompt: Review existing public docs and mark unclear or unverifiable claims as Pending verification instead of presenting them as implemented behavior`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `README.md` ya no presenta `soft_delete` ni `tenant` como diferidos junto a `AuditProvider`; ahora deja diferido solo `AuditProvider` runtime y el filtrado automático sobre entidades unidas.
+- `README.md` corrige la descripción de `database update`: imprime SQL por defecto y puede ejecutar con `--execute`.
+- `README.md` marca como `Pending verification` las afirmaciones de validación real del ejemplo `todo-app`, para exigir reejecución en el entorno actual antes de usarlas como evidencia fresca.
+- `docs/architecture/overview.md` ya no afirma que las crates siguen con implementaciones placeholder; redirige claims de estado a `docs/repository-audit.md` y marca como `Pending verification` cualquier claim funcional no respaldado.
+- `docs/entity-policies.md` distingue el MVP inicial de auditoría del estado posterior implementado para `soft_delete` y `tenant`; también deja `AuditProvider` como diferido real.
+- `docs/api.md` agrega `SoftDeleteFields` y `TenantContext` al inventario de derives públicos.
+- `docs/context.md` quedó sincronizado con la revisión.
+
+### Resultado
+
+- La documentación pública ya no repite varios claims obsoletos o demasiado amplios detectados durante la auditoría.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- Búsquedas `rg` dirigidas para confirmar que no quedan claims obsoletos sobre crates placeholder, `soft_delete`/`tenant` diferidos, `database update` sin ejecución, inserts tenant pendientes o `DELETE` físico para soft delete.
+- Búsquedas `rg` dirigidas para confirmar presencia de `Pending verification`, `SoftDeleteFields`, `TenantContext`, estados `Implementado en Etapa 16+` / `Diferido` y la descripción corregida de `database update`.
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- El archivo `prompt` sigue modificado en el working tree y se preservó sin cambios.
+
+### Próximo paso recomendado
+
+- Ejecutar `Documentation prompt: Update README.md as a brief navigation document linking to docs/core-concepts.md without duplicating detailed docs`.
+
 ### Sesión: guía conceptual `core-concepts`
 
 - Se ejecutó la tarea `Documentation prompt: Create docs/core-concepts.md in English explaining the ORM mental model, entities, DbContext, metadata, query AST, SQL Server compilation, Tiberius execution and the Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity flow`.

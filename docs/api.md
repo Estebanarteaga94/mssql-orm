@@ -19,6 +19,8 @@ Estos derives se usan desde la crate publica:
 - `#[derive(Changeset)]`
 - `#[derive(DbContext)]`
 - `#[derive(AuditFields)]`
+- `#[derive(SoftDeleteFields)]`
+- `#[derive(TenantContext)]`
 
 Ejemplo base:
 

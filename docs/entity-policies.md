@@ -1,8 +1,8 @@
 # Entity Policies
 
-Diseno publico inicial de `Entity Policies` para `mssql-orm`.
+Diseno publico y estado operativo de `Entity Policies` para `mssql-orm`.
 
-Este documento fija el concepto de producto, las fronteras arquitectonicas y el estado publico de `Entity Policies` en la Etapa 16. El MVP disponible cubre auditoria como metadata/schema mediante `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`; las policies con comportamiento runtime siguen diferidas.
+Este documento fija el concepto de producto, las fronteras arquitectonicas y el estado publico de `Entity Policies`. El MVP inicial cubrio auditoria como metadata/schema mediante `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`; cortes posteriores ya agregaron comportamiento runtime para `soft_delete` y filtros obligatorios para `tenant`. `AuditProvider` runtime sigue diferido.
 
 ## Objetivo
 
@@ -169,13 +169,13 @@ Una policy no debe introducir un DSL alternativo ni una capa de configuracion fl
 
 ## Politicas Candidatas
 
-El concepto general cubre varias preocupaciones transversales, pero no todas pertenecen al MVP:
+El concepto general cubre varias preocupaciones transversales, con distinto estado operativo:
 
 - `audit = Audit`: columnas como `created_at`, `created_by`, `updated_at`, `updated_by`.
 - `soft_delete = SoftDelete`: columnas y semantica de borrado logico.
 - `tenant = CurrentTenant`: columna y filtros obligatorios de seguridad por tenant usando un tipo de tenant definido por el usuario.
 
-La primera policy que debe implementarse es auditoria como generacion de columnas. Las politicas que cambian comportamiento de lectura o escritura requieren diseno separado porque afectan `DbSet`, Active Record, transacciones y change tracking.
+La primera policy implementada fue auditoria como generacion de columnas. Las politicas que cambian comportamiento de lectura o escritura requieren diseno separado porque afectan `DbSet`, Active Record, transacciones y change tracking; ese trabajo posterior ya existe para `soft_delete` y `tenant`, con los limites descritos mas abajo.
 
 ## Alcance Inicial
 
@@ -183,14 +183,14 @@ El alcance inicial de Etapa 16 es deliberadamente estrecho: probar que el modelo
 
 La unica policy que entra al MVP de implementacion es `audit = Audit`. Los casos que solo necesitan columnas temporales pueden modelarse con un struct `AuditFields` reducido que declare `created_at` y `updated_at`.
 
-`soft_delete = SoftDelete`, `tenant = TenantScope` y cualquier autollenado runtime quedan fuera del MVP.
+`soft_delete` y `tenant` quedaron fuera del MVP inicial, pero ya tienen implementacion posterior en Etapa 16+. El autollenado runtime de auditoria sigue diferido.
 
 | Policy | Estado de Etapa 16 | Alcance permitido |
 | --- | --- | --- |
 | `audit = Audit` | MVP | Generar columnas normales de auditoria dentro de `EntityMetadata.columns`. |
-| `soft_delete = SoftDelete` | Etapa 16+ | Requiere redisenar rutas de borrado, queries por defecto y Active Record. |
-| `tenant = CurrentTenant` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
-| `AuditProvider` o autollenado | Etapa 16+ | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
+| `soft_delete = SoftDelete` | Implementado en Etapa 16+ | Borrado logico runtime, visibilidad de lectura y schema como columnas ordinarias, con limites sobre joined entities. |
+| `tenant = CurrentTenant` | Implementado en Etapa 16+ | Contrato opt-in por entidad, tenant activo y filtros obligatorios sobre la entidad raiz. |
+| `AuditProvider` o autollenado | Diferido | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
 
 ## Concurrencia y `rowversion`
 
@@ -1112,7 +1112,7 @@ Quedan fuera de este contrato:
 
 El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
 
-Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. `DbSetQuery::select_query()` e `into_select_query()` ya no son API publica y solo quedan disponibles en pruebas internas, evitando entregar un AST base sin filtros runtime. Las lecturas publicas de la entidad raiz ya aplican filtro tenant obligatorio en `all()`, `first()` y `count()`, y por delegacion en `find`, `find_tracked` y Active Record `query/find`. Las escrituras existentes tambien aplican tenant obligatorio en `DbSet::update`, `DbSet::delete`, Active Record `save/delete` y `save_changes()` para entidades `Modified`/`Deleted`, combinando tenant con PK, `rowversion` y `soft_delete`. Los checks internos de `ConcurrencyConflict` conservan tenant aunque omitan la visibilidad de `soft_delete`. Faltan todavia inserts tenant-scoped y la cobertura integral de seguridad.
+Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. `DbSetQuery::select_query()` e `into_select_query()` ya no son API publica y solo quedan disponibles en pruebas internas, evitando entregar un AST base sin filtros runtime. Las lecturas publicas de la entidad raiz ya aplican filtro tenant obligatorio en `all()`, `first()` y `count()`, y por delegacion en `find`, `find_tracked` y Active Record `query/find`. Las escrituras existentes tambien aplican tenant obligatorio en `DbSet::update`, `DbSet::delete`, Active Record `save/delete` y `save_changes()` para entidades `Modified`/`Deleted`, combinando tenant con PK, `rowversion` y `soft_delete`. Los inserts tenant-scoped ya autollenan la columna tenant desde el contexto cuando falta, aceptan valores explicitos que coinciden y rechazan valores distintos. Los checks internos de `ConcurrencyConflict` conservan tenant aunque omitan la visibilidad de `soft_delete`. La cobertura integral de seguridad quedo registrada en `docs/tasks.md` y `docs/worklog.md`.
 
 El comportamiento esperado para inserts debe ser estricto:
 
@@ -1246,12 +1246,11 @@ Quedan diferidos hasta tener contratos especificos:
 
 - autollenado de `created_at`, `created_by`, `updated_at` y `updated_by`
 - provider runtime de auditoria por request o transaccion
-- filtros automaticos de `soft_delete`
-- reemplazo de `DELETE` fisico por `UPDATE` logico
-- filtros obligatorios de tenant
-- insercion automatica de `tenant_id`
+- filtros automaticos de `soft_delete` sobre entidades unidas manualmente
+- filtros obligatorios de tenant sobre entidades unidas manualmente
+- helpers predefinidos para convenciones globales como `tenant_id` sin tipo de usuario
 
-El primer objetivo verificable es que las columnas declaradas por una policy aparezcan en metadata, snapshots, diff y DDL como columnas ordinarias.
+El primer objetivo verificable ya esta cubierto: las columnas declaradas por una policy aparecen en metadata, snapshots, diff y DDL como columnas ordinarias. Los objetivos diferidos restantes son principalmente ergonomia futura y auditoria runtime.
 
 ## Criterio de Aceptacion Conceptual
 

@@ -70,6 +70,6 @@ El proyecto construye un ORM `code-first` para SQL Server. La arquitectura está
 
 ## Estado actual
 
-- La arquitectura está declarada y el workspace existe.
-- Los crates todavía contienen implementaciones placeholder.
-- La siguiente fase funcional comienza con metadata de entidades en `mssql-orm-core`.
+- La arquitectura está implementada como workspace con crates separadas para la API pública, core, macros, query AST, compilación SQL Server, ejecución Tiberius, migraciones y CLI.
+- `docs/repository-audit.md` mantiene el inventario verificado de APIs reales, features implementadas, límites y features diferidas.
+- Pending verification: cualquier claim de estado funcional no cubierto por `docs/repository-audit.md`, pruebas versionadas o `docs/worklog.md` debe verificarse contra el código antes de repetirse en documentación pública.

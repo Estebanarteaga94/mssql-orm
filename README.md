@@ -185,7 +185,8 @@ Lo que queda deliberadamente diferido:
 
 - autollenado runtime de `created_at`, `created_by`, `updated_at` o `updated_by`
 - campos Rust visibles y símbolos asociados como `Todo::created_at` cuando la columna viene de una policy
-- `soft_delete = SoftDelete`, `tenant = TenantScope` y `AuditProvider`
+- `AuditProvider` runtime
+- filtros automaticos sobre entidades unidas manualmente por `soft_delete` o `tenant`
 
 Documento: [docs/entity-policies.md](docs/entity-policies.md)
 
@@ -244,7 +245,7 @@ Documento: [docs/transactions.md](docs/transactions.md)
 Guía operativa para:
 
 - usar `migration add`, `migration list` y `database update`
-- entender que hoy `database update` genera script y no ejecuta contra la base
+- entender que `database update` imprime SQL por defecto y puede ejecutar con `--execute`
 - trabajar con checksums, historial e idempotencia sin reescribir migraciones aplicadas
 
 Documento: [docs/migrations.md](docs/migrations.md)
@@ -260,6 +261,8 @@ Ejemplo web async más realista, con:
 - endpoints mínimos de lectura
 - wiring con `MssqlPool`
 - smoke reproducible contra SQL Server real
+
+Pending verification: antes de presentar el smoke como validacion actual de tu entorno, vuelve a ejecutarlo con un connection string real; la evidencia historica esta registrada en `docs/worklog.md`.
 
 ```bash
 cargo run --manifest-path examples/todo-app/Cargo.toml
@@ -309,7 +312,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-El ejemplo `todo_app` también quedó validado contra SQL Server real con fixture reproducible.
+Pending verification: el ejemplo `todo_app` tiene validacion historica contra SQL Server real registrada en `docs/worklog.md`, pero debe reejecutarse en el entorno actual antes de tratarla como evidencia fresca.
 
 ## Documentación del Repositorio
 
