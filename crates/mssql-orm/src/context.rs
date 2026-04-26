@@ -265,7 +265,7 @@ impl<E: Entity> DbSet<E> {
         DbSetQuery::new(self.connection.as_ref().cloned(), select_query)
     }
 
-    fn query_with_unfiltered(&self, select_query: SelectQuery) -> DbSetQuery<E> {
+    fn query_with_internal_visibility(&self, select_query: SelectQuery) -> DbSetQuery<E> {
         DbSetQuery::new(self.connection.as_ref().cloned(), select_query).with_deleted()
     }
 
@@ -439,7 +439,7 @@ impl<E: Entity> DbSet<E> {
 
         if updated.is_none()
             && concurrency_token.is_some()
-            && self.find_by_sql_value(key).await?.is_some()
+            && self.exists_by_sql_value_internal(key).await?
         {
             return Err(OrmError::concurrency_conflict());
         }
@@ -478,7 +478,8 @@ impl<E: Entity> DbSet<E> {
 
         drop(connection);
 
-        if !deleted && concurrency_token.is_some() && self.find_by_sql_value(key).await?.is_some() {
+        if !deleted && concurrency_token.is_some() && self.exists_by_sql_value_internal(key).await?
+        {
             return Err(OrmError::concurrency_conflict());
         }
 
@@ -496,13 +497,20 @@ impl<E: Entity> DbSet<E> {
         self.delete_by_sql_value(key, concurrency_token).await
     }
 
-    pub(crate) async fn find_by_sql_value(&self, key: SqlValue) -> Result<Option<E>, OrmError>
+    async fn find_by_sql_value_internal(&self, key: SqlValue) -> Result<Option<E>, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity,
     {
-        self.query_with_unfiltered(self.find_select_query_sql_value(key)?)
+        self.query_with_internal_visibility(self.find_select_query_sql_value(key)?)
             .first()
             .await
+    }
+
+    pub(crate) async fn exists_by_sql_value_internal(&self, key: SqlValue) -> Result<bool, OrmError>
+    where
+        E: FromRow + Send + SoftDeleteEntity,
+    {
+        Ok(self.find_by_sql_value_internal(key).await?.is_some())
     }
 
     pub(crate) async fn insert_entity_values(
@@ -548,7 +556,7 @@ impl<E: Entity> DbSet<E> {
 
         if updated.is_none()
             && concurrency_token.is_some()
-            && self.find_by_sql_value(key).await?.is_some()
+            && self.exists_by_sql_value_internal(key).await?
         {
             return Err(OrmError::concurrency_conflict());
         }
@@ -1429,6 +1437,19 @@ mod tests {
         let custom = SelectQuery::from_entity::<TestEntity>();
 
         assert_eq!(dbset.query_with(custom.clone()).into_select_query(), custom);
+    }
+
+    #[test]
+    fn dbset_internal_query_visibility_bypasses_soft_delete_filter() {
+        let dbset = DbSet::<SoftDeleteEntityUnderTest>::disconnected();
+        let select = SelectQuery::from_entity::<SoftDeleteEntityUnderTest>();
+
+        assert_eq!(
+            dbset
+                .query_with_internal_visibility(select.clone())
+                .into_select_query(),
+            select
+        );
     }
 
     #[test]

@@ -475,6 +475,12 @@ Esto evita mezclar dos problemas distintos:
 - semantica publica de lectura para usuarios del ORM
 - chequeos internos necesarios para resolver conflictos y existencia fisica real
 
+Estado implementado actual:
+
+- `DbSet` ya usa una ruta interna con visibilidad `WithDeleted` para existencia/lectura real por primary key
+- esa ruta alimenta `ConcurrencyConflict` en `update(...)`, `delete(...)`, `save_changes()` y `ActiveRecord::save(...)`
+- el helper interno ya no se presenta como surface publica de lectura; el bypass visible para el usuario sigue siendo solo `with_deleted()` / `only_deleted()` sobre `DbSetQuery<E>`
+
 ### `count()` y joins
 
 `DbSetQuery::count()` debe aplicar la misma visibilidad que `all()` y `first()`. Si la query esta en modo `ActiveOnly`, el conteo no debe incluir filas borradas logicamente.

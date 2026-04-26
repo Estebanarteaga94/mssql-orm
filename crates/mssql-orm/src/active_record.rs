@@ -68,7 +68,11 @@ pub trait ActiveRecord: Entity + Sized {
                     Ok(())
                 }
                 EntityPersistMode::InsertOrUpdate(key) => {
-                    if db.db_set().find_by_sql_value(key.clone()).await?.is_some() {
+                    if db
+                        .db_set()
+                        .exists_by_sql_value_internal(key.clone())
+                        .await?
+                    {
                         if let Some(persisted) = db
                             .db_set()
                             .update_entity_by_sql_value(

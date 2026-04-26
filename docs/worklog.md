@@ -5542,3 +5542,25 @@
 ### Próximo paso recomendado
 
 - Implementar `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental`.
+
+### Sesión: rutas internas sin filtro implícito para `soft_delete`
+
+- Se ejecutó la subtarea `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental`.
+- En `crates/mssql-orm/src/context.rs` se renombró y explicitó la intención de la ruta interna: `query_with_internal_visibility(...)`, `find_by_sql_value_internal(...)` y `exists_by_sql_value_internal(...)` quedan dedicados a lectura/existencia real de filas con `WithDeleted`, no a surface pública de consulta.
+- Los checks de `ConcurrencyConflict` en `update(...)`, `delete(...)` y `update_entity_values_by_sql_value(...)` ya no dependen de nombres ambiguos; usan `exists_by_sql_value_internal(...)` como helper interno explícito.
+- `ActiveRecord::save(...)` también dejó de usar una lectura interna con nombre ambiguo y ahora consulta existencia real mediante el helper interno de `DbSet`.
+- Se añadió una prueba unitaria dedicada en `crates/mssql-orm/src/context.rs` para fijar que la ruta interna efectivamente nace sin el filtro implícito de `soft_delete`, pero sigue encapsulada dentro de `DbSet`.
+- Validaciones ejecutadas: `cargo fmt --all`, `cargo fmt --all --check`, `cargo check --workspace`, `cargo test -p mssql-orm dbset_internal_query_visibility_bypasses_soft_delete_filter --lib -- --nocapture` y `cargo test -p mssql-orm active_record_find_reuses_dbset_error_contract --lib -- --nocapture`.
+- No se ejecutó un smoke adicional contra SQL Server real porque esta sesión solo endureció helpers internos y nombres de intención; no cambió la semántica observable de lectura o borrado ya cubierta en la subtarea anterior.
+
+### Resultado
+
+- El bypass sin filtro implícito de `soft_delete` ya quedó encapsulado como helper interno de `DbSet` para existencia/lectura real, y dejó de parecer una ruta pública accidental dentro de la crate.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Implementar `Etapa 16+: Integrar soft_delete en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema`.
