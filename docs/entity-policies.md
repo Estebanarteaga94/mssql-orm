@@ -1112,7 +1112,7 @@ Quedan fuera de este contrato:
 
 El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
 
-Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. `DbSetQuery::select_query()` e `into_select_query()` ya no son API publica y solo quedan disponibles en pruebas internas, evitando entregar un AST base sin filtros runtime. Faltan todavia filtros automaticos e inserts tenant-scoped.
+Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. `SharedConnectionRuntime` ya puede transportar `ActiveTenant { column_name, value }` mediante `SharedConnection::with_tenant(...)` / `clear_tenant()`, y el `DbContext` derivado expone helpers equivalentes. `DbSetQuery::select_query()` e `into_select_query()` ya no son API publica y solo quedan disponibles en pruebas internas, evitando entregar un AST base sin filtros runtime. Las lecturas publicas de la entidad raiz ya aplican filtro tenant obligatorio en `all()`, `first()` y `count()`, y por delegacion en `find`, `find_tracked` y Active Record `query/find`. Faltan todavia escrituras tenant-scoped e inserts tenant-scoped.
 
 El comportamiento esperado para inserts debe ser estricto:
 
@@ -1158,9 +1158,9 @@ Este helper debe ser usado por todas las rutas de lectura y escritura sobre la e
 
 Lecturas:
 
-- `DbSet::query()` y `DbSet::query_with(...)` deben seguir pudiendo construir `DbSetQuery<E>`, pero el filtro de tenant debe materializarse en el paso efectivo previo a compilar/ejecutar, igual que `soft_delete`, para que `query_with(select_query)` no pueda saltarse el tenant por recibir un AST custom.
-- `DbSetQuery::all()`, `first()` y `count()` deben llamar a un `effective_select_query()` que combine primero el filtro obligatorio de tenant y despues la visibilidad de `soft_delete`.
-- `DbSet::find(...)` debe seguir delegando en la ruta publica de query y por tanto heredar tenant.
+- `DbSet::query()` y `DbSet::query_with(...)` siguen construyendo `DbSetQuery<E>`, pero el filtro de tenant se materializa en el paso efectivo previo a compilar/ejecutar, igual que `soft_delete`, para que `query_with(select_query)` no pueda saltarse el tenant por recibir un AST custom.
+- `DbSetQuery::all()`, `first()` y `count()` ya llaman a un `effective_select_query()` que combina primero el filtro obligatorio de tenant y despues la visibilidad de `soft_delete`.
+- `DbSet::find(...)` delega en la ruta publica de query y por tanto hereda tenant.
 - `DbSet::find_tracked(...)` debe reutilizar `find(...)` y no abrir una ruta especial.
 - Active Record `Entity::query(&db)` y `Entity::find(&db, id)` deben seguir delegando en `DbSet`; no deben construir filtros propios.
 

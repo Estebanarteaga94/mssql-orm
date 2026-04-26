@@ -2,7 +2,10 @@ use crate::dbset_query::DbSetQuery;
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
-use crate::{SoftDeleteEntity, TenantContext, Tracked, TrackingRegistry, TrackingRegistryHandle};
+use crate::{
+    SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked, TrackingRegistry,
+    TrackingRegistryHandle,
+};
 use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -317,7 +320,7 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn find<K>(&self, key: K) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
     {
         self.query_with(self.find_select_query(key)?).first().await
@@ -327,7 +330,7 @@ impl<E: Entity> DbSet<E> {
     /// experimental snapshot-based tracking container.
     pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
     where
-        E: Clone + FromRow + Send + SoftDeleteEntity,
+        E: Clone + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
     {
         let mut tracked = self
@@ -548,7 +551,7 @@ impl<E: Entity> DbSet<E> {
         E: FromRow + Send + SoftDeleteEntity,
     {
         self.query_with_internal_visibility(self.find_select_query_sql_value(key)?)
-            .first()
+            .first_without_tenant_filter()
             .await
     }
 
@@ -872,7 +875,8 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, Tracked,
+        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
@@ -1330,6 +1334,36 @@ mod tests {
                 "soft_delete",
                 &SOFT_DELETE_POLICY_COLUMNS,
             ))
+        }
+    }
+
+    impl TenantScopedEntity for TestEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for CompositeKeyEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for VersionedEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for SoftDeleteEntityUnderTest {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for SoftDeleteVersionedEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
         }
     }
 

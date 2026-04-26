@@ -2,6 +2,45 @@
 
 ## 2026-04-26
 
+### Sesión: filtros tenant obligatorios en lecturas
+
+- Se ejecutó la tarea `Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: query(), query_with(...), all(), first(), count(), find, Active Record query/find y find_tracked`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- En `crates/mssql-orm/src/dbset_query.rs`, `DbSetQuery` ahora captura el `ActiveTenant` normalizado desde `SharedConnection` al construirse.
+- `effective_select_query()` aplica primero el filtro tenant obligatorio para entidades con `TenantScopedEntity::tenant_policy()`, y después conserva la visibilidad de `soft_delete`.
+- Las entidades sin `#[orm(tenant = ...)]` siguen sin filtro tenant aunque exista tenant activo.
+- Para entidades tenant-scoped, las lecturas fallan cerrado antes de compilar SQL si falta tenant activo, si la policy no tiene exactamente una columna, si la columna del tenant activo no coincide o si el `SqlValue` no es compatible con el tipo SQL de la columna tenant.
+- `DbSetQuery::all()`, `first()` y `count()` heredan esa materialización; `DbSet::find(...)`, `find_tracked(...)` y Active Record `query/find` quedan cubiertos por delegación.
+- Se mantuvo una ruta interna separada sin filtro tenant para checks de existencia usados por escrituras; su corrección queda explícitamente pendiente para la tarea siguiente de escrituras.
+- Se agregaron pruebas unitarias para filtro tenant efectivo, fail-closed sin tenant, mismatch de columna, mismatch de tipo y rechazo de `NULL`.
+- Se actualizaron `docs/tasks.md`, `docs/context.md` y `docs/entity-policies.md`.
+
+### Resultado
+
+- Las lecturas públicas de entidades tenant-scoped ya aplican frontera tenant sobre la entidad raíz antes de compilar SQL.
+- Escrituras, checks internos de concurrencia e inserts tenant-scoped siguen pendientes en sus tareas dedicadas.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm tenant --lib -- --nocapture`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo test -p mssql-orm dbset_query_ --lib -- --nocapture`
+- `cargo test -p mssql-orm active_record_ --lib -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs` bajo `pool-bb8`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: update, delete, Active Record save/delete, save_changes() para Modified/Deleted, rowversion y soft_delete`.
+
 ### Sesión: cierre del bypass público de AST en `DbSetQuery`
 
 - Se ejecutó la tarea `Etapa 16+: Cerrar el bypass público de DbSetQuery::into_select_query() antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios`.

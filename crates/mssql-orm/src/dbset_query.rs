@@ -1,7 +1,7 @@
-use crate::SoftDeleteEntity;
-use crate::context::SharedConnection;
+use crate::context::{ActiveTenant, SharedConnection};
 use crate::page_request::PageRequest;
-use mssql_orm_core::{Entity, FromRow, OrmError, Row, SqlServerType, SqlValue};
+use crate::{SoftDeleteEntity, TenantScopedEntity};
+use mssql_orm_core::{ColumnMetadata, Entity, FromRow, OrmError, Row, SqlServerType, SqlValue};
 use mssql_orm_query::{
     ColumnRef, CountQuery, Expr, Join, OrderBy, Pagination, Predicate, SelectQuery, TableRef,
 };
@@ -10,6 +10,7 @@ use mssql_orm_sqlserver::SqlServerCompiler;
 #[derive(Clone)]
 pub struct DbSetQuery<E: Entity> {
     connection: Option<SharedConnection>,
+    active_tenant: Option<ActiveTenant>,
     select_query: SelectQuery,
     visibility: SoftDeleteVisibility,
     _entity: core::marker::PhantomData<fn() -> E>,
@@ -24,12 +25,22 @@ enum SoftDeleteVisibility {
 
 impl<E: Entity> DbSetQuery<E> {
     pub(crate) fn new(connection: Option<SharedConnection>, select_query: SelectQuery) -> Self {
+        let active_tenant = connection
+            .as_ref()
+            .and_then(SharedConnection::active_tenant);
         Self {
             connection,
+            active_tenant,
             select_query,
             visibility: SoftDeleteVisibility::Default,
             _entity: core::marker::PhantomData,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_active_tenant_for_test(mut self, active_tenant: ActiveTenant) -> Self {
+        self.active_tenant = Some(active_tenant);
+        self
     }
 
     pub fn with_select_query(mut self, select_query: SelectQuery) -> Self {
@@ -98,7 +109,7 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub async fn all(self) -> Result<Vec<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
         let shared_connection = self.require_connection()?;
@@ -108,7 +119,7 @@ impl<E: Entity> DbSetQuery<E> {
 
     pub async fn first(self) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
         let shared_connection = self.require_connection()?;
@@ -116,9 +127,21 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_one(compiled).await
     }
 
+    pub(crate) async fn first_without_tenant_filter(self) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + Send + SoftDeleteEntity,
+    {
+        let compiled = SqlServerCompiler::compile_select(
+            &self.effective_select_query_without_tenant_filter()?,
+        )?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        connection.fetch_one(compiled).await
+    }
+
     pub async fn count(self) -> Result<i64, OrmError>
     where
-        E: SoftDeleteEntity,
+        E: SoftDeleteEntity + TenantScopedEntity,
     {
         let compiled = SqlServerCompiler::compile_count(&self.count_query())?;
         let shared_connection = self.require_connection()?;
@@ -131,7 +154,7 @@ impl<E: Entity> DbSetQuery<E> {
 
     fn count_query(&self) -> CountQuery
     where
-        E: SoftDeleteEntity,
+        E: SoftDeleteEntity + TenantScopedEntity,
     {
         let effective = self
             .effective_select_query()
@@ -144,13 +167,75 @@ impl<E: Entity> DbSetQuery<E> {
 
     fn effective_select_query(&self) -> Result<SelectQuery, OrmError>
     where
+        E: SoftDeleteEntity + TenantScopedEntity,
+    {
+        let mut query = self.select_query.clone();
+
+        if let Some(predicate) = self.tenant_predicate()? {
+            query = query.filter(predicate);
+        }
+
+        if let Some(predicate) = self.soft_delete_visibility_predicate()? {
+            query = query.filter(predicate);
+        }
+
+        Ok(query)
+    }
+
+    fn effective_select_query_without_tenant_filter(&self) -> Result<SelectQuery, OrmError>
+    where
         E: SoftDeleteEntity,
     {
-        let Some(predicate) = self.soft_delete_visibility_predicate()? else {
-            return Ok(self.select_query.clone());
+        let mut query = self.select_query.clone();
+
+        if let Some(predicate) = self.soft_delete_visibility_predicate()? {
+            query = query.filter(predicate);
+        }
+
+        Ok(query)
+    }
+
+    fn tenant_predicate(&self) -> Result<Option<Predicate>, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let Some(policy) = E::tenant_policy() else {
+            return Ok(None);
         };
 
-        Ok(self.select_query.clone().filter(predicate))
+        if policy.columns.len() != 1 {
+            return Err(OrmError::new(
+                "tenant query filter requires exactly one tenant policy column",
+            ));
+        }
+
+        let tenant_column = &policy.columns[0];
+        let active_tenant = self.active_tenant.as_ref().ok_or_else(|| {
+            OrmError::new("tenant-scoped query requires an active tenant in the DbContext")
+        })?;
+
+        if active_tenant.column_name != tenant_column.column_name {
+            return Err(OrmError::new(format!(
+                "active tenant column `{}` does not match entity tenant column `{}`",
+                active_tenant.column_name, tenant_column.column_name
+            )));
+        }
+
+        if !tenant_value_matches_column_type(&active_tenant.value, tenant_column) {
+            return Err(OrmError::new(format!(
+                "active tenant value is not compatible with entity tenant column `{}`",
+                tenant_column.column_name
+            )));
+        }
+
+        Ok(Some(Predicate::eq(
+            Expr::Column(ColumnRef::new(
+                TableRef::for_entity::<E>(),
+                tenant_column.rust_field,
+                tenant_column.column_name,
+            )),
+            Expr::Value(active_tenant.value.clone()),
+        )))
     }
 
     fn soft_delete_visibility_predicate(&self) -> Result<Option<Predicate>, OrmError>
@@ -209,6 +294,29 @@ impl<E: Entity> DbSetQuery<E> {
     }
 }
 
+fn tenant_value_matches_column_type(value: &SqlValue, column: &ColumnMetadata) -> bool {
+    if matches!(value, SqlValue::Null) {
+        return false;
+    }
+
+    match column.sql_type {
+        SqlServerType::BigInt => matches!(value, SqlValue::I64(_)),
+        SqlServerType::Int | SqlServerType::SmallInt | SqlServerType::TinyInt => {
+            matches!(value, SqlValue::I32(_))
+        }
+        SqlServerType::Bit => matches!(value, SqlValue::Bool(_)),
+        SqlServerType::UniqueIdentifier => matches!(value, SqlValue::Uuid(_)),
+        SqlServerType::Date => matches!(value, SqlValue::Date(_)),
+        SqlServerType::DateTime2 => matches!(value, SqlValue::DateTime(_)),
+        SqlServerType::Decimal | SqlServerType::Money => matches!(value, SqlValue::Decimal(_)),
+        SqlServerType::Float => matches!(value, SqlValue::F64(_)),
+        SqlServerType::NVarChar | SqlServerType::Custom(_) => {
+            matches!(value, SqlValue::String(_))
+        }
+        SqlServerType::VarBinary | SqlServerType::RowVersion => matches!(value, SqlValue::Bytes(_)),
+    }
+}
+
 impl<E: Entity> core::fmt::Debug for DbSetQuery<E> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DbSetQuery")
@@ -240,10 +348,10 @@ impl FromRow for CountRow {
 
 #[cfg(test)]
 mod tests {
-    use super::DbSetQuery;
-    use crate::SoftDeleteEntity;
-    use crate::context::DbSet;
+    use super::{DbSetQuery, tenant_value_matches_column_type};
+    use crate::context::{ActiveTenant, DbSet};
     use crate::page_request::PageRequest;
+    use crate::{SoftDeleteEntity, TenantScopedEntity};
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityMetadata, EntityPolicyMetadata, FromRow, OrmError,
         PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
@@ -256,6 +364,7 @@ mod tests {
     struct JoinedEntity;
     struct SoftDeleteEntityUnderTest;
     struct BoolSoftDeleteEntity;
+    struct TenantEntity;
 
     static TEST_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "TestEntity",
@@ -380,6 +489,38 @@ mod tests {
         foreign_keys: &[],
     };
 
+    static TENANT_POLICY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
+        rust_field: "tenant_id",
+        column_name: "tenant_id",
+        renamed_from: None,
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: false,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: true,
+        updatable: false,
+        max_length: None,
+        precision: None,
+        scale: None,
+    }];
+
+    static TENANT_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TenantEntity",
+        schema: "sales",
+        table: "tenant_entities",
+        renamed_from: None,
+        columns: &TENANT_POLICY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &[],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
     impl Entity for SoftDeleteEntityUnderTest {
         fn metadata() -> &'static EntityMetadata {
             &SOFT_DELETE_ENTITY_METADATA
@@ -389,6 +530,12 @@ mod tests {
     impl Entity for BoolSoftDeleteEntity {
         fn metadata() -> &'static EntityMetadata {
             &BOOL_SOFT_DELETE_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for TenantEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &TENANT_ENTITY_METADATA
         }
     }
 
@@ -419,6 +566,42 @@ mod tests {
                 "soft_delete",
                 &BOOL_SOFT_DELETE_POLICY_COLUMNS,
             ))
+        }
+    }
+
+    impl SoftDeleteEntity for TenantEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for TestEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for JoinedEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for SoftDeleteEntityUnderTest {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for BoolSoftDeleteEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for TenantEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new("tenant", &TENANT_POLICY_COLUMNS))
         }
     }
 
@@ -554,6 +737,90 @@ mod tests {
                 Expr::Value(SqlValue::Bool(true)),
             ))
         );
+    }
+
+    #[test]
+    fn dbset_query_applies_active_tenant_filter_for_tenant_scoped_entities() {
+        let query = DbSetQuery::<TenantEntity>::new(
+            None,
+            SelectQuery::from_entity::<TenantEntity>().filter(Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            )),
+        )
+        .with_active_tenant_for_test(ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        })
+        .effective_select_query()
+        .unwrap();
+
+        assert_eq!(
+            query,
+            SelectQuery::from_entity::<TenantEntity>()
+                .filter(Predicate::eq(
+                    Expr::value(SqlValue::Bool(true)),
+                    Expr::value(SqlValue::Bool(true)),
+                ))
+                .filter(Predicate::eq(
+                    Expr::Column(mssql_orm_query::ColumnRef::new(
+                        TableRef::new("sales", "tenant_entities"),
+                        "tenant_id",
+                        "tenant_id",
+                    )),
+                    Expr::Value(SqlValue::I64(42)),
+                ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_fails_closed_without_active_tenant_for_tenant_scoped_entities() {
+        let error =
+            DbSetQuery::<TenantEntity>::new(None, SelectQuery::from_entity::<TenantEntity>())
+                .effective_select_query()
+                .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("requires an active tenant in the DbContext")
+        );
+    }
+
+    #[test]
+    fn dbset_query_rejects_mismatched_active_tenant_column() {
+        let error =
+            DbSetQuery::<TenantEntity>::new(None, SelectQuery::from_entity::<TenantEntity>())
+                .with_active_tenant_for_test(ActiveTenant {
+                    column_name: "company_id",
+                    value: SqlValue::I64(42),
+                })
+                .effective_select_query()
+                .unwrap_err();
+
+        assert!(error.message().contains("does not match"));
+    }
+
+    #[test]
+    fn dbset_query_rejects_incompatible_active_tenant_value() {
+        let error =
+            DbSetQuery::<TenantEntity>::new(None, SelectQuery::from_entity::<TenantEntity>())
+                .with_active_tenant_for_test(ActiveTenant {
+                    column_name: "tenant_id",
+                    value: SqlValue::String("not-a-bigint".to_string()),
+                })
+                .effective_select_query()
+                .unwrap_err();
+
+        assert!(error.message().contains("not compatible"));
+    }
+
+    #[test]
+    fn tenant_value_type_matching_rejects_null_even_for_nullable_columns() {
+        assert!(!tenant_value_matches_column_type(
+            &SqlValue::Null,
+            &TENANT_POLICY_COLUMNS[0],
+        ));
     }
 
     #[test]

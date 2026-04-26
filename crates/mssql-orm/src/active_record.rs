@@ -1,4 +1,4 @@
-use crate::{DbContextEntitySet, DbSetQuery, SoftDeleteEntity};
+use crate::{DbContextEntitySet, DbSetQuery, SoftDeleteEntity, TenantScopedEntity};
 use core::future::Future;
 use mssql_orm_core::{ColumnValue, Entity, FromRow, OrmError, SqlTypeMapping, SqlValue};
 
@@ -27,6 +27,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn query<C>(db: &C) -> DbSetQuery<Self>
     where
         C: DbContextEntitySet<Self>,
+        Self: TenantScopedEntity,
     {
         db.db_set().query()
     }
@@ -34,7 +35,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn find<C, K>(db: &C, key: K) -> impl Future<Output = Result<Option<Self>, OrmError>> + Send
     where
         C: DbContextEntitySet<Self>,
-        Self: FromRow + Send + SoftDeleteEntity,
+        Self: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping + Send,
     {
         db.db_set().find(key)
@@ -122,7 +123,7 @@ impl<E: Entity> ActiveRecord for E {}
 #[cfg(test)]
 mod tests {
     use super::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
-    use crate::{DbContext, DbContextEntitySet, DbSet, SoftDeleteEntity};
+    use crate::{DbContext, DbContextEntitySet, DbSet, SoftDeleteEntity, TenantScopedEntity};
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
         OrmError, PrimaryKeyMetadata, Row, SqlServerType,
@@ -194,6 +195,12 @@ mod tests {
 
     impl SoftDeleteEntity for TestEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for TestEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
             None
         }
     }
