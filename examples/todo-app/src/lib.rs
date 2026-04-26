@@ -426,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn settings_require_database_url() {
+    fn settings_validate_required_database_url_and_defaults() {
         let env = HashMap::<String, String>::new();
         let error = TodoAppSettings::from_map(&env).unwrap_err();
 
@@ -434,10 +434,7 @@ mod tests {
             error.to_string(),
             "DATABASE_URL no está configurada para el ejemplo todo-app"
         );
-    }
 
-    #[test]
-    fn settings_use_defaults_when_optional_values_are_missing() {
         let env = env_with_database_url();
         let settings = TodoAppSettings::from_map(&env).unwrap();
 
@@ -452,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn settings_accept_explicit_bind_addr_and_rust_log() {
+    fn settings_accept_overrides_and_build_connection_config() {
         let mut env = env_with_database_url();
         env.insert("APP_ADDR".to_string(), "0.0.0.0:4040".to_string());
         env.insert("RUST_LOG".to_string(), "debug,todo_app=trace".to_string());
@@ -464,10 +461,14 @@ mod tests {
             "0.0.0.0:4040".parse::<SocketAddr>().unwrap()
         );
         assert_eq!(settings.rust_log, "debug,todo_app=trace");
+        let config = settings.connection_config().unwrap();
+
+        assert_eq!(config.connection_string(), settings.database_url);
+        assert_eq!(config.options(), &settings.operational_options);
     }
 
     #[test]
-    fn default_operational_options_fix_expected_runtime_profile() {
+    fn operational_options_and_router_can_be_built_without_services() {
         let options = default_operational_options();
 
         assert_eq!(
@@ -488,20 +489,7 @@ mod tests {
         assert!(options.slow_query.enabled);
         assert!(options.health.enabled);
         assert!(options.pool.enabled);
-    }
 
-    #[test]
-    fn settings_build_connection_config_with_operational_options() {
-        let env = env_with_database_url();
-        let settings = TodoAppSettings::from_map(&env).unwrap();
-        let config = settings.connection_config().unwrap();
-
-        assert_eq!(config.connection_string(), settings.database_url);
-        assert_eq!(config.options(), &settings.operational_options);
-    }
-
-    #[test]
-    fn app_state_and_router_can_be_built_without_http_server() {
         let settings = TodoAppSettings::from_map(&env_with_database_url()).unwrap();
         let state = TodoAppState::new(FakeDbContext::healthy(), settings.clone());
         let _app = build_app(state.clone());
@@ -510,80 +498,47 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn health_check_handler_returns_ok_when_dbcontext_is_healthy() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
+    async fn public_handlers_cover_health_and_read_responses() {
+        let settings = TodoAppSettings::from_map(&env_with_database_url()).unwrap();
 
-        let response = health_check_handler(State(state)).await.into_response();
+        let healthy = TodoAppState::new(FakeDbContext::healthy(), settings.clone());
+        let response = health_check_handler(State(healthy.clone()))
+            .await
+            .into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::OK);
         assert_eq!(&body[..], b"ok");
-    }
 
-    #[tokio::test]
-    async fn health_check_handler_returns_service_unavailable_when_dbcontext_fails() {
-        let state = TodoAppState::new(
-            FakeDbContext::unhealthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
-
-        let response = health_check_handler(State(state)).await.into_response();
+        let unhealthy = TodoAppState::new(FakeDbContext::unhealthy(), settings);
+        let response = health_check_handler(State(unhealthy)).await.into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(&body[..], b"database unavailable");
-    }
-
-    #[tokio::test]
-    async fn get_todo_list_handler_returns_json_payload_for_existing_list() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
 
         let response =
-            get_todo_list_handler::<FakeDbContext>(State(state), axum::extract::Path(10))
+            get_todo_list_handler::<FakeDbContext>(State(healthy.clone()), axum::extract::Path(10))
                 .await
                 .into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             String::from_utf8(body.to_vec()).unwrap(),
             r#"{"id":10,"owner_user_id":7,"title":"Inbox","is_archived":false,"created_at":"2026-04-23T00:00:00"}"#
         );
-    }
 
-    #[tokio::test]
-    async fn get_todo_list_handler_returns_not_found_for_unknown_list() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
-
-        let response =
-            get_todo_list_handler::<FakeDbContext>(State(state), axum::extract::Path(999))
-                .await
-                .into_response();
-
+        let response = get_todo_list_handler::<FakeDbContext>(
+            State(healthy.clone()),
+            axum::extract::Path(999),
+        )
+        .await
+        .into_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
-    async fn list_user_lists_handler_filters_archived_lists() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
 
         let response = list_user_lists_handler::<FakeDbContext>(
-            State(state),
+            State(healthy.clone()),
             axum::extract::Path(7),
             Query(PageParams {
                 page: 1,
@@ -594,23 +549,14 @@ mod tests {
         .into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             String::from_utf8(body.to_vec()).unwrap(),
             r#"[{"id":10,"owner_user_id":7,"title":"Inbox","is_archived":false,"created_at":"2026-04-23T00:00:00"}]"#
         );
-    }
-
-    #[tokio::test]
-    async fn preview_open_items_handler_limits_open_items() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
 
         let response = preview_open_items_handler::<FakeDbContext>(
-            State(state),
+            State(healthy.clone()),
             axum::extract::Path(10),
             Query(PreviewParams { limit: 1 }),
         )
@@ -618,28 +564,18 @@ mod tests {
         .into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
             String::from_utf8(body.to_vec()).unwrap(),
             r#"[{"id":100,"list_id":10,"title":"Ship release","position":1,"is_completed":false}]"#
         );
-    }
-
-    #[tokio::test]
-    async fn count_open_items_handler_returns_json_count() {
-        let state = TodoAppState::new(
-            FakeDbContext::healthy(),
-            TodoAppSettings::from_map(&env_with_database_url()).unwrap(),
-        );
 
         let response =
-            count_open_items_handler::<FakeDbContext>(State(state), axum::extract::Path(10))
+            count_open_items_handler::<FakeDbContext>(State(healthy), axum::extract::Path(10))
                 .await
                 .into_response();
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-
         assert_eq!(status, StatusCode::OK);
         assert_eq!(String::from_utf8(body.to_vec()).unwrap(), r#"{"count":2}"#);
     }
