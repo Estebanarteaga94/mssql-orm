@@ -9,6 +9,7 @@ mod page_request;
 mod predicate_composition;
 mod query_order;
 mod query_predicates;
+mod query_projection;
 mod raw_sql;
 mod soft_delete_runtime;
 mod tracking;
@@ -41,6 +42,7 @@ pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
+pub use query_projection::SelectProjections;
 pub use raw_sql::{RawCommand, RawParam, RawParams, RawQuery};
 pub use soft_delete_runtime::{
     SoftDeleteContext, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
@@ -86,9 +88,9 @@ pub mod prelude {
         MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
         MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
         PageRequest, PredicateCompositionExt, RawCommand, RawParam, RawParams, RawQuery,
-        SharedConnection, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
-        SoftDeleteProvider, SoftDeleteRequestValues, TenantContext, TenantScopedEntity, Tracked,
-        model_snapshot_from_source, model_snapshot_json_from_source,
+        SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
+        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, TenantContext,
+        TenantScopedEntity, Tracked, model_snapshot_from_source, model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -101,7 +103,7 @@ pub mod prelude {
     pub use mssql_orm_macros::{
         AuditFields, Changeset, DbContext, Entity, Insertable, SoftDeleteFields, TenantContext,
     };
-    pub use mssql_orm_query::{Join, JoinType};
+    pub use mssql_orm_query::{Join, JoinType, SelectProjection};
 }
 
 #[cfg(test)]
@@ -113,8 +115,9 @@ mod tests {
         IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
         MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
         PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, RawCommand, RawParam, RawParams,
-        RawQuery, SharedConnection, SoftDeleteEntity, SoftDeleteFields, SqlServerType,
-        SqlTypeMapping, SqlValue, TenantContext, TenantScopedEntity, Tracked,
+        RawQuery, SelectProjection, SelectProjections, SharedConnection, SoftDeleteEntity,
+        SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -191,14 +194,18 @@ mod tests {
         let error = OrmError::new("public-api");
         let raw_query_type = core::any::type_name::<RawQuery<PublicEntity>>();
         let raw_command_type = core::any::type_name::<RawCommand>();
+        let projection_type = core::any::type_name::<SelectProjection>();
         fn assert_raw_param<T: RawParam>() {}
         fn assert_raw_params<T: RawParams>() {}
+        fn assert_select_projections<T: SelectProjections>() {}
 
         assert!(raw_query_type.contains("RawQuery"));
         assert!(raw_command_type.contains("RawCommand"));
+        assert!(projection_type.contains("SelectProjection"));
         assert_raw_param::<i64>();
         assert_raw_param::<SqlValue>();
         assert_raw_params::<(bool, i64)>();
+        assert_select_projections::<(EntityColumn<PublicEntity>,)>();
         assert_eq!(error.message(), "public-api");
         assert_eq!(
             ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),

@@ -202,9 +202,9 @@ Esta surface existe en el `DbContext` trait y reexporta `RawQuery`, `RawCommand`
 
 Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para varios valores, repetir `@P1` es valido y reutiliza el mismo valor, los placeholders deben ser continuos desde `@P1` hasta `@Pn`, y la cantidad de parametros debe coincidir con el mayor placeholder usado. La implementacion debe validar por indices de placeholders, no por cantidad de ocurrencias.
 
-### Roadmap cercano: proyecciones tipadas
+### Etapa 18: proyecciones tipadas
 
-Las proyecciones tipadas tambien quedan planificadas y tienen diseño operativo en `docs/projections.md`. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
+Las proyecciones tipadas tienen diseño operativo en `docs/projections.md`. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
 
 Direccion de API:
 
@@ -217,7 +217,7 @@ let users = db
     .await?;
 ```
 
-El diseno preserva la ruta actual `all()` / `first()` para entidades completas y agrega materializacion a DTOs mediante `all_as::<T>()` / `first_as::<T>()`. El AST debe transportar aliases estables para que `FromRow` lea DTOs por nombre.
+La API inicial ya existe en `DbSetQuery`: `select(...)` construye la proyeccion y `all_as::<T>()` / `first_as::<T>()` materializan DTOs mediante `FromRow`. `all()` / `first()` siguen siendo la ruta de entidades completas. El AST transporta aliases estables para que `FromRow` lea DTOs por nombre.
 
 ## Active Record
 

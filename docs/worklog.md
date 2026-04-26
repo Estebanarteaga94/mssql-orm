@@ -2,6 +2,41 @@
 
 ## 2026-04-26
 
+### Sesión: API pública inicial de proyecciones tipadas
+
+- Se ejecutó la tarea `Etapa 18: Implementar API pública inicial de proyecciones: select(...) y ejecución all_as::<T>() / first_as::<T>() sobre DbSetQuery`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó `crates/mssql-orm/src/query_projection.rs` con el trait público `SelectProjections`, soportando `SelectProjection`, `Expr`, `EntityColumn<E>`, arrays, `Vec<T>` y tuplas hasta 12 elementos.
+- `DbSetQuery<E>` ahora expone `.select(...)`, `.all_as::<T>()` y `.first_as::<T>()`.
+- `all_as` y `first_as` reutilizan `effective_select_query()` antes de compilar, por lo que conservan filtros obligatorios de `tenant` y visibilidad de `soft_delete`.
+- La crate pública reexporta `SelectProjections` y `SelectProjection` desde `mssql_orm::prelude`.
+- Se agregaron pruebas internas para proyección con aliases, compilación previa a conexión en `all_as` y rechazo de expresiones sin alias en `first_as`.
+- Se actualizó `docs/api.md`, `docs/query-builder.md`, `docs/projections.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- La API pública inicial de proyecciones ya existe sobre `DbSetQuery`; la siguiente tarea queda enfocada en cobertura pública amplia y materialización real a DTOs.
+
+### Validación
+
+- `cargo test -p mssql-orm dbset_query_ --lib -- --nocapture`
+- `cargo test -p mssql-orm exposes_public_prelude --lib -- --nocapture`
+- `cargo check --workspace`
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, trybuild de API pública y materialización a DTOs FromRow`.
+
 ### Sesión: AST de proyecciones tipadas con alias estable
 
 - Se ejecutó la tarea `Etapa 18: Extender el AST SelectQuery para proyecciones públicas de columnas/expresiones con alias estable suficiente para FromRow`.

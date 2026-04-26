@@ -1,5 +1,6 @@
 use crate::context::{ActiveTenant, SharedConnection};
 use crate::page_request::PageRequest;
+use crate::query_projection::SelectProjections;
 use crate::{SoftDeleteEntity, TenantScopedEntity};
 use mssql_orm_core::{ColumnMetadata, Entity, FromRow, OrmError, Row, SqlServerType, SqlValue};
 use mssql_orm_query::{
@@ -87,6 +88,16 @@ impl<E: Entity> DbSetQuery<E> {
         self
     }
 
+    pub fn select<P>(mut self, projection: P) -> Self
+    where
+        P: SelectProjections,
+    {
+        self.select_query = self
+            .select_query
+            .select(projection.into_select_projections());
+        self
+    }
+
     #[cfg(test)]
     pub(crate) fn select_query(&self) -> &SelectQuery {
         &self.select_query
@@ -120,6 +131,28 @@ impl<E: Entity> DbSetQuery<E> {
     pub async fn first(self) -> Result<Option<E>, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+    {
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        connection.fetch_one(compiled).await
+    }
+
+    pub async fn all_as<T>(self) -> Result<Vec<T>, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+        T: FromRow + Send,
+    {
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
+        let shared_connection = self.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        connection.fetch_all(compiled).await
+    }
+
+    pub async fn first_as<T>(self) -> Result<Option<T>, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+        T: FromRow + Send,
     {
         let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
         let shared_connection = self.require_connection()?;
@@ -328,11 +361,12 @@ mod tests {
     use crate::page_request::PageRequest;
     use crate::{SoftDeleteEntity, TenantScopedEntity};
     use mssql_orm_core::{
-        ColumnMetadata, Entity, EntityMetadata, EntityPolicyMetadata, FromRow, OrmError,
-        PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
+        ColumnMetadata, Entity, EntityColumn, EntityMetadata, EntityPolicyMetadata, FromRow,
+        OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
     };
     use mssql_orm_query::{
-        Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
+        Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectProjection, SelectQuery,
+        SortDirection, TableRef,
     };
     use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -360,6 +394,12 @@ mod tests {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
         }
+    }
+
+    #[allow(non_upper_case_globals)]
+    impl TestEntity {
+        const id: EntityColumn<TestEntity> = EntityColumn::new("id", "id");
+        const name: EntityColumn<TestEntity> = EntityColumn::new("name", "name");
     }
 
     static JOINED_ENTITY_METADATA: EntityMetadata = EntityMetadata {
@@ -581,6 +621,15 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct TestProjectionRow;
+
+    impl FromRow for TestProjectionRow {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
+        }
+    }
+
     #[test]
     fn dbset_query_starts_from_entity_select_query() {
         let dbset = DbSet::<TestEntity>::disconnected();
@@ -621,6 +670,58 @@ mod tests {
                 Expr::value(SqlValue::Bool(true)),
                 Expr::value(SqlValue::Bool(true)),
             ))
+        );
+    }
+
+    #[test]
+    fn dbset_query_select_builds_projection_with_aliases() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let query = dbset
+            .query()
+            .select((TestEntity::id, TestEntity::name))
+            .into_select_query();
+
+        assert_eq!(
+            query.projection,
+            vec![
+                SelectProjection::column(TestEntity::id),
+                SelectProjection::column(TestEntity::name),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn dbset_query_all_as_reuses_projection_compilation_before_connection() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let error = dbset
+            .query()
+            .select(TestEntity::id)
+            .all_as::<TestProjectionRow>()
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "DbSetQuery requires an initialized shared connection"
+        );
+    }
+
+    #[tokio::test]
+    async fn dbset_query_first_as_rejects_unaliased_expression_projection() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+
+        let error = dbset
+            .query()
+            .select(Expr::function("LOWER", vec![Expr::from(TestEntity::name)]))
+            .first_as::<TestProjectionRow>()
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server projection expressions require an explicit alias"
         );
     }
 

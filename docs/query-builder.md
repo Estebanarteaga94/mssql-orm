@@ -198,7 +198,7 @@ let users = db
     .await?;
 ```
 
-Ese ejemplo describe la direccion de la API, no una surface disponible todavia. La implementacion debe resolver aliases estables para columnas y expresiones, compatibilidad inicial con joins sin aliases de tabla, y materializacion a DTOs mediante `all_as::<T>()` / `first_as::<T>()` sin romper `all()` / `first()` sobre entidades completas.
+Esa API inicial ya esta disponible. `all()` / `first()` siguen materializando entidades completas; usa `all_as::<T>()` / `first_as::<T>()` cuando hayas llamado `select(...)` y quieras materializar un DTO `FromRow`.
 
 ## Inspeccion del AST
 
@@ -213,9 +213,9 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 - No hay aliases de tabla en joins.
 - No hay navigation properties ni carga automatica de relaciones.
 - `count()` no preserva joins en esta etapa.
-- La proyeccion publica de `DbSetQuery<T>` materializa entidades completas; proyecciones parciales quedan fuera del alcance actual.
-- Raw SQL tipado esta planificado como escape hatch previo a proyecciones complejas, pero no forma parte todavia del query builder publico.
-- El diseño de proyecciones tipadas ya esta documentado, pero la API publica `select(...)`, `all_as::<T>()` y `first_as::<T>()` sigue pendiente de implementacion.
+- La proyeccion publica inicial existe, pero no hay aliases de tabla ni agregaciones tipadas de alto nivel.
+- Raw SQL tipado sigue siendo el escape hatch para consultas que todavia exceden el AST del query builder.
+- La cobertura publica amplia de proyecciones, incluyendo `trybuild` y materializacion real a DTOs, queda en la siguiente tarea de Etapa 18.
 
 ## Referencias relacionadas
 

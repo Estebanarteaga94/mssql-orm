@@ -10,9 +10,10 @@ El AST ya tiene una base parcial:
 - `SelectQuery::select(...)` ya acepta elementos convertibles a `SelectProjection`.
 - `mssql-orm-sqlserver` ya compila `projection` cuando no esta vacia, usando aliases estables.
 - Si `projection` esta vacia, el compilador emite `SELECT *`.
-- `DbSetQuery<E>::all()` y `first()` siempre materializan `E` y no exponen proyeccion publica.
+- `DbSetQuery<E>::all()` y `first()` siempre materializan `E`.
+- `DbSetQuery<E>::select(...)`, `all_as::<T>()` y `first_as::<T>()` ya exponen la API publica inicial de proyecciones.
 
-La pieza faltante ya no esta en el AST sino en la API publica de `DbSetQuery`: falta exponer una forma ergonomica de construir proyecciones y ejecutar `all_as::<T>()` / `first_as::<T>()`.
+La pieza pendiente ahora es cobertura publica amplia: snapshots SQL dedicados, `trybuild` de API publica y materializacion a DTOs `FromRow`.
 
 ## Objetivo
 
@@ -219,6 +220,5 @@ Raw SQL tipado sigue siendo el escape hatch para consultas mas complejas mientra
 
 ## Secuencia Recomendada
 
-1. Agregar una API publica minima en `mssql-orm` para `.select(...)`, `all_as::<T>()` y `first_as::<T>()`.
-2. Cubrir snapshots SQL, orden de parametros, `trybuild` publico y materializacion de DTOs.
-3. Actualizar `docs/query-builder.md` y `docs/api.md` diferenciando proyecciones reales de `map` en memoria.
+1. Cubrir snapshots SQL, orden de parametros, `trybuild` publico y materializacion de DTOs.
+2. Actualizar `docs/query-builder.md` y `docs/api.md` diferenciando proyecciones reales de `map` en memoria.
