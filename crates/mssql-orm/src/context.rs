@@ -832,6 +832,10 @@ mod tests {
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
         OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
     };
+    use mssql_orm_migrate::{
+        ColumnSnapshot, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
+        diff_column_operations, diff_schema_and_table_operations,
+    };
     use mssql_orm_query::{
         ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
     };
@@ -1778,6 +1782,69 @@ mod tests {
             error,
             OrmError::new("soft_delete delete requires at least one runtime change")
         );
+    }
+
+    #[test]
+    fn soft_delete_security_guardrail_keeps_schema_and_delete_paths_logical() {
+        let current = ModelSnapshot::from_entities(&[SoftDeleteEntityUnderTest::metadata()]);
+        let previous = ModelSnapshot::new(vec![SchemaSnapshot::new(
+            "dbo",
+            vec![TableSnapshot::new(
+                "soft_delete_entities",
+                vec![
+                    ColumnSnapshot::from(&SOFT_DELETE_ENTITY_COLUMNS[0]),
+                    ColumnSnapshot::from(&SOFT_DELETE_ENTITY_COLUMNS[1]),
+                ],
+                None,
+                vec!["id".to_string()],
+                vec![],
+                vec![],
+            )],
+        )]);
+        let schema_operations =
+            diff_schema_and_table_operations(&ModelSnapshot::default(), &current);
+        let column_operations = diff_column_operations(&previous, &current);
+
+        let current_schema = current.schema("dbo").expect("dbo schema should exist");
+        let table = current_schema
+            .table("soft_delete_entities")
+            .expect("soft delete table should exist");
+        let deleted_at = table
+            .column("deleted_at")
+            .expect("soft delete column should be ordinary snapshot metadata");
+
+        assert_eq!(deleted_at.sql_type, SqlServerType::DateTime2);
+        assert!(deleted_at.nullable);
+        assert!(!deleted_at.insertable);
+        assert!(deleted_at.updatable);
+        assert!(
+            schema_operations
+                .iter()
+                .any(|operation| matches!(operation, MigrationOperation::CreateTable(operation) if operation.table.name == "soft_delete_entities")),
+            "soft_delete entities should create tables through the normal migration pipeline"
+        );
+        assert!(
+            column_operations
+                .iter()
+                .any(|operation| matches!(operation, MigrationOperation::AddColumn(operation) if operation.column.name == "deleted_at")),
+            "activating soft_delete should surface generated columns as AddColumn"
+        );
+
+        let provider = TestSoftDeleteProvider;
+        let compiled = DbSet::<SoftDeleteEntityUnderTest>::disconnected()
+            .delete_compiled_query_sql_value(SqlValue::I64(7), None, Some(&provider), None)
+            .expect("soft delete should compile as logical update");
+
+        assert!(
+            compiled.sql.starts_with("UPDATE "),
+            "soft_delete delete route must compile to UPDATE, got {}",
+            compiled.sql
+        );
+        assert!(
+            !compiled.sql.starts_with("DELETE "),
+            "soft_delete delete route must never compile to physical DELETE"
+        );
+        assert!(compiled.sql.contains("[deleted_at] = @P1"));
     }
 
     #[test]

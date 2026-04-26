@@ -61,52 +61,15 @@ struct ArchivedEntity {
     id: i64,
 }
 
-struct SoftDeletePolicy;
+#[derive(SoftDeleteFields)]
+#[allow(dead_code)]
+struct SoftDeletePolicy {
+    #[orm(sql_type = "datetime2")]
+    deleted_at: Option<String>,
 
-impl EntityPolicy for SoftDeletePolicy {
-    const POLICY_NAME: &'static str = "soft_delete";
-    const COLUMN_NAMES: &'static [&'static str] = &["deleted_at", "deleted_by"];
-
-    fn columns() -> &'static [ColumnMetadata] {
-        const COLUMNS: &[ColumnMetadata] = &[
-            ColumnMetadata {
-                rust_field: "deleted_at",
-                column_name: "deleted_at",
-                renamed_from: None,
-                sql_type: SqlServerType::DateTime2,
-                nullable: true,
-                primary_key: false,
-                identity: None,
-                default_sql: None,
-                computed_sql: None,
-                rowversion: false,
-                insertable: false,
-                updatable: true,
-                max_length: None,
-                precision: None,
-                scale: None,
-            },
-            ColumnMetadata {
-                rust_field: "deleted_by",
-                column_name: "deleted_by",
-                renamed_from: None,
-                sql_type: SqlServerType::NVarChar,
-                nullable: true,
-                primary_key: false,
-                identity: None,
-                default_sql: None,
-                computed_sql: None,
-                rowversion: false,
-                insertable: false,
-                updatable: true,
-                max_length: Some(120),
-                precision: None,
-                scale: None,
-            },
-        ];
-
-        COLUMNS
-    }
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    deleted_by: Option<String>,
 }
 
 #[derive(Entity, Debug, Clone, PartialEq)]

@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: guardrail final de seguridad para `soft_delete`
+
+- Se ejecutó la tarea `Etapa 16+: Cubrir soft_delete con prueba de seguridad final agregada que reúna metadata, SQL compilado y migraciones ya cubiertas, más rutas runtime públicas, para evitar regresiones de borrado físico accidental`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se actualizó la cobertura de metadata y migraciones para usar `#[derive(SoftDeleteFields)]` como forma pública principal, en vez de `impl EntityPolicy` manual.
+- Se agregó el test unitario `soft_delete_security_guardrail_keeps_schema_and_delete_paths_logical` en `crates/mssql-orm/src/context.rs`.
+- El guardrail verifica en un solo punto que una entidad con `soft_delete` produce columnas ordinarias en `ModelSnapshot`, que activar la policy se ve como `AddColumn`, que el pipeline de migraciones crea la tabla por el camino normal y que la ruta interna de delete compila a `UPDATE`, no a `DELETE`.
+- Se ejecutó también la cobertura runtime compilable de `stage16_soft_delete_runtime`; en este entorno los smokes reales se auto-saltaron porque `MSSQL_ORM_TEST_CONNECTION_STRING` no está definido.
+
+### Resultado
+
+- La cobertura de `soft_delete` queda cerrada localmente para API pública de campos, metadata, snapshot/diff/DDL, SQL compilado y rutas runtime de alto riesgo.
+- No queda tarea pendiente específica de `soft_delete` en el backlog vivo; el próximo foco pasa a `tenant`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm soft_delete_security_guardrail_keeps_schema_and_delete_paths_logical --lib -- --nocapture`
+- `cargo test -p mssql-orm --test stage16_entity_policies soft_delete -- --nocapture`
+- `cargo test -p mssql-orm --test stage16_audit_migrations soft_delete -- --nocapture`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo test -p mssql-orm --test stage16_soft_delete_runtime -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Para evidencia contra SQL Server real hace falta definir `MSSQL_ORM_TEST_CONNECTION_STRING`; sin esa variable, los smokes reales compilan y se auto-saltan siguiendo el patrón existente del repositorio.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Evaluar tenant = TenantScope como feature de seguridad con filtros obligatorios, inserción automática de tenant_id y validación de que no existan rutas de query que omitan el tenant por accidente`.
+
 ### Sesión: derive público `SoftDeleteFields`
 
 - Se corrigió una brecha de ergonomía señalada durante la revisión de `soft_delete`: aunque `#[orm(soft_delete = SoftDelete)]` ya consumía un `EntityPolicy`, el camino público esperado es que el usuario defina un struct de columnas y derive la policy, igual que con `AuditFields`.

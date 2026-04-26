@@ -411,6 +411,6 @@ Para `tenant`, el comportamiento esperado futuro es de seguridad, no solo comodi
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 16+: Cubrir soft_delete con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, ConcurrencyConflict y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente`.
-2. Mantener `tenant` como backlog `Etapa 16+` hasta diseñar contratos separados.
+1. Ejecutar `Etapa 16+: Evaluar tenant = TenantScope como feature de seguridad con filtros obligatorios, inserción automática de tenant_id y validación de que no existan rutas de query que omitan el tenant por accidente`.
+2. Mantener las pruebas reales de `soft_delete` disponibles con `MSSQL_ORM_TEST_CONNECTION_STRING` para validación externa contra SQL Server cuando haya base configurada.
 3. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
