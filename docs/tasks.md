@@ -1,13 +1,13 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
 - [ ] Etapa 16+: Garantizar que inserts de entidades con `tenant = TenantScope` reciban automáticamente `tenant_id` desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
 - [x] Etapa 16+: Diseñar `tenant = TenantScope` para que toda query, `find`, `update`, `delete`, Active Record y `save_changes()` sobre entidades tenant-scoped agregue automáticamente el filtro `tenant_id = current_tenant` cuando exista un tenant activo en el contexto
 - [x] Etapa 16+: Evaluar `tenant = TenantScope` como feature de seguridad con filtros obligatorios, inserción automática de `tenant_id` y validación de que no existan rutas de query que omitan el tenant por accidente
 - [x] Etapa 16+: Cubrir `soft_delete` con prueba de seguridad final agregada que reúna metadata, SQL compilado y migraciones ya cubiertas, más rutas runtime públicas, para evitar regresiones de borrado físico accidental

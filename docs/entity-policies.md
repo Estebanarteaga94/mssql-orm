@@ -949,6 +949,129 @@ Rutas que deben quedar cubiertas:
 
 La columna de tenant debe venir de una policy declarativa similar a las otras policies de columnas generadas, pero el runtime necesita un contrato separado para conocer el tenant activo. La opcion mas alineada con el estado actual es extender la infraestructura de `SharedConnectionRuntime` o un runtime config equivalente en `mssql-orm`, porque hoy ese objeto ya viaja por `DbContext`, `DbSet`, Active Record, tracking y transacciones.
 
+## Diseno del Tenant Activo
+
+El contexto no debe inferir ni descubrir el tenant activo. El consumidor debe configurarlo explicitamente sobre el `DbContext` o sobre la `SharedConnection` que ese contexto transporta.
+
+La forma publica preferida es un struct de usuario con campo nombrado:
+
+```rust
+#[derive(TenantContext)]
+struct CurrentTenant {
+    #[orm(column = "company_id")]
+    tenant_id: i32,
+}
+
+let db = AppDbContext::connect(connection_string)
+    .await?
+    .with_tenant(CurrentTenant { tenant_id: 42 });
+```
+
+Este shape es preferible a `struct Tenant(i32)` porque permite que el usuario nombre y configure la columna desde el mismo tipo que representa el tenant activo. Tambien permite evolucionar el contrato sin romper ergonomia, por ejemplo agregando mas datos de request en campos no persistibles si una version futura lo necesita.
+
+La forma tuple/newtype puede aceptarse despues como azucar, pero no debe ser el primer contrato canonico:
+
+```rust
+struct Tenant(i32);
+struct Tenant(uuid::Uuid);
+```
+
+Si se soporta, debe exigir una convencion explicita de columna o un atributo a nivel del tipo, porque un tuple struct no tiene un nombre de campo que pueda mapearse de forma clara a `tenant_id`, `company_id` u otro identificador propio del dominio.
+
+Contrato runtime esperado:
+
+```rust
+pub trait TenantContext: Send + Sync + 'static {
+    const COLUMN_NAME: &'static str;
+
+    fn tenant_value(&self) -> SqlValue;
+}
+```
+
+El nombre puede cambiar, pero la responsabilidad debe mantenerse:
+
+- `COLUMN_NAME` define la columna que el tenant activo pretende filtrar.
+- `tenant_value()` devuelve el valor runtime ya convertido a `SqlValue`.
+- El derive `TenantContext` debe aceptar un struct con exactamente un campo tenant persistible.
+- El campo puede usar `#[orm(column = "...")]` para desacoplar nombre Rust y columna SQL.
+- El tipo del campo debe implementar `SqlTypeMapping`.
+- `Option<T>` no debe aceptarse como tenant activo en el primer corte; ausencia de tenant se expresa con `None` en el contexto, no con `Some(TenantContext { tenant_id: None })`.
+
+`SharedConnectionRuntime` debe conservar el tenant activo como un valor ya normalizado, no como un tipo generico:
+
+```rust
+pub struct ActiveTenant {
+    pub column_name: &'static str,
+    pub value: SqlValue,
+}
+```
+
+El contexto derivado debe exponer helpers publicos equivalentes a los de `soft_delete`:
+
+```rust
+impl AppDbContext {
+    pub fn with_tenant<T>(&self, tenant: T) -> Self
+    where
+        T: TenantContext;
+
+    pub fn clear_tenant(&self) -> Self;
+}
+```
+
+`SharedConnection` debe tener los equivalentes internos/publicos necesarios para transportar ese `ActiveTenant`:
+
+```rust
+impl SharedConnection {
+    pub fn with_tenant<T>(&self, tenant: T) -> Self
+    where
+        T: TenantContext;
+
+    pub fn clear_tenant(&self) -> Self;
+}
+```
+
+La razon para guardar el tenant en `SharedConnectionRuntime` es que ese objeto ya se clona por `DbContext`, `DbSet`, Active Record, tracking y transacciones. Un contexto transaccional creado por `db.transaction(...)` debe heredar el mismo tenant activo del contexto padre, igual que hereda la misma conexion compartida y la configuracion runtime existente.
+
+Reglas de compatibilidad entre `TenantContext` y `TenantScope`:
+
+- Una entidad que declara `#[orm(tenant = TenantScope)]` debe exponer exactamente una columna tenant mediante `TenantScopedEntity`.
+- Al ejecutar una ruta tenant-scoped, el ORM compara `TenantContext::COLUMN_NAME` con la columna declarada por la policy de la entidad.
+- Si los nombres no coinciden, la operacion falla con `OrmError` antes de compilar SQL.
+- Si coinciden, el ORM valida que el `SqlValue` sea compatible con el tipo SQL de la columna tenant.
+- Si no hay tenant activo, la operacion falla cerrado con `OrmError`.
+- Entidades sin `tenant = TenantScope` ignoran el tenant activo; el tenant configurado no debe agregar filtros a entidades no tenant-scoped.
+
+Ejemplo con columna por defecto:
+
+```rust
+#[derive(TenantContext)]
+struct CurrentTenant {
+    tenant_id: i32,
+}
+```
+
+Ejemplo con columna de dominio:
+
+```rust
+#[derive(TenantContext)]
+struct CurrentCompany {
+    #[orm(column = "company_id")]
+    id: uuid::Uuid,
+}
+```
+
+El segundo caso debe funcionar si la entidad tenant-scoped declara una policy cuya columna sea `company_id`. La policy de entidad y el tenant activo deben acordar el nombre de columna; el ORM no debe traducir `company_id` a `tenant_id` por convencion.
+
+Quedan fuera de este contrato:
+
+- tenant global en variable estatica/thread-local/task-local;
+- lectura automatica desde headers HTTP;
+- multiples tenants activos en una misma operacion;
+- filtros automaticos sobre entidades unidas distintas de la entidad raiz;
+- bypass publico tipo `without_tenant()`.
+
+El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
+
 El comportamiento esperado para inserts debe ser estricto:
 
 - Si la entidad tenant-scoped no recibe un `tenant_id` explicito, el ORM debe agregarlo desde el tenant activo.

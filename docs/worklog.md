@@ -2,6 +2,36 @@
 
 ## 2026-04-25
 
+### Sesión: diseño del tenant activo configurable
+
+- Se ejecutó la tarea `Etapa 16+: Definir cómo se configura el tenant activo en DbContext/SharedConnection o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con tenant = TenantScope`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- A partir de la preferencia de producto, se descartó usar solo primitivos sueltos como contrato canónico (`i32`, `Uuid`, `SqlValue`) para el tenant activo.
+- Se documentó en `docs/entity-policies.md` que el contrato público preferido debe ser un struct de usuario con campo nombrado derivando un futuro `TenantContext`.
+- El struct de tenant activo debe definir el valor y la columna, usando `#[orm(column = "...")]` cuando el dominio no use `tenant_id`; esto permite casos como `CurrentTenant { tenant_id: i32 }` y `CurrentCompany { #[orm(column = "company_id")] id: Uuid }`.
+- Se fijó que `SharedConnectionRuntime` debe almacenar un `ActiveTenant { column_name, value: SqlValue }` ya normalizado, no un tipo genérico, para que viaje por `DbContext`, `DbSet`, Active Record, tracking y transacciones.
+- Se fijaron helpers objetivo `with_tenant(...)` y `clear_tenant()` en el contexto derivado y en `SharedConnection`.
+- Se dejó explícito el comportamiento fail-closed: si una entidad tenant-scoped no tiene tenant activo, si la columna configurada no coincide con la policy de la entidad o si el valor no es compatible con la columna, la operación debe fallar antes de compilar SQL.
+- Se actualizó `docs/context.md` con la decisión y el siguiente paso recomendado.
+
+### Resultado
+
+- Queda definido cómo sabrá el contexto qué tenant aplicar: el consumidor lo configura explícitamente con un struct propio, y el ORM lo normaliza en runtime junto a la conexión compartida.
+- No se implementó código todavía; esta tarea cerró el contrato de configuración para que la implementación posterior sea acotada.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Garantizar que inserts de entidades con tenant = TenantScope reciban automáticamente tenant_id desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto`.
+
 ### Sesión: diseño de filtros obligatorios para `tenant = TenantScope`
 
 - Se ejecutó la tarea `Etapa 16+: Diseñar tenant = TenantScope para que toda query, find, update, delete, Active Record y save_changes() sobre entidades tenant-scoped agregue automáticamente el filtro tenant_id = current_tenant cuando exista un tenant activo en el contexto`.
