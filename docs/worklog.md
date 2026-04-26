@@ -2,6 +2,34 @@
 
 ## 2026-04-25
 
+### Sesión: revisión de cierre de rutas internas para `soft_delete`
+
+- Se revisó si la subtarea `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental` estaba realmente completada.
+- Se confirmó que el plan maestro no está en la raíz con el nombre solicitado; la ruta operativa sigue siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- La tarea ya figura en `docs/tasks.md` como completada y el código lo respalda: `DbSet` tiene `query_with_internal_visibility(...)`, `find_by_sql_value_internal(...)` y `exists_by_sql_value_internal(...)` como rutas internas que fuerzan `with_deleted()`.
+- Los checks de `ConcurrencyConflict` en `DbSet::update(...)`, `DbSet::delete_by_sql_value(...)` y `update_entity_values_by_sql_value(...)` usan `exists_by_sql_value_internal(...)`, por lo que no dependen del filtro público por defecto de `soft_delete`.
+- `ActiveRecord::save(...)` también usa `exists_by_sql_value_internal(...)` para decidir existencia real en modo insert-or-update, sin exponer una API pública de bypass.
+- La ruta pública `DbSet::find(...)` sigue usando `query_with(...).first()` y por tanto conserva la visibilidad pública por defecto; `DbSetQuery` solo expone los escapes explícitos `with_deleted()` y `only_deleted()`.
+- Se detectó que `docs/tasks.md` ya tenía un cambio pendiente ajeno a esta revisión, limitado a mover el encabezado `## Pendientes`; no se modificó ese archivo en esta sesión.
+
+### Resultado
+
+- La tarea revisada puede considerarse completada: hay implementación interna, cobertura unitaria focal y trazabilidad previa en `docs/worklog.md`.
+
+### Validación
+
+- `cargo test -p mssql-orm dbset_internal_query_visibility_bypasses_soft_delete_filter --lib -- --nocapture`
+- `cargo test -p mssql-orm active_record_find_reuses_dbset_error_contract --lib -- --nocapture`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Continuar con `Etapa 16+: Integrar soft_delete en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema`.
+
 ### Sesión: evaluación de `concurrency = RowVersion`
 
 - Se ejecutó la subtarea `Etapa 16+: Evaluar concurrency = RowVersion como política declarativa sobre el soporte existente de #[orm(rowversion)], sin romper ConcurrencyConflict`.
