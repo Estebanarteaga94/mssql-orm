@@ -24,7 +24,7 @@ pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPr
 #[cfg(feature = "pool-bb8")]
 pub use context::connect_shared_from_pool;
 pub use context::{
-    DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
+    ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
     connect_shared_with_config, connect_shared_with_options,
 };
 pub use dbset_query::DbSetQuery;
@@ -78,14 +78,15 @@ pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
-        ActiveRecord, DbContext, DbContextEntitySet, DbSet, DbSetQuery, EntityColumnOrderExt,
-        EntityColumnPredicateExt, EntityState, MigrationModelSource, MssqlConnectionConfig,
-        MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
-        MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
-        MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
-        PredicateCompositionExt, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
-        SoftDeleteProvider, SoftDeleteRequestValues, TenantContext, TenantScopedEntity, Tracked,
-        model_snapshot_from_source, model_snapshot_json_from_source,
+        ActiveRecord, ActiveTenant, DbContext, DbContextEntitySet, DbSet, DbSetQuery,
+        EntityColumnOrderExt, EntityColumnPredicateExt, EntityState, MigrationModelSource,
+        MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
+        MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
+        MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
+        PageRequest, PredicateCompositionExt, SharedConnection, SoftDeleteContext,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+        TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
+        model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -104,13 +105,14 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        ActiveRecord, AuditFields, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet,
-        Entity, EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata,
-        EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable,
-        MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions,
-        MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt,
-        PrimaryKeyMetadata, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
-        SqlValue, TenantContext, TenantScopedEntity, Tracked,
+        ActiveRecord, ActiveTenant, AuditFields, Changeset, ColumnValue, DbContext,
+        DbContextEntitySet, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
+        EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
+        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
+        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
+        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, SharedConnection,
+        SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -281,6 +283,7 @@ mod tests {
     fn derives_tenant_context_policy_metadata_from_public_prelude() {
         let metadata = PublicTenant::metadata();
         let tenant = PublicTenant { tenant_id: 42 };
+        let active_tenant = ActiveTenant::from_context(&tenant);
 
         assert_eq!(metadata.name, "tenant");
         assert_eq!(metadata.columns.len(), 1);
@@ -295,6 +298,8 @@ mod tests {
         );
         assert_eq!(PublicTenant::COLUMN_NAME, "company_id");
         assert_eq!(tenant.tenant_value(), SqlValue::I64(42));
+        assert_eq!(active_tenant.column_name, "company_id");
+        assert_eq!(active_tenant.value, SqlValue::I64(42));
     }
 
     #[test]
@@ -355,6 +360,14 @@ mod tests {
         let _with_soft_delete_provider = DerivedDbContext::with_soft_delete_provider;
         let _with_soft_delete_request_values = DerivedDbContext::with_soft_delete_request_values;
         let _clear_soft_delete_request_values = DerivedDbContext::clear_soft_delete_request_values;
+    }
+
+    #[test]
+    fn exposes_dbcontext_tenant_runtime_helpers() {
+        let _with_tenant = DerivedDbContext::with_tenant::<PublicTenant>;
+        let _clear_tenant = DerivedDbContext::clear_tenant;
+        let _shared_with_tenant = SharedConnection::with_tenant::<PublicTenant>;
+        let _shared_clear_tenant = SharedConnection::clear_tenant;
     }
 
     #[test]

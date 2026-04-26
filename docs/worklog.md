@@ -2,6 +2,44 @@
 
 ## 2026-04-25
 
+### Sesión: transporte runtime de tenant activo
+
+- Se ejecutó la tarea `Etapa 16+: Implementar with_tenant(...) / clear_tenant() en SharedConnection y en #[derive(DbContext)], transportando un ActiveTenant { column_name, value } normalizado por SharedConnectionRuntime`.
+- Se confirmó que el plan maestro solicitado en la raíz no existe con ese nombre; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- En `crates/mssql-orm/src/context.rs` se agregó `ActiveTenant { column_name, value }` y `ActiveTenant::from_context(...)` para normalizar cualquier `TenantContext` a columna + `SqlValue`.
+- `SharedConnectionRuntime` ahora almacena `active_tenant: Option<ActiveTenant>`.
+- `SharedConnection::with_tenant(...)` y `SharedConnection::clear_tenant()` preservan la conexión física, `SoftDeleteProvider` y `SoftDeleteRequestValues`, cambiando solo el tenant activo.
+- `SharedConnection::active_tenant()` queda disponible como getter oculto para que las siguientes tareas de filtros, escrituras e inserts puedan leer el tenant normalizado.
+- `#[derive(DbContext)]` ahora genera `with_tenant(...)` y `clear_tenant()` sobre el contexto derivado, reconstruyendo los `DbSet` con la nueva `SharedConnection` y preservando el mismo `TrackingRegistry`.
+- La crate pública reexporta `ActiveTenant` y `SharedConnection` desde `mssql_orm::prelude::*`, y el fixture `dbcontext_valid.rs` fija la surface pública.
+- Se actualizó `docs/tasks.md`, `docs/context.md` y `docs/entity-policies.md`.
+
+### Resultado
+
+- El tenant activo ya puede configurarse y limpiarse en `SharedConnection` y en contextos derivados.
+- No se implementaron filtros obligatorios, cierre de `DbSetQuery::into_select_query()` ni inserts tenant-scoped; esas tareas siguen separadas en el backlog.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm tenant --lib -- --nocapture`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Se intentó primero una invocación inválida de `cargo test` con dos filtros posicionales; Cargo acepta un solo filtro. Se repitió correctamente con el filtro común `tenant`.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero reportó warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs` bajo `pool-bb8`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Cerrar el bypass público de DbSetQuery::into_select_query() antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios`.
+
 ### Sesión: sincronización de backlog de tenant runtime
 
 - Se detectó que `docs/tasks.md` no contenía los pasos inmediatos derivados de la implementación de metadata tenant.

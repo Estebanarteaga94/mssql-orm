@@ -16,6 +16,11 @@ struct AppDbContext {
     pub users: DbSet<User>,
 }
 
+#[derive(TenantContext)]
+struct CurrentTenant {
+    tenant_id: i64,
+}
+
 fn main() {
     let _connect = AppDbContext::connect;
     let _connect_with_options = AppDbContext::connect_with_options;
@@ -25,6 +30,10 @@ fn main() {
     let _with_soft_delete_provider = AppDbContext::with_soft_delete_provider;
     let _with_soft_delete_request_values = AppDbContext::with_soft_delete_request_values;
     let _clear_soft_delete_request_values = AppDbContext::clear_soft_delete_request_values;
+    let _with_tenant = AppDbContext::with_tenant::<CurrentTenant>;
+    let _clear_tenant = AppDbContext::clear_tenant;
+    let _shared_with_tenant = SharedConnection::with_tenant::<CurrentTenant>;
+    let _shared_clear_tenant = SharedConnection::clear_tenant;
     let _db_set: fn(&AppDbContext) -> &DbSet<User> =
         <AppDbContext as mssql_orm::DbContextEntitySet<User>>::db_set;
     let _entity_metadata: fn() -> &'static [&'static mssql_orm::EntityMetadata] =

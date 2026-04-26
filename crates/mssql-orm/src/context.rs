@@ -2,7 +2,7 @@ use crate::dbset_query::DbSetQuery;
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
-use crate::{SoftDeleteEntity, Tracked, TrackingRegistry, TrackingRegistryHandle};
+use crate::{SoftDeleteEntity, TenantContext, Tracked, TrackingRegistry, TrackingRegistryHandle};
 use core::future::Future;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -27,6 +27,21 @@ pub struct SharedConnection {
     runtime: Arc<SharedConnectionRuntime>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveTenant {
+    pub column_name: &'static str,
+    pub value: SqlValue,
+}
+
+impl ActiveTenant {
+    pub fn from_context<T: TenantContext>(tenant: &T) -> Self {
+        Self {
+            column_name: T::COLUMN_NAME,
+            value: tenant.tenant_value(),
+        }
+    }
+}
+
 enum SharedConnectionInner {
     Direct(tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>),
     #[cfg(feature = "pool-bb8")]
@@ -37,6 +52,7 @@ enum SharedConnectionInner {
 struct SharedConnectionRuntime {
     soft_delete_provider: Option<Arc<dyn SoftDeleteProvider>>,
     soft_delete_request_values: Option<Arc<SoftDeleteRequestValues>>,
+    active_tenant: Option<ActiveTenant>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +92,7 @@ impl SharedConnection {
             runtime: Arc::new(SharedConnectionRuntime {
                 soft_delete_provider: Some(provider),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: self.runtime.active_tenant.clone(),
             }),
         }
     }
@@ -86,6 +103,7 @@ impl SharedConnection {
             runtime: Arc::new(SharedConnectionRuntime {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: Some(Arc::new(request_values)),
+                active_tenant: self.runtime.active_tenant.clone(),
             }),
         }
     }
@@ -96,6 +114,29 @@ impl SharedConnection {
             runtime: Arc::new(SharedConnectionRuntime {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: None,
+                active_tenant: self.runtime.active_tenant.clone(),
+            }),
+        }
+    }
+
+    pub fn with_tenant<T: TenantContext>(&self, tenant: T) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: Some(ActiveTenant::from_context(&tenant)),
+            }),
+        }
+    }
+
+    pub fn clear_tenant(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: None,
             }),
         }
     }
@@ -126,6 +167,11 @@ impl SharedConnection {
 
     pub(crate) fn soft_delete_request_values(&self) -> Option<Arc<SoftDeleteRequestValues>> {
         self.runtime.soft_delete_request_values.clone()
+    }
+
+    #[doc(hidden)]
+    pub fn active_tenant(&self) -> Option<ActiveTenant> {
+        self.runtime.active_tenant.clone()
     }
 }
 

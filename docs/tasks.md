@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Implementar `with_tenant(...)` / `clear_tenant()` en `SharedConnection` y en `#[derive(DbContext)]`, transportando un `ActiveTenant { column_name, value }` normalizado por `SharedConnectionRuntime`
 - [ ] Etapa 16+: Cerrar el bypass público de `DbSetQuery::into_select_query()` antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios
 - [ ] Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: `query()`, `query_with(...)`, `all()`, `first()`, `count()`, `find`, Active Record `query/find` y `find_tracked`
 - [ ] Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: `update`, `delete`, Active Record `save/delete`, `save_changes()` para `Modified`/`Deleted`, `rowversion` y `soft_delete`
@@ -11,6 +10,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Implementar `with_tenant(...)` / `clear_tenant()` en `SharedConnection` y en `#[derive(DbContext)]`, transportando un `ActiveTenant { column_name, value }` normalizado por `SharedConnectionRuntime`
 - [x] Etapa 16+: Implementar la base code-first de tenant opt-in: `#[derive(TenantContext)]`, `#[orm(tenant = CurrentTenant)]`, metadata ordinaria y contrato auxiliar `TenantScopedEntity`
 - [x] Etapa 16+: Ajustar el diseño para que cada entidad opte explícitamente por tenant con `#[orm(tenant = CurrentTenant)]`, permitiendo tablas transversales sin filtro tenant
 - [x] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`

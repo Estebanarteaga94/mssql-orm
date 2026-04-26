@@ -1241,6 +1241,27 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 Self::__from_shared_parts(connection, tracking_registry)
             }
 
+            pub fn with_tenant<T>(&self, tenant: T) -> Self
+            where
+                T: ::mssql_orm::TenantContext,
+            {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_tenant(tenant);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
+            pub fn clear_tenant(&self) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .clear_tenant();
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
             pub fn from_connection(
                 connection: ::mssql_orm::tiberius::MssqlConnection<
                     ::mssql_orm::tiberius::TokioConnectionStream
