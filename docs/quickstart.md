@@ -17,14 +17,14 @@ From an external project, use the root crate:
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm" }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm" }
 ```
 
 If you want optional pooling:
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm", features = ["pool-bb8"] }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm", features = ["pool-bb8"] }
 ```
 
 ## 2. Import the Prelude

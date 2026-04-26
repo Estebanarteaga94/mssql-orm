@@ -6,26 +6,26 @@ You can consume `mssql-orm` from another Rust project through a Git dependency. 
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm" }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm" }
 ```
 
 To pin a branch, tag, or revision:
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm", branch = "main" }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm", branch = "main" }
 ```
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm", rev = "<commit-sha>" }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm", rev = "<commit-sha>" }
 ```
 
 ## Optional Pooling
 
 ```toml
 [dependencies]
-mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm", features = ["pool-bb8"] }
+mssql-orm = { git = "https://github.com/Estebanarteaga94/mssql-orm.git", package = "mssql-orm", features = ["pool-bb8"] }
 ```
 
 ## Basic Consumer Code
