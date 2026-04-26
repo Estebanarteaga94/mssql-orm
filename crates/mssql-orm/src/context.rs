@@ -1,4 +1,4 @@
-use crate::dbset_query::DbSetQuery;
+use crate::dbset_query::{DbSetQuery, tenant_value_matches_column_type};
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
@@ -395,7 +395,13 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_deleted(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send + SoftDeleteEntity,
+        E: Clone
+            + EntityPersist
+            + EntityPrimaryKey
+            + FromRow
+            + Send
+            + SoftDeleteEntity
+            + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -427,7 +433,13 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_modified(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + EntityPrimaryKey + FromRow + Send + SoftDeleteEntity,
+        E: Clone
+            + EntityPersist
+            + EntityPrimaryKey
+            + FromRow
+            + Send
+            + SoftDeleteEntity
+            + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -470,7 +482,7 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn update<K, C>(&self, key: K, changeset: C) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
@@ -498,7 +510,7 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn delete<K>(&self, key: K) -> Result<bool, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
     {
         self.delete_by_sql_value(key.to_sql_value(), None).await
@@ -510,7 +522,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<bool, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let shared_connection = self.require_connection()?;
         let soft_delete_provider = shared_connection.soft_delete_provider();
@@ -541,23 +553,23 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<bool, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         self.delete_by_sql_value(key, concurrency_token).await
     }
 
     async fn find_by_sql_value_internal(&self, key: SqlValue) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         self.query_with_internal_visibility(self.find_select_query_sql_value(key)?)
-            .first_without_tenant_filter()
+            .first()
             .await
     }
 
     pub(crate) async fn exists_by_sql_value_internal(&self, key: SqlValue) -> Result<bool, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         Ok(self.find_by_sql_value_internal(key).await?.is_some())
     }
@@ -591,7 +603,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity,
+        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
             key.clone(),
@@ -620,7 +632,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: EntityPersist + FromRow + Send + SoftDeleteEntity,
+        E: EntityPersist + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         self.update_entity_values_by_sql_value(key, entity.update_changes(), concurrency_token)
             .await
@@ -643,6 +655,12 @@ impl<E: Entity> DbSet<E> {
             .as_ref()
             .cloned()
             .ok_or_else(|| OrmError::new("DbSet requires an initialized shared connection"))
+    }
+
+    fn active_tenant(&self) -> Option<ActiveTenant> {
+        self.connection
+            .as_ref()
+            .and_then(SharedConnection::active_tenant)
     }
 }
 
@@ -681,11 +699,17 @@ impl<E: Entity> DbSet<E> {
     #[cfg(test)]
     fn update_query<K, C>(&self, key: K, changeset: &C) -> Result<UpdateQuery, OrmError>
     where
+        E: TenantScopedEntity,
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
+        let active_tenant = self.active_tenant();
         let mut query =
             UpdateQuery::for_entity::<E, C>(changeset).filter(self.primary_key_predicate(key)?);
+
+        if let Some(predicate) = self.tenant_write_predicate(active_tenant.as_ref())? {
+            query = query.filter(predicate);
+        }
 
         if let Some(token) = changeset.concurrency_token()? {
             query = query.filter(self.rowversion_predicate_value(token)?);
@@ -699,9 +723,35 @@ impl<E: Entity> DbSet<E> {
         key: SqlValue,
         changes: Vec<mssql_orm_core::ColumnValue>,
         concurrency_token: Option<SqlValue>,
-    ) -> Result<UpdateQuery, OrmError> {
+    ) -> Result<UpdateQuery, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let active_tenant = self.active_tenant();
+        self.update_query_sql_value_with_active_tenant(
+            key,
+            changes,
+            concurrency_token,
+            active_tenant.as_ref(),
+        )
+    }
+
+    fn update_query_sql_value_with_active_tenant(
+        &self,
+        key: SqlValue,
+        changes: Vec<mssql_orm_core::ColumnValue>,
+        concurrency_token: Option<SqlValue>,
+        active_tenant: Option<&ActiveTenant>,
+    ) -> Result<UpdateQuery, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
         let mut query = UpdateQuery::for_entity::<E, _>(&RawChangeset(changes))
             .filter(self.primary_key_predicate_value(key)?);
+
+        if let Some(predicate) = self.tenant_write_predicate(active_tenant)? {
+            query = query.filter(predicate);
+        }
 
         if let Some(token) = concurrency_token {
             query = query.filter(self.rowversion_predicate_value(token)?);
@@ -713,50 +763,57 @@ impl<E: Entity> DbSet<E> {
     #[cfg(test)]
     fn delete_query<K>(&self, key: K) -> Result<DeleteQuery, OrmError>
     where
+        E: TenantScopedEntity,
         K: SqlTypeMapping,
     {
-        Ok(DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?))
+        let active_tenant = self.active_tenant();
+        let mut query = DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate(key)?);
+
+        if let Some(predicate) = self.tenant_write_predicate(active_tenant.as_ref())? {
+            query = query.filter(predicate);
+        }
+
+        Ok(query)
     }
 
+    #[cfg(test)]
     fn delete_query_sql_value(
         &self,
         key: SqlValue,
         concurrency_token: Option<SqlValue>,
-    ) -> Result<DeleteQuery, OrmError> {
+    ) -> Result<DeleteQuery, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let active_tenant = self.active_tenant();
+        self.delete_query_sql_value_with_active_tenant(
+            key,
+            concurrency_token,
+            active_tenant.as_ref(),
+        )
+    }
+
+    fn delete_query_sql_value_with_active_tenant(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+        active_tenant: Option<&ActiveTenant>,
+    ) -> Result<DeleteQuery, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
         let mut query =
             DeleteQuery::from_entity::<E>().filter(self.primary_key_predicate_value(key)?);
+
+        if let Some(predicate) = self.tenant_write_predicate(active_tenant)? {
+            query = query.filter(predicate);
+        }
 
         if let Some(token) = concurrency_token {
             query = query.filter(self.rowversion_predicate_value(token)?);
         }
 
         Ok(query)
-    }
-
-    fn soft_delete_query_sql_value(
-        &self,
-        key: SqlValue,
-        concurrency_token: Option<SqlValue>,
-        soft_delete_provider: Option<&dyn SoftDeleteProvider>,
-        request_values: Option<&SoftDeleteRequestValues>,
-    ) -> Result<UpdateQuery, OrmError>
-    where
-        E: SoftDeleteEntity,
-    {
-        let changes = apply_soft_delete_values::<E>(
-            SoftDeleteOperation::Delete,
-            Vec::new(),
-            soft_delete_provider,
-            request_values,
-        )?;
-
-        if changes.is_empty() {
-            return Err(OrmError::new(
-                "soft_delete delete requires at least one runtime change",
-            ));
-        }
-
-        self.update_query_sql_value(key, changes, concurrency_token)
     }
 
     fn delete_compiled_query_sql_value(
@@ -767,18 +824,102 @@ impl<E: Entity> DbSet<E> {
         request_values: Option<&SoftDeleteRequestValues>,
     ) -> Result<mssql_orm_query::CompiledQuery, OrmError>
     where
-        E: SoftDeleteEntity,
+        E: SoftDeleteEntity + TenantScopedEntity,
+    {
+        let active_tenant = self.active_tenant();
+        self.delete_compiled_query_sql_value_with_active_tenant(
+            key,
+            concurrency_token,
+            soft_delete_provider,
+            request_values,
+            active_tenant.as_ref(),
+        )
+    }
+
+    fn delete_compiled_query_sql_value_with_active_tenant(
+        &self,
+        key: SqlValue,
+        concurrency_token: Option<SqlValue>,
+        soft_delete_provider: Option<&dyn SoftDeleteProvider>,
+        request_values: Option<&SoftDeleteRequestValues>,
+        active_tenant: Option<&ActiveTenant>,
+    ) -> Result<mssql_orm_query::CompiledQuery, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
     {
         if E::soft_delete_policy().is_some() {
-            SqlServerCompiler::compile_update(&self.soft_delete_query_sql_value(
-                key,
-                concurrency_token,
+            let changes = apply_soft_delete_values::<E>(
+                SoftDeleteOperation::Delete,
+                Vec::new(),
                 soft_delete_provider,
                 request_values,
+            )?;
+
+            if changes.is_empty() {
+                return Err(OrmError::new(
+                    "soft_delete delete requires at least one runtime change",
+                ));
+            }
+
+            SqlServerCompiler::compile_update(&self.update_query_sql_value_with_active_tenant(
+                key,
+                changes,
+                concurrency_token,
+                active_tenant,
             )?)
         } else {
-            SqlServerCompiler::compile_delete(&self.delete_query_sql_value(key, concurrency_token)?)
+            SqlServerCompiler::compile_delete(&self.delete_query_sql_value_with_active_tenant(
+                key,
+                concurrency_token,
+                active_tenant,
+            )?)
         }
+    }
+
+    fn tenant_write_predicate(
+        &self,
+        active_tenant: Option<&ActiveTenant>,
+    ) -> Result<Option<Predicate>, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let Some(policy) = E::tenant_policy() else {
+            return Ok(None);
+        };
+
+        if policy.columns.len() != 1 {
+            return Err(OrmError::new(
+                "tenant write filter requires exactly one tenant policy column",
+            ));
+        }
+
+        let tenant_column = &policy.columns[0];
+        let active_tenant = active_tenant.ok_or_else(|| {
+            OrmError::new("tenant-scoped write requires an active tenant in the DbContext")
+        })?;
+
+        if active_tenant.column_name != tenant_column.column_name {
+            return Err(OrmError::new(format!(
+                "active tenant column `{}` does not match entity tenant column `{}`",
+                active_tenant.column_name, tenant_column.column_name
+            )));
+        }
+
+        if !tenant_value_matches_column_type(&active_tenant.value, tenant_column) {
+            return Err(OrmError::new(format!(
+                "active tenant value is not compatible with entity tenant column `{}`",
+                tenant_column.column_name
+            )));
+        }
+
+        Ok(Some(Predicate::eq(
+            Expr::Column(ColumnRef::new(
+                TableRef::for_entity::<E>(),
+                tenant_column.rust_field,
+                tenant_column.column_name,
+            )),
+            Expr::Value(active_tenant.value.clone()),
+        )))
     }
 
     fn primary_key_predicate<K>(&self, key: K) -> Result<Predicate, OrmError>
@@ -873,7 +1014,7 @@ pub fn connect_shared_from_pool(pool: MssqlPool) -> SharedConnection {
 mod tests {
     #[cfg(feature = "pool-bb8")]
     use super::ensure_transactions_supported;
-    use super::{DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
+    use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
         SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
         TenantScopedEntity, Tracked,
@@ -893,6 +1034,7 @@ mod tests {
     #[derive(Debug, Clone)]
     struct TestEntity;
     struct VersionedEntity;
+    struct TenantWriteEntity;
     struct SoftDeleteEntityUnderTest;
     struct SoftDeleteVersionedEntity;
     struct CompositeKeyEntity;
@@ -1100,6 +1242,108 @@ mod tests {
         foreign_keys: &[],
     };
 
+    static TENANT_WRITE_ENTITY_COLUMNS: [ColumnMetadata; 5] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "tenant_id",
+            column_name: "tenant_id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "version",
+            column_name: "version",
+            renamed_from: None,
+            sql_type: SqlServerType::RowVersion,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: true,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "deleted_at",
+            column_name: "deleted_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static TENANT_WRITE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TenantWriteEntity",
+        schema: "dbo",
+        table: "tenant_write_entities",
+        renamed_from: None,
+        columns: &TENANT_WRITE_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
     static SOFT_DELETE_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
         ColumnMetadata {
             rust_field: "id",
@@ -1289,6 +1533,12 @@ mod tests {
         }
     }
 
+    impl Entity for TenantWriteEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &TENANT_WRITE_ENTITY_METADATA
+        }
+    }
+
     impl Entity for SoftDeleteEntityUnderTest {
         fn metadata() -> &'static EntityMetadata {
             &SOFT_DELETE_ENTITY_METADATA
@@ -1316,6 +1566,15 @@ mod tests {
     impl SoftDeleteEntity for VersionedEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
+        }
+    }
+
+    impl SoftDeleteEntity for TenantWriteEntity {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &TENANT_WRITE_ENTITY_COLUMNS[4..5],
+            ))
         }
     }
 
@@ -1352,6 +1611,15 @@ mod tests {
     impl TenantScopedEntity for VersionedEntity {
         fn tenant_policy() -> Option<EntityPolicyMetadata> {
             None
+        }
+    }
+
+    impl TenantScopedEntity for TenantWriteEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "tenant",
+                &TENANT_WRITE_ENTITY_COLUMNS[2..3],
+            ))
         }
     }
 
@@ -1437,6 +1705,16 @@ mod tests {
 
         fn concurrency_token(&self) -> Result<Option<SqlValue>, mssql_orm_core::OrmError> {
             Ok(self.version.clone().map(SqlValue::Bytes))
+        }
+    }
+
+    impl mssql_orm_core::Changeset<TenantWriteEntity> for UpdateVersionedEntity {
+        fn changes(&self) -> Vec<ColumnValue> {
+            <Self as mssql_orm_core::Changeset<VersionedEntity>>::changes(self)
+        }
+
+        fn concurrency_token(&self) -> Result<Option<SqlValue>, mssql_orm_core::OrmError> {
+            <Self as mssql_orm_core::Changeset<VersionedEntity>>::concurrency_token(self)
         }
     }
 
@@ -1715,6 +1993,66 @@ mod tests {
     }
 
     #[test]
+    fn dbset_update_appends_tenant_filter_before_rowversion_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let changes = vec![ColumnValue::new(
+            "name",
+            SqlValue::String("tenant row".to_string()),
+        )];
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let query = dbset
+            .update_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                changes,
+                Some(SqlValue::Bytes(vec![1, 2, 3, 4])),
+                Some(&active_tenant),
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_update(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[tenant_write_entities] SET [name] = @P1 OUTPUT INSERTED.* WHERE ((([dbo].[tenant_write_entities].[id] = @P2) AND ([dbo].[tenant_write_entities].[tenant_id] = @P3)) AND ([dbo].[tenant_write_entities].[version] = @P4))"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("tenant row".to_string()),
+                SqlValue::I64(7),
+                SqlValue::I64(42),
+                SqlValue::Bytes(vec![1, 2, 3, 4]),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_update_fails_closed_without_active_tenant_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+
+        let error = dbset
+            .update_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("blocked".to_string()),
+                )],
+                None,
+                None,
+            )
+            .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("tenant-scoped write requires an active tenant")
+        );
+    }
+
+    #[test]
     fn dbset_delete_builds_delete_query_for_entity_and_primary_key() {
         let dbset = DbSet::<TestEntity>::disconnected();
 
@@ -1786,6 +2124,26 @@ mod tests {
     }
 
     #[test]
+    fn dbset_delete_appends_tenant_filter_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let query = dbset
+            .delete_query_sql_value_with_active_tenant(SqlValue::I64(7), None, Some(&active_tenant))
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_delete(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "DELETE FROM [dbo].[tenant_write_entities] WHERE (([dbo].[tenant_write_entities].[id] = @P1) AND ([dbo].[tenant_write_entities].[tenant_id] = @P2))"
+        );
+        assert_eq!(compiled.params, vec![SqlValue::I64(7), SqlValue::I64(42)]);
+    }
+
+    #[test]
     fn dbset_delete_compiled_query_uses_physical_delete_for_plain_entities() {
         let dbset = DbSet::<TestEntity>::disconnected();
 
@@ -1845,6 +2203,40 @@ mod tests {
             vec![
                 SqlValue::String("2026-04-25T00:00:00".to_string()),
                 SqlValue::I64(7),
+                SqlValue::Bytes(vec![9, 8, 7]),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_soft_delete_appends_tenant_filter_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let provider = TestSoftDeleteProvider;
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let compiled = dbset
+            .delete_compiled_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                Some(SqlValue::Bytes(vec![9, 8, 7])),
+                Some(&provider),
+                None,
+                Some(&active_tenant),
+            )
+            .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[tenant_write_entities] SET [deleted_at] = @P1 OUTPUT INSERTED.* WHERE ((([dbo].[tenant_write_entities].[id] = @P2) AND ([dbo].[tenant_write_entities].[tenant_id] = @P3)) AND ([dbo].[tenant_write_entities].[version] = @P4))"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("2026-04-25T00:00:00".to_string()),
+                SqlValue::I64(7),
+                SqlValue::I64(42),
                 SqlValue::Bytes(vec![9, 8, 7]),
             ]
         );

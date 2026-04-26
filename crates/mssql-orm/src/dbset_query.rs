@@ -127,18 +127,6 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_one(compiled).await
     }
 
-    pub(crate) async fn first_without_tenant_filter(self) -> Result<Option<E>, OrmError>
-    where
-        E: FromRow + Send + SoftDeleteEntity,
-    {
-        let compiled = SqlServerCompiler::compile_select(
-            &self.effective_select_query_without_tenant_filter()?,
-        )?;
-        let shared_connection = self.require_connection()?;
-        let mut connection = shared_connection.lock().await?;
-        connection.fetch_one(compiled).await
-    }
-
     pub async fn count(self) -> Result<i64, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
@@ -174,19 +162,6 @@ impl<E: Entity> DbSetQuery<E> {
         if let Some(predicate) = self.tenant_predicate()? {
             query = query.filter(predicate);
         }
-
-        if let Some(predicate) = self.soft_delete_visibility_predicate()? {
-            query = query.filter(predicate);
-        }
-
-        Ok(query)
-    }
-
-    fn effective_select_query_without_tenant_filter(&self) -> Result<SelectQuery, OrmError>
-    where
-        E: SoftDeleteEntity,
-    {
-        let mut query = self.select_query.clone();
 
         if let Some(predicate) = self.soft_delete_visibility_predicate()? {
             query = query.filter(predicate);
@@ -294,7 +269,7 @@ impl<E: Entity> DbSetQuery<E> {
     }
 }
 
-fn tenant_value_matches_column_type(value: &SqlValue, column: &ColumnMetadata) -> bool {
+pub(crate) fn tenant_value_matches_column_type(value: &SqlValue, column: &ColumnMetadata) -> bool {
     if matches!(value, SqlValue::Null) {
         return false;
     }

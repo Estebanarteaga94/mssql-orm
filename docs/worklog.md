@@ -2,6 +2,45 @@
 
 ## 2026-04-26
 
+### Sesión: filtros tenant obligatorios en escrituras
+
+- Se ejecutó la tarea `Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: update, delete, Active Record save/delete, save_changes() para Modified/Deleted, rowversion y soft_delete`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- En `crates/mssql-orm/src/context.rs`, `DbSet` ahora construye un predicate tenant obligatorio para escrituras tenant-scoped usando el `ActiveTenant` normalizado desde `SharedConnection`.
+- `DbSet::update(...)`, `update_entity_by_sql_value(...)` y `save_tracked_modified(...)` agregan tenant al `UpdateQuery` junto con PK simple y `rowversion` cuando existe.
+- `DbSet::delete(...)`, `delete_by_sql_value(...)`, `delete_tracked_by_sql_value(...)` y `save_tracked_deleted(...)` agregan tenant al `DeleteQuery` físico o al `UpdateQuery` de `soft_delete`, preservando la semántica existente de borrado lógico.
+- Los checks internos de existencia para `ConcurrencyConflict` ahora usan la ruta con visibilidad interna de `soft_delete`, pero siguen aplicando tenant; ya no existe el helper interno que omitía tenant.
+- Active Record `save/delete` exige `TenantScopedEntity` y hereda la protección por delegar a `DbSet`.
+- `#[derive(DbContext)]` agrega `TenantScopedEntity` a los bounds de `save_changes()` para que `Modified`/`Deleted` pasen por las rutas protegidas.
+- Se agregaron pruebas unitarias para SQL compilado de update con tenant + rowversion, fail-closed sin tenant, delete físico con tenant y soft_delete con tenant + rowversion.
+- Se actualizó `docs/tasks.md`, `docs/context.md` y `docs/entity-policies.md`.
+
+### Resultado
+
+- Las escrituras existentes de entidades tenant-scoped fallan cerrado si no hay tenant activo compatible y agregan `tenant = current_tenant` antes de compilar SQL.
+- Los inserts tenant-scoped siguen fuera de alcance y quedan en la siguiente tarea del backlog.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm dbset_ --lib -- --nocapture`
+- `cargo test -p mssql-orm active_record_ --lib -- --nocapture`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs` bajo `pool-bb8`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Garantizar que inserts de entidades con #[orm(tenant = CurrentTenant)] reciban automáticamente la columna tenant desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto`.
+
 ### Sesión: filtros tenant obligatorios en lecturas
 
 - Se ejecutó la tarea `Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: query(), query_with(...), all(), first(), count(), find, Active Record query/find y find_tracked`.

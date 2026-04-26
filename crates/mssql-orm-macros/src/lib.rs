@@ -1149,6 +1149,7 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                     + ::mssql_orm::EntityPersist
                     + ::mssql_orm::EntityPrimaryKey
                     + ::mssql_orm::SoftDeleteEntity
+                    + ::mssql_orm::TenantScopedEntity
                     + ::mssql_orm::core::FromRow
                     + ::core::marker::Send
             })

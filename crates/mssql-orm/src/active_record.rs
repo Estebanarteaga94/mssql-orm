@@ -44,7 +44,12 @@ pub trait ActiveRecord: Entity + Sized {
     fn delete<C>(&self, db: &C) -> impl Future<Output = Result<bool, OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
-        Self: EntityPrimaryKey + EntityPersist + FromRow + Send + SoftDeleteEntity,
+        Self: EntityPrimaryKey
+            + EntityPersist
+            + FromRow
+            + Send
+            + SoftDeleteEntity
+            + TenantScopedEntity,
     {
         let key = <Self as EntityPrimaryKey>::primary_key_value(self);
         let concurrency_token = <Self as EntityPersist>::concurrency_token(self);
@@ -59,7 +64,7 @@ pub trait ActiveRecord: Entity + Sized {
     fn save<C>(&mut self, db: &C) -> impl Future<Output = Result<(), OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
-        Self: EntityPersist + FromRow + Send + SoftDeleteEntity,
+        Self: EntityPersist + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         async move {
             match <Self as EntityPersist>::persist_mode(self)? {
