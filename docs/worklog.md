@@ -2,6 +2,37 @@
 
 ## 2026-04-26
 
+### Sesión: validación documental final
+
+- Se ejecutó la tarea `Documentation prompt: Validate documentation consistency with repository state using targeted rg checks plus cargo fmt --all --check and cargo check --workspace`.
+- Se movió la tarea a `En Progreso` antes de validar y a `Completadas` después de cerrar los checks.
+- Se revisaron claims sensibles sobre `Pending verification`, `AuditProvider`, navigation properties, soporte multibase, `migration.rs`, aliases, agregaciones, primary keys compuestas, placeholders y features diferidas.
+- Se verificó la surface documentada de `raw(...)`, `raw_exec(...)`, `all_as(...)`, `first_as(...)`, tenant runtime, `soft_delete`, health checks, pool, snapshots y migraciones contra rutas de código y pruebas.
+- Se corrigió `docs/context.md`, que todavía decía que faltaba revisar enlaces internos aunque esa tarea ya estaba cerrada.
+- Se corrigió `docs/entity-policies.md` para reflejar el estado actual de `soft_delete`: la visibilidad de lectura ya está implementada, el contrato auxiliar ya existe y el provider viaja por la infraestructura runtime pública de `mssql-orm`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- El bloque documental del `prompt` queda cerrado: no quedan tareas pendientes ni en progreso en `docs/tasks.md`.
+
+### Validación
+
+- Link check local: `checked 26 markdown files; all local links resolve`.
+- Búsquedas `rg` dirigidas para detectar claims obsoletos sobre enlaces internos y `soft_delete`.
+- Búsquedas `rg` dirigidas sobre features diferidas y surface pública documentada.
+- Check de nombres `kebab-case` en `docs/`, preservando las excepciones históricas `docs/ai/README.md` y `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Seleccionar una nueva tarea explícita antes de continuar; el backlog documental actual queda vacío.
+
 ### Sesión: enlaces internos de documentación
 
 - Se ejecutó la tarea `Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related docs guides`.

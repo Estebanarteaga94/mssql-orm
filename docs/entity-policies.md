@@ -555,7 +555,7 @@ Estado implementado actual:
 - la validacion de duplicados, nullability, `updatable` y columnas runtime requeridas ya ocurre antes de compilar SQL
 - `SharedConnection` ya puede transportar `SoftDeleteProvider` y `SoftDeleteRequestValues`, y el derive `DbContext` ya expone `with_soft_delete_provider(...)`, `with_soft_delete_request_values(...)` y `clear_soft_delete_request_values()`
 - `db.transaction(...)` conserva ese wiring porque el contexto transaccional nace desde el mismo `SharedConnection`
-- la limitacion pendiente ya no es el provider sino la visibilidad de lectura: `query()` y `find()` todavia no excluyen filas soft-deleted por defecto
+- la visibilidad de lectura tambien esta implementada: `query()` y `find()` excluyen filas soft-deleted por defecto, y `DbSetQuery<E>` expone `with_deleted()` / `only_deleted()` para cambiar ese modo de forma explicita sobre la entidad raiz
 
 ### Shape conceptual del provider
 
@@ -608,13 +608,13 @@ Razon:
 - una entidad podria tener una columna `deleted_at` no asociada a `soft_delete`
 - el usuario puede renombrar columnas via `#[orm(column = "...")]`
 
-Por eso, una implementacion posterior necesitara un contrato runtime auxiliar generado por `#[orm(soft_delete = SoftDelete)]` que exponga que columnas de la entidad pertenecen a la policy de borrado logico.
+Por eso, `#[orm(soft_delete = SoftDelete)]` ya genera un contrato auxiliar que expone que columnas de la entidad pertenecen a la policy de borrado logico.
 
 Ese contrato auxiliar no debe alterar snapshots, diff ni DDL. Solo debe permitir que la crate publica sepa que columnas puede completar en runtime.
 
 ### Integracion con contexto y transacciones
 
-El provider de `soft_delete` debe colgar de `DbContext` o de la infraestructura publica de runtime en `mssql-orm`, no de `SharedConnection`, `MssqlConnection` ni `mssql-orm-core`.
+El provider de `soft_delete` cuelga de la infraestructura publica de runtime en `mssql-orm` y viaja en `SharedConnectionRuntime`, no en `MssqlConnection` ni en `mssql-orm-core`.
 
 Debe heredar el mismo principio ya aceptado para `AuditProvider`:
 
@@ -624,7 +624,7 @@ Debe heredar el mismo principio ya aceptado para `AuditProvider`:
 
 ### Consecuencia de diseno
 
-La implementacion futura de `soft_delete` no debe empezar por “armar un `UpdateQuery` con literales” dentro de `delete_by_sql_value(...)`. Primero necesita este contrato runtime para producir assignments consistentes y compartidos.
+La implementacion actual de `soft_delete` evita armar un `UpdateQuery` con literales ad hoc dentro de cada caller: usa el contrato runtime para producir assignments consistentes y compartidos antes de compilar SQL.
 
 Sin ese contrato, cualquier implementacion de `deleted_at`, `deleted_by` o `is_deleted` quedaria duplicada entre:
 
