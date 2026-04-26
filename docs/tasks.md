@@ -1,6 +1,12 @@
 # Tasks
 
 ## Pendientes
+- [ ] Documentation prompt: Audit the repository before writing docs by identifying existing crates, real public APIs, implemented features, incomplete features and planned-only features
+- [ ] Documentation prompt: Create `docs/core-concepts.md` in English explaining the ORM mental model, entities, `DbContext`, metadata, query AST, SQL Server compilation, Tiberius execution and the `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity` flow
+- [ ] Documentation prompt: Review existing public docs and mark unclear or unverifiable claims as `Pending verification` instead of presenting them as implemented behavior
+- [ ] Documentation prompt: Update `README.md` as a brief navigation document linking to `docs/core-concepts.md` without duplicating detailed docs
+- [ ] Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related `docs/` guides
+- [ ] Documentation prompt: Validate documentation consistency with repository state using targeted `rg` checks plus `cargo fmt --all --check` and `cargo check --workspace`
 
 ## En Progreso
 

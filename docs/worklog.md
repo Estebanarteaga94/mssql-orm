@@ -2,6 +2,31 @@
 
 ## 2026-04-26
 
+### Sesión: ajuste de backlog desde prompt documental
+
+- Se revisó el archivo `prompt` solicitado por el usuario.
+- Se confirmó que el prompt pide fortalecer documentación del repositorio sin inventar funcionalidades, mantener la documentación en inglés, usar nombres `kebab-case`, revisar APIs reales antes de documentar y crear/mejorar `docs/core-concepts.md`.
+- Se agregó a `docs/tasks.md` una fase documental con tareas pendientes ordenadas: auditoría del repositorio, creación de `docs/core-concepts.md`, revisión de claims no verificados, actualización breve del README, enlaces internos y validación final.
+- Se actualizó `docs/context.md` para reflejar que el próximo foco operativo es ejecutar la fase documental definida por `prompt`.
+
+### Resultado
+
+- `docs/tasks.md` vuelve a tener backlog pendiente y accionable, alineado con el prompt documental.
+
+### Validación
+
+- Revisión directa de `prompt`.
+- Revisión de `docs/tasks.md`.
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- El archivo `prompt` ya aparece modificado en el working tree y se preservó sin cambios.
+
+### Próximo paso recomendado
+
+- Ejecutar la primera tarea pendiente: auditar crates, APIs públicas reales y estado implementado/incompleto/planificado antes de escribir documentación nueva.
+
 ### Sesión: documentación pública de proyecciones SQL reales
 
 - Se ejecutó la tarea `Etapa 18: Documentar la diferencia entre map en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones`.
