@@ -11,6 +11,7 @@
 - `CHANGELOG.md` ahora lista `SoftDeleteFields`/`soft_delete` y `TenantContext`/`tenant` como Entity Policies implementadas, con límites explícitos.
 - Se corrigió la sección de exclusiones para mantener diferidos solo `AuditProvider`, `timestamps`, autollenado runtime de auditoría y filtros automáticos sobre entidades unidas manualmente.
 - Se dejó explícito que raw SQL no aplica automáticamente filtros ORM de `tenant` ni `soft_delete`.
+- Se creó el commit `43e277a docs: sync changelog with current release surface`.
 
 ### Resultado
 
@@ -22,6 +23,8 @@
 - Búsqueda negativa en `CHANGELOG.md` para `No hay proyecciones parciales` y para la forma obsoleta de listar `soft_delete` junto a `tenant` como features diferidas: sin coincidencias.
 - `cargo fmt --all --check`
 - `cargo check --workspace`
+- `git diff --check`
+- `git status --short` sin cambios pendientes tras el commit.
 
 ### Bloqueos
 
