@@ -182,6 +182,54 @@ fn snapshots_audit_column_migration_sql() {
 }
 
 #[test]
+fn snapshots_soft_delete_column_migration_sql() {
+    let operations = vec![
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "soft_deleted_entities",
+            ColumnSnapshot::new(
+                "deleted_at",
+                SqlServerType::DateTime2,
+                true,
+                false,
+                None,
+                None,
+                None,
+                false,
+                false,
+                true,
+                None,
+                None,
+                None,
+            ),
+        )),
+        MigrationOperation::AddColumn(AddColumn::new(
+            "audit",
+            "soft_deleted_entities",
+            ColumnSnapshot::new(
+                "deleted_by",
+                SqlServerType::NVarChar,
+                true,
+                false,
+                None,
+                None,
+                None,
+                false,
+                false,
+                true,
+                Some(120),
+                None,
+                None,
+            ),
+        )),
+    ];
+
+    let sql = SqlServerCompiler::compile_migration_operations(&operations).unwrap();
+
+    assert_snapshot!("soft_delete_column_migration_sql", render_statements(&sql));
+}
+
+#[test]
 fn snapshots_rename_column_migration_sql() {
     let operations = vec![MigrationOperation::RenameColumn(RenameColumn::new(
         "sales",

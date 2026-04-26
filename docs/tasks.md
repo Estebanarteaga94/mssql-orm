@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Integrar `soft_delete` en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema
 - [ ] Etapa 16+: Cubrir `soft_delete` con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, `ConcurrencyConflict` y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente
 - [ ] Etapa 16+: Evaluar `tenant = TenantScope` como feature de seguridad con filtros obligatorios, inserción automática de `tenant_id` y validación de que no existan rutas de query que omitan el tenant por accidente
 - [ ] Etapa 16+: Diseñar `tenant = TenantScope` para que toda query, `find`, `update`, `delete`, Active Record y `save_changes()` sobre entidades tenant-scoped agregue automáticamente el filtro `tenant_id = current_tenant` cuando exista un tenant activo en el contexto
@@ -9,7 +8,10 @@
 - [ ] Etapa 16+: Garantizar que inserts de entidades con `tenant = TenantScope` reciban automáticamente `tenant_id` desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
 
+## En Progreso
+
 ## Completadas
+- [x] Etapa 16+: Integrar `soft_delete` en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema
 - [x] Etapa 16+: Agregar rutas internas sin filtro implícito de `soft_delete` para comprobaciones de existencia y `ConcurrencyConflict` sin exponer bypass público accidental
 - [x] Etapa 16+: Implementar visibilidad de lectura para `soft_delete` en `DbSetQuery` con modo por defecto `ActiveOnly` y APIs públicas `with_deleted()` / `only_deleted()`
 - [x] Etapa 16+: Integrar `SoftDeleteProvider` y/o `SoftDeleteRequestValues` al `DbContext`/`DbSet` para que `delete`, Active Record y change tracking puedan poblar columnas como `deleted_at`, `deleted_by` o `is_deleted` sin wiring manual interno

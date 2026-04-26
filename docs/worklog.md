@@ -2,6 +2,39 @@
 
 ## 2026-04-25
 
+### Sesión: `soft_delete` en snapshots, diff y DDL
+
+- Se ejecutó la subtarea `Etapa 16+: Integrar soft_delete en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se confirmó que el plan maestro no está en la raíz con el nombre solicitado; la ruta operativa sigue siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- La implementación no requirió lógica nueva de migraciones: `#[orm(soft_delete = SoftDelete)]` ya expande columnas de la policy como `ColumnMetadata` ordinarias, igual que `audit`.
+- Se agregó cobertura en `crates/mssql-orm/tests/stage16_entity_policies.rs` para confirmar que `ModelSnapshot::from_entities(...)` incluye `deleted_at` y `deleted_by`, preserva flags de persistencia, tipo, longitud y roundtrip JSON.
+- Se agregó cobertura en `crates/mssql-orm/tests/stage16_audit_migrations.rs` para confirmar que una entidad nueva con `soft_delete` genera `CREATE TABLE` con columnas de borrado lógico, que activar la policy sobre una tabla existente emite `AddColumn` y que quitarla emite `DropColumn`.
+- Se agregó snapshot SQL en `crates/mssql-orm-sqlserver/tests/migration_snapshots.rs` y `crates/mssql-orm-sqlserver/tests/snapshots/migration_snapshots__soft_delete_column_migration_sql.snap` para fijar el DDL SQL Server de `ALTER TABLE ... ADD` sobre columnas `soft_delete`.
+- Se actualizó `docs/context.md` con el estado operativo: `soft_delete` ya queda cubierto en metadata, snapshots, diff y DDL sin pipeline de esquema especial.
+
+### Resultado
+
+- `soft_delete` queda integrado y validado como columnas ordinarias de schema. La tarea amplia pendiente pasa a ser cobertura integral de runtime/CRUD/Active Record/tracking/ConcurrencyConflict/migraciones para asegurar que ninguna ruta siga haciendo borrado físico por accidente.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test stage16_entity_policies model_snapshot_includes_soft_delete_columns_without_special_pipeline -- --nocapture`
+- `cargo test -p mssql-orm --test stage16_audit_migrations soft_delete -- --nocapture`
+- `cargo test -p mssql-orm-sqlserver --test migration_snapshots snapshots_soft_delete_column_migration_sql -- --nocapture`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- `cargo-insta` no está instalado en este entorno; el snapshot nuevo se revisó y aceptó manualmente.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Cubrir soft_delete con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, ConcurrencyConflict y migraciones para evitar que alguna ruta siga haciendo borrado físico por accidente`.
+
 ### Sesión: revisión de cierre de rutas internas para `soft_delete`
 
 - Se revisó si la subtarea `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental` estaba realmente completada.

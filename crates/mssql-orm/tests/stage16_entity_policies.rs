@@ -432,6 +432,50 @@ fn model_snapshot_includes_audit_columns_without_special_pipeline() {
     );
 }
 
+#[test]
+fn model_snapshot_includes_soft_delete_columns_without_special_pipeline() {
+    let snapshot = ModelSnapshot::from_entities(&[SoftDeletedEntity::metadata()]);
+    let schema = snapshot
+        .schema("audit")
+        .expect("audit schema should be present");
+    let table = schema
+        .table("soft_deleted_entities")
+        .expect("soft deleted table should be present");
+    let column_names = table
+        .columns
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(column_names, vec!["id", "name", "deleted_at", "deleted_by"]);
+    assert_eq!(table.primary_key_columns, vec!["id"]);
+
+    let deleted_at = table
+        .column("deleted_at")
+        .expect("soft delete column should be present in snapshot");
+    assert_eq!(deleted_at.sql_type, SqlServerType::DateTime2);
+    assert!(deleted_at.nullable);
+    assert!(!deleted_at.insertable);
+    assert!(deleted_at.updatable);
+
+    let deleted_by = table
+        .column("deleted_by")
+        .expect("soft delete column should be present in snapshot");
+    assert_eq!(deleted_by.sql_type, SqlServerType::NVarChar);
+    assert_eq!(deleted_by.max_length, Some(120));
+    assert!(deleted_by.nullable);
+
+    let json = snapshot
+        .to_json_pretty()
+        .expect("soft delete snapshot should serialize");
+    assert!(json.contains("\"deleted_at\""));
+    assert!(json.contains("\"deleted_by\""));
+
+    let roundtripped =
+        ModelSnapshot::from_json(&json).expect("soft delete snapshot should deserialize");
+    assert_eq!(roundtripped, snapshot);
+}
+
 fn column_names(values: &[ColumnValue]) -> Vec<&'static str> {
     values.iter().map(|value| value.column_name).collect()
 }
