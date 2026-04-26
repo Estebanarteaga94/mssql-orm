@@ -148,7 +148,7 @@ fn insertable_extracts_persistible_values_in_field_order() {
         values,
         vec![
             ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),
-            ColumnValue::new("phone", SqlValue::Null),
+            ColumnValue::new("phone", SqlValue::TypedNull(SqlServerType::NVarChar)),
             ColumnValue::new("active", SqlValue::Bool(true)),
         ]
     );
@@ -167,7 +167,7 @@ fn changeset_extracts_only_present_changes_and_preserves_nulls() {
     assert_eq!(
         changes,
         vec![
-            ColumnValue::new("phone", SqlValue::Null),
+            ColumnValue::new("phone", SqlValue::TypedNull(SqlServerType::NVarChar)),
             ColumnValue::new("active", SqlValue::Bool(false)),
         ]
     );

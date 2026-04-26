@@ -336,6 +336,7 @@ fn render_snapshot(compiled: &mssql_orm_query::CompiledQuery) -> String {
 fn render_sql_value(value: &SqlValue) -> String {
     match value {
         SqlValue::Null => "Null".to_string(),
+        SqlValue::TypedNull(sql_type) => format!("TypedNull({sql_type:?})"),
         SqlValue::Bool(value) => format!("Bool({value})"),
         SqlValue::I32(value) => format!("I32({value})"),
         SqlValue::I64(value) => format!("I64({value})"),

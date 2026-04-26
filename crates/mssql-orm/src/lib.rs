@@ -627,7 +627,7 @@ mod tests {
             values,
             vec![
                 ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),
-                ColumnValue::new("display_name", SqlValue::Null),
+                ColumnValue::new("display_name", SqlValue::TypedNull(SqlServerType::NVarChar)),
                 ColumnValue::new("created_by", SqlValue::String("system".to_string())),
             ]
         );
@@ -650,7 +650,7 @@ mod tests {
                     "email",
                     SqlValue::String("ana.maria@example.com".to_string())
                 ),
-                ColumnValue::new("display_name", SqlValue::Null),
+                ColumnValue::new("display_name", SqlValue::TypedNull(SqlServerType::NVarChar)),
             ]
         );
     }

@@ -130,7 +130,7 @@ fn validate_soft_delete_column_value(
         )));
     }
 
-    if matches!(value, SqlValue::Null) && !column.nullable {
+    if value.is_null() && !column.nullable {
         return Err(OrmError::new(format!(
             "soft_delete column `{}` is not nullable",
             column.column_name

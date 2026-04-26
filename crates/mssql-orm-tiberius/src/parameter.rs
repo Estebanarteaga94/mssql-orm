@@ -1,5 +1,5 @@
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
-use mssql_orm_core::{OrmError, SqlValue};
+use mssql_orm_core::{OrmError, SqlServerType, SqlValue};
 use mssql_orm_query::CompiledQuery;
 use std::collections::BTreeSet;
 use tiberius::numeric::Numeric;
@@ -8,6 +8,7 @@ use tiberius::{Client, Query, QueryStream};
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BoundSqlValue {
     Null,
+    TypedNull(SqlServerType),
     Bool(bool),
     I32(i32),
     I64(i64),
@@ -104,6 +105,7 @@ impl From<SqlValue> for BoundSqlValue {
     fn from(value: SqlValue) -> Self {
         match value {
             SqlValue::Null => Self::Null,
+            SqlValue::TypedNull(sql_type) => Self::TypedNull(sql_type),
             SqlValue::Bool(value) => Self::Bool(value),
             SqlValue::I32(value) => Self::I32(value),
             SqlValue::I64(value) => Self::I64(value),
@@ -121,6 +123,7 @@ impl From<SqlValue> for BoundSqlValue {
 fn bind_sql_value<'a>(query: &mut Query<'a>, value: &'a BoundSqlValue) {
     match value {
         BoundSqlValue::Null => query.bind(Option::<String>::None),
+        BoundSqlValue::TypedNull(sql_type) => bind_typed_null(query, *sql_type),
         BoundSqlValue::Bool(value) => query.bind(*value),
         BoundSqlValue::I32(value) => query.bind(*value),
         BoundSqlValue::I64(value) => query.bind(*value),
@@ -134,6 +137,25 @@ fn bind_sql_value<'a>(query: &mut Query<'a>, value: &'a BoundSqlValue) {
         )),
         BoundSqlValue::Date(value) => query.bind(*value),
         BoundSqlValue::DateTime(value) => query.bind(*value),
+    }
+}
+
+fn bind_typed_null<'a>(query: &mut Query<'a>, sql_type: SqlServerType) {
+    match sql_type {
+        SqlServerType::BigInt => query.bind(Option::<i64>::None),
+        SqlServerType::Int => query.bind(Option::<i32>::None),
+        SqlServerType::SmallInt => query.bind(Option::<i16>::None),
+        SqlServerType::TinyInt => query.bind(Option::<u8>::None),
+        SqlServerType::Bit => query.bind(Option::<bool>::None),
+        SqlServerType::UniqueIdentifier => query.bind(Option::<uuid::Uuid>::None),
+        SqlServerType::Date => query.bind(Option::<chrono::NaiveDate>::None),
+        SqlServerType::DateTime2 => query.bind(Option::<chrono::NaiveDateTime>::None),
+        SqlServerType::Decimal => query.bind(Option::<Numeric>::None),
+        SqlServerType::Float => query.bind(Option::<f64>::None),
+        SqlServerType::Money => query.bind(Option::<f64>::None),
+        SqlServerType::NVarChar => query.bind(Option::<String>::None),
+        SqlServerType::VarBinary | SqlServerType::RowVersion => query.bind(Option::<Vec<u8>>::None),
+        SqlServerType::Custom(_) => query.bind(Option::<String>::None),
     }
 }
 
@@ -185,7 +207,7 @@ fn sql_parameter_plan(sql: &str) -> Result<usize, OrmError> {
 mod tests {
     use super::{BoundSqlValue, PreparedQuery};
     use chrono::NaiveDate;
-    use mssql_orm_core::SqlValue;
+    use mssql_orm_core::{SqlServerType, SqlValue};
     use mssql_orm_query::CompiledQuery;
     use rust_decimal::Decimal;
     use uuid::Uuid;
@@ -237,6 +259,25 @@ mod tests {
                         .and_hms_opt(10, 20, 30)
                         .unwrap(),
                 ),
+            ]
+        );
+    }
+
+    #[test]
+    fn prepares_typed_null_preserving_sql_type() {
+        let prepared = PreparedQuery::from_compiled(CompiledQuery::new(
+            "SELECT @P1, @P2",
+            vec![
+                SqlValue::TypedNull(SqlServerType::BigInt),
+                SqlValue::TypedNull(SqlServerType::DateTime2),
+            ],
+        ));
+
+        assert_eq!(
+            prepared.params,
+            vec![
+                BoundSqlValue::TypedNull(SqlServerType::BigInt),
+                BoundSqlValue::TypedNull(SqlServerType::DateTime2),
             ]
         );
     }

@@ -5,6 +5,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Tipar los valores nulos generados desde `Option<T>` para que el binding Tiberius no trate todos los `NULL` como `nvarchar`
 - [x] Documentation prompt: Validate documentation consistency with repository state using targeted `rg` checks plus `cargo fmt --all --check` and `cargo check --workspace`
 - [x] Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related `docs/` guides
 - [x] Documentation prompt: Update `README.md` as a brief navigation document linking to `docs/core-concepts.md` without duplicating detailed docs

@@ -28,6 +28,10 @@ La revisión de claims públicos ya corrigió documentos que seguían presentand
 
 `README.md` ahora funciona como documento breve de navegación: enlaza `docs/core-concepts.md`, `docs/repository-audit.md`, guías públicas principales, ejemplos, límites actuales y documentos operativos sin duplicar el detalle extenso de cada guía.
 
+### Estado vigente de valores nulos tipados
+
+`SqlValue` ahora distingue `Null` no tipado de `TypedNull(SqlServerType)`. La ruta de persistencia derivada desde `Option<T>::None` usa `SqlTypeMapping` para emitir `TypedNull(T::SQL_SERVER_TYPE)`, de modo que `Insertable`, `Changeset` y cualquier valor producido por el contrato core conservan el tipo SQL Server esperado hasta el binding Tiberius. `mssql-orm-tiberius` liga esos valores como `Option::<tipo>::None`, incluyendo tipos base, `Decimal` mediante `Numeric`, fechas, `Uuid`, binarios y `rowversion` como `varbinary`. `SqlValue::Null` se mantiene como escape hatch explicito no tipado, especialmente para raw SQL manual, y conserva el fallback `Option::<String>::None`.
+
 ### Estado vigente de `tenant` runtime
 
 El plan maestro solicitado en algunas sesiones puede aparecer como `plan_orm_sqlserver_tiberius_code_first.md` en la raiz, pero la ruta real vigente del repositorio es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
@@ -266,7 +270,7 @@ La base code-first de tenant opt-in ya existe en codigo: la crate publica expone
 - `mssql-orm-tiberius` ahora también expone `MssqlTransaction<'a, S>` y `MssqlConnection::begin_transaction()`, iniciando transacciones con `BEGIN TRANSACTION` y cerrándolas explícitamente mediante `commit()` o `rollback()`.
 - La capa de ejecución del adaptador ahora comparte helpers internos entre conexión normal y transacción, por lo que `MssqlTransaction` también implementa `Executor` y puede reutilizar `execute`, `query_raw`, `fetch_one` y `fetch_all` sin duplicar binding ni mapeo.
 - El adaptador ya prepara `CompiledQuery`, valida conteo de placeholders y realiza binding real de `SqlValue` hacia `tiberius::Query`.
-- El binding de `Decimal` ya se resuelve a `tiberius::numeric::Numeric`; el caso `SqlValue::Null` sigue siendo provisional y hoy se envía como `Option::<String>::None`.
+- El binding de `Decimal` ya se resuelve a `tiberius::numeric::Numeric`. Los valores `Option<T>::None` generados mediante `SqlTypeMapping` ahora preservan tipo con `SqlValue::TypedNull(T::SQL_SERVER_TYPE)`, y Tiberius los liga como `Option::<tipo>::None`; `SqlValue::Null` queda como escape hatch explicito no tipado y conserva el fallback `Option::<String>::None`.
 - `mssql-orm-tiberius` ya expone `MssqlRow<'a>` como wrapper sobre `tiberius::Row`, implementa el contrato neutral `Row` del core y convierte tipos soportados de SQL Server a `SqlValue`.
 - El adaptador ya encapsula errores de Tiberius en `OrmError` mediante una capa interna de mapeo contextual, incluyendo lectura de filas, detección básica de deadlock y detalle del error original cuando falla la ejecución de una query.
 - `MssqlConnection<S>` ya implementa `fetch_one<T: FromRow>` y `fetch_all<T: FromRow>` apoyándose en `query_raw`, `MssqlRow` y el contrato `FromRow` del core.
@@ -394,7 +398,7 @@ La base code-first de tenant opt-in ya existe en codigo: la crate publica expone
 
 ## Riesgos Inmediatos
 
-- `SqlValue::Null` sigue siendo no tipado en el core, por lo que su binding actual en Tiberius es provisional y conviene revisarlo cuando exista suficiente contexto de tipo.
+- `SqlValue::Null` sigue existiendo como escape hatch no tipado para raw SQL o valores construidos manualmente; para persistencia derivada desde `Option<T>`, el camino preferido ya es `SqlValue::TypedNull(T::SQL_SERVER_TYPE)`.
 - La implementación actual de `db.transaction(...)` reutiliza la misma `SharedConnection`; por tanto, durante el closure debe asumirse uso lógico exclusivo de ese contexto/conexión y todavía no existe aislamiento adicional frente a operaciones concurrentes sobre clones del mismo contexto.
 - `db.transaction(...)` sobre `SharedConnection::Pool` queda bloqueado explícitamente en la crate pública: antes de emitir `BEGIN TRANSACTION`, `DbContext::transaction(...)` detecta la conexión pooled y devuelve `OrmError`. La corrección futura, si se quiere soportar esta combinación, debe pinnear una conexión física del pool durante todo el closure transaccional.
 - La surface de producción de Etapa 14 ya no es solo contractual: `connect_timeout`, `query_timeout`, `tracing`, `slow_query`, `health_check`, `retry`, `pool` y el wiring de `DbContext` desde pool ya alteran runtime del adaptador Tiberius y de la crate pública.

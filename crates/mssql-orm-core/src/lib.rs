@@ -124,6 +124,7 @@ pub trait SqlTypeMapping: Sized {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SqlValue {
     Null,
+    TypedNull(SqlServerType),
     Bool(bool),
     I32(i32),
     I64(i64),
@@ -134,6 +135,12 @@ pub enum SqlValue {
     Decimal(Decimal),
     Date(NaiveDate),
     DateTime(NaiveDateTime),
+}
+
+impl SqlValue {
+    pub const fn is_null(&self) -> bool {
+        matches!(self, Self::Null | Self::TypedNull(_))
+    }
 }
 
 /// Column/value pair produced by insert and update models.
@@ -405,12 +412,13 @@ where
     const DEFAULT_SCALE: Option<u8> = T::DEFAULT_SCALE;
 
     fn to_sql_value(self) -> SqlValue {
-        self.map(T::to_sql_value).unwrap_or(SqlValue::Null)
+        self.map(T::to_sql_value)
+            .unwrap_or(SqlValue::TypedNull(T::SQL_SERVER_TYPE))
     }
 
     fn from_sql_value(value: SqlValue) -> Result<Self, OrmError> {
         match value {
-            SqlValue::Null => Ok(None),
+            SqlValue::Null | SqlValue::TypedNull(_) => Ok(None),
             other => T::from_sql_value(other).map(Some),
         }
     }
@@ -1088,7 +1096,15 @@ mod tests {
             NaiveDateTime::from_sql_value(datetime.to_sql_value()),
             Ok(datetime)
         );
+        assert_eq!(
+            Option::<i64>::None.to_sql_value(),
+            SqlValue::TypedNull(SqlServerType::BigInt)
+        );
         assert_eq!(Option::<String>::from_sql_value(SqlValue::Null), Ok(None));
+        assert_eq!(
+            Option::<i64>::from_sql_value(SqlValue::TypedNull(SqlServerType::BigInt)),
+            Ok(None)
+        );
         assert_eq!(
             Option::<String>::from_sql_value(SqlValue::String("ana".to_string())),
             Ok(Some("ana".to_string()))

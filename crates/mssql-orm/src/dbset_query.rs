@@ -303,7 +303,7 @@ impl<E: Entity> DbSetQuery<E> {
 }
 
 pub(crate) fn tenant_value_matches_column_type(value: &SqlValue, column: &ColumnMetadata) -> bool {
-    if matches!(value, SqlValue::Null) {
+    if value.is_null() {
         return false;
     }
 

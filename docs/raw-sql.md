@@ -183,6 +183,7 @@ Reglas obligatorias:
 - `@P1` repetido es valido y reutiliza el primer valor;
 - `@P0`, saltos como `@P1` + `@P3`, parametros faltantes y parametros extra fallan antes de ejecutar;
 - `SqlValue::Null` y `Option::<T>::None` representan `NULL`;
+- si necesitas forzar un tipo SQL Server concreto para un `NULL` raw, usa `SqlValue::TypedNull(SqlServerType::...)`;
 - los tipos soportados son los que implementan `RawParam`, incluyendo los tipos base mapeados por `SqlTypeMapping`, `&str`, `SqlValue` y `Option<T>`.
 
 Ejemplo valido con placeholder repetido:

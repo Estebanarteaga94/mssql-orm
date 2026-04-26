@@ -2,6 +2,41 @@
 
 ## 2026-04-26
 
+### Sesión: `NULL` tipado para `Option<T>`
+
+- Se agregó y ejecutó la tarea `Operativo: Tipar los valores nulos generados desde Option<T> para que el binding Tiberius no trate todos los NULL como nvarchar`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `mssql-orm-core::SqlValue` ahora incluye `TypedNull(SqlServerType)` y un helper `is_null()`.
+- `SqlTypeMapping for Option<T>` ahora produce `SqlValue::TypedNull(T::SQL_SERVER_TYPE)` para `None`, preservando el tipo SQL Server en valores persistibles generados por `Insertable`, `Changeset` y otros contratos core.
+- `mssql-orm-tiberius` ahora convierte `TypedNull` a `Option::<tipo>::None` según `SqlServerType`; `RowVersion` se liga como `varbinary` y `Custom(_)` conserva fallback no tipado/string por falta de semántica driver específica.
+- `SqlValue::Null` se preserva como escape hatch explícito no tipado, principalmente para raw SQL manual.
+- Se actualizaron validaciones de nullability en `soft_delete` y filtros tenant para tratar `Null` y `TypedNull(_)` como nulos.
+- Se actualizaron tests de mapping, snapshots/renderizado de parámetros y documentación viva.
+
+### Resultado
+
+- Los `NULL` derivados de `Option<T>` ya no se ligan todos como `nvarchar`; conservan el tipo SQL Server del mapping de Rust.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm-core sql_type_mapping_roundtrips_supported_values -- --nocapture`
+- `cargo test -p mssql-orm-tiberius parameter::tests -- --nocapture`
+- `cargo test -p mssql-orm --test stage2_mapping -- --nocapture`
+- `cargo test -p mssql-orm --test stage6_public_query_builder_snapshots -- --nocapture`
+- `cargo test -p mssql-orm-sqlserver --test compiler_snapshots -- --nocapture`
+- `cargo test -p mssql-orm --test stage18_public_projections public_projection_sql_preserves_aliases_and_parameter_order -- --nocapture`
+- `cargo test --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Seleccionar una nueva tarea explícita desde riesgos restantes o roadmap; el backlog vuelve a quedar vacío.
+
 ### Sesión: validación documental final
 
 - Se ejecutó la tarea `Documentation prompt: Validate documentation consistency with repository state using targeted rg checks plus cargo fmt --all --check and cargo check --workspace`.
