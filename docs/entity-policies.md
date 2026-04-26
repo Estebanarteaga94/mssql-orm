@@ -960,6 +960,83 @@ El comportamiento esperado para lecturas y escrituras debe agregar siempre el pr
 
 No debe existir un bypass publico accidental equivalente a “ignorar tenant”. Cualquier bypass interno para comprobaciones de existencia o `ConcurrencyConflict` debe seguir aplicando tenant si la operacion es tenant-scoped; a diferencia de `soft_delete`, el tenant no representa visibilidad de fila sino frontera de seguridad. Una comprobacion interna que ignore tenant podria convertir una ausencia legitima en `ConcurrencyConflict` o filtrar informacion entre tenants.
 
+## Diseno de Filtros Obligatorios de `tenant = TenantScope`
+
+La integracion de filtros de tenant debe hacerse como politica runtime de seguridad en la crate publica `mssql-orm`, no en `mssql-orm-query`, `mssql-orm-sqlserver` ni `mssql-orm-tiberius`.
+
+Contrato de entidad esperado:
+
+- `#[derive(Entity)]` debe implementar un contrato auxiliar similar a `SoftDeleteEntity`, por ejemplo `TenantScopedEntity`.
+- Ese contrato debe devolver `None` para entidades sin tenant y `Some(EntityPolicyMetadata)` para entidades que declaren `#[orm(tenant = TenantScope)]`.
+- La policy debe exponer exactamente la columna que representa el tenant activo. El primer corte debe exigir una sola columna de tenant para no introducir semantica ambigua en filtros automaticos.
+- El tipo runtime del tenant activo debe viajar como `SqlValue` validado contra la metadata de esa columna antes de construir predicates o valores persistibles.
+
+Punto unico de construccion del filtro:
+
+```rust
+fn tenant_predicate<E>(
+    connection: &SharedConnection,
+) -> Result<Option<Predicate>, OrmError>
+where
+    E: TenantScopedEntity;
+```
+
+La funcion anterior es conceptual; el nombre puede cambiar. La responsabilidad no debe cambiar:
+
+- Si `E` no declara tenant, devuelve `Ok(None)`.
+- Si `E` declara tenant y el contexto tiene tenant activo, devuelve `tenant_column = current_tenant`.
+- Si `E` declara tenant y no hay tenant activo, devuelve `OrmError` antes de compilar SQL.
+- Si la policy de tenant no tiene exactamente una columna, devuelve `OrmError`.
+- Si el valor runtime no es compatible con la columna tenant, devuelve `OrmError`.
+
+Este helper debe ser usado por todas las rutas de lectura y escritura sobre la entidad raiz. No debe existir un equivalente publico de `with_deleted()` para tenant.
+
+Lecturas:
+
+- `DbSet::query()` y `DbSet::query_with(...)` deben seguir pudiendo construir `DbSetQuery<E>`, pero el filtro de tenant debe materializarse en el paso efectivo previo a compilar/ejecutar, igual que `soft_delete`, para que `query_with(select_query)` no pueda saltarse el tenant por recibir un AST custom.
+- `DbSetQuery::all()`, `first()` y `count()` deben llamar a un `effective_select_query()` que combine primero el filtro obligatorio de tenant y despues la visibilidad de `soft_delete`.
+- `DbSet::find(...)` debe seguir delegando en la ruta publica de query y por tanto heredar tenant.
+- `DbSet::find_tracked(...)` debe reutilizar `find(...)` y no abrir una ruta especial.
+- Active Record `Entity::query(&db)` y `Entity::find(&db, id)` deben seguir delegando en `DbSet`; no deben construir filtros propios.
+
+Riesgo de AST publico:
+
+- `DbSetQuery::into_select_query()` hoy devuelve el AST base sin materializar filtros runtime. Para `tenant = TenantScope`, esa API no puede seguir siendo una salida publica que prometa una query ejecutable segura.
+- Antes de implementar tenant debe cambiarse una de estas dos cosas: hacer `into_select_query()` solo interna/testing, o reemplazarla por una API falible que materialice filtros runtime obligatorios antes de entregar el AST.
+- Mientras `mssql-orm-sqlserver` siga reexportado como modulo avanzado, entregar un `SelectQuery` sin tenant desde una entidad tenant-scoped seria un bypass publico accidental.
+
+Updates:
+
+- `DbSet::update(...)` debe construir `UpdateQuery` con predicate compuesto por PK simple, tenant obligatorio y `rowversion` cuando exista.
+- `update_entity_values_by_sql_value(...)` y `update_entity_by_sql_value(...)` deben reutilizar el mismo helper para que Active Record y `save_changes()` no dupliquen reglas.
+- Si no hay fila afectada con token de concurrencia, la comprobacion para elevar a `ConcurrencyConflict` debe buscar existencia aplicando tenant. Ignorar tenant en ese check filtraria informacion entre tenants.
+- Si la fila existe fuera del tenant activo, el resultado observable debe ser ausencia para el tenant actual, no `ConcurrencyConflict`.
+
+Deletes:
+
+- `DbSet::delete(...)`, `delete_by_sql_value(...)` y `delete_tracked_by_sql_value(...)` deben agregar tenant al predicate antes de compilar.
+- Para entidades normales, el resultado sigue siendo `DELETE` fisico con predicate por PK + tenant + `rowversion` si aplica.
+- Para entidades con `soft_delete`, el resultado sigue siendo `UPDATE` de borrado logico, pero el predicate debe ser PK + tenant + `rowversion` si aplica. `soft_delete` decide la forma de escritura; tenant decide el limite de seguridad.
+- Active Record `entity.delete(&db)` debe seguir delegando en `DbSet::delete_by_sql_value(...)`.
+
+Change tracking:
+
+- `save_tracked_modified(...)` debe heredar tenant a traves de `update_entity_by_sql_value(...)`.
+- `save_tracked_deleted(...)` debe heredar tenant a traves de `delete_tracked_by_sql_value(...)`.
+- `save_tracked_added(...)` queda cubierto por la tarea separada de inserts tenant-scoped; no debe resolverse dentro del diseno de filtros de lectura/update/delete.
+- `save_changes()` puede persistir multiples tipos de entidad; cada `DbSet<E>` debe evaluar tenant de forma independiente segun `E::tenant_policy()`.
+
+Orden de combinacion de predicates:
+
+- Lecturas: `(predicado_usuario) AND (tenant_id = current_tenant) AND (soft_delete_visibility)` para la entidad raiz.
+- `find`: `(pk = @P) AND (tenant_id = current_tenant) AND (soft_delete_visibility)`.
+- `update`: `(pk = @P) AND (tenant_id = current_tenant) AND (rowversion = @P)` cuando hay `rowversion`.
+- `delete` fisico: `(pk = @P) AND (tenant_id = current_tenant) AND (rowversion = @P)` cuando hay `rowversion`.
+- `soft_delete`: mismo predicate de `delete`, pero compilado como `UpdateQuery`.
+- Checks internos de existencia para `ConcurrencyConflict`: `(pk = @P) AND (tenant_id = current_tenant)`, sin filtro de `soft_delete` pero siempre con tenant.
+
+Esta ultima regla es la diferencia clave con `soft_delete`: el filtro de borrado logico puede omitirse internamente para comprobar existencia fisica real, pero tenant nunca debe omitirse.
+
 Riesgos principales:
 
 - `query_with(select_query)` podria aceptar un AST custom sin filtro si el tenant se aplica demasiado temprano o solo en `query()`.

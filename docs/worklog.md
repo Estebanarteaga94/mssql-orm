@@ -2,6 +2,40 @@
 
 ## 2026-04-25
 
+### Sesión: diseño de filtros obligatorios para `tenant = TenantScope`
+
+- Se ejecutó la tarea `Etapa 16+: Diseñar tenant = TenantScope para que toda query, find, update, delete, Active Record y save_changes() sobre entidades tenant-scoped agregue automáticamente el filtro tenant_id = current_tenant cuando exista un tenant activo en el contexto`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se revisaron `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md` y se confirmó que el plan maestro real está en `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se revisaron las rutas actuales de `DbSet`, `DbSetQuery`, Active Record, tracking y `SharedConnectionRuntime`.
+- Se actualizó `docs/entity-policies.md` con el diseño operativo de filtros obligatorios de tenant:
+  - contrato auxiliar esperado tipo `TenantScopedEntity`;
+  - helper conceptual único para construir `tenant_id = current_tenant`;
+  - fallar cerrado si falta tenant activo;
+  - aplicación tardía del filtro antes de compilar/ejecutar, incluyendo `query_with(...)`;
+  - combinación con PK, `rowversion` y `soft_delete`;
+  - checks internos de `ConcurrencyConflict` con tenant siempre aplicado;
+  - `DbSetQuery::into_select_query()` identificado como riesgo de bypass público que debe cerrarse antes de implementar tenant.
+- Se actualizó `docs/context.md` con la decisión vigente y el siguiente paso recomendado.
+
+### Resultado
+
+- El diseño de propagación de filtro tenant queda cerrado para lecturas, `find`, updates, deletes, Active Record y tracking.
+- No se implementó runtime todavía porque el backlog separa la configuración del tenant activo y la semántica de inserts en tareas posteriores.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Definir cómo se configura el tenant activo en DbContext/SharedConnection o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con tenant = TenantScope`.
+
 ### Sesión: verificación solicitada de rutas internas para `soft_delete`
 
 - Se revisó nuevamente la tarea `Etapa 16+: Agregar rutas internas sin filtro implícito de soft_delete para comprobaciones de existencia y ConcurrencyConflict sin exponer bypass público accidental`.
