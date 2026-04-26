@@ -1,12 +1,23 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 16+: Garantizar que inserts de entidades con `#[orm(tenant = CurrentTenant)]` reciban automáticamente la columna tenant desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
-- [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
+- [ ] Etapa 17: Agregar pruebas públicas de `raw<T>().first()`, `raw<T>().all()` y `raw_exec().execute()` contra SQL Server real cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esté configurado
+- [ ] Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad
+- [ ] Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas
+- [ ] Etapa 18: Extender el AST `SelectQuery` para proyecciones públicas de columnas/expresiones con alias estable suficiente para `FromRow`
+- [ ] Etapa 18: Implementar API pública inicial de proyecciones: `select(...)` y ejecución `all_as::<T>()` / `first_as::<T>()` sobre `DbSetQuery`
+- [ ] Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, `trybuild` de API pública y materialización a DTOs `FromRow`
+- [ ] Etapa 18: Documentar la diferencia entre `map` en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, `@P1` repetido y placeholders continuos desde `@P1` hasta `@Pn`
+- [x] Etapa 17: Reexportar la surface raw SQL en `mssql_orm::prelude` y documentar que raw SQL no aplica automáticamente filtros ORM de `tenant` ni `soft_delete`
+- [x] Etapa 17: Implementar `RawQuery<T>` y `RawCommand` en la crate pública reutilizando `SharedConnection`, `CompiledQuery`, `SqlValue`, `SqlTypeMapping`, `FromRow` y `ExecuteResult`
+- [x] Etapa 17: Diseñar la surface pública de raw SQL tipado: `DbContext::raw<T>(sql)`, `RawQuery<T>::param(...)`, `RawQuery<T>::params((...))`, `all()`, `first()`, `DbContext::raw_exec(sql)` y `RawCommand::execute()`
+- [x] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
+- [x] Etapa 16+: Garantizar que inserts de entidades con `#[orm(tenant = CurrentTenant)]` reciban automáticamente la columna tenant desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [x] Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: `update`, `delete`, Active Record `save/delete`, `save_changes()` para `Modified`/`Deleted`, `rowversion` y `soft_delete`
 - [x] Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: `query()`, `query_with(...)`, `all()`, `first()`, `count()`, `find`, Active Record `query/find` y `find_tracked`
 - [x] Etapa 16+: Cerrar el bypass público de `DbSetQuery::into_select_query()` antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios

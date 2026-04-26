@@ -3,8 +3,8 @@ use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
 use crate::{
-    SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked, TrackingRegistry,
-    TrackingRegistryHandle,
+    RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked,
+    TrackingRegistry, TrackingRegistryHandle,
 };
 use core::future::Future;
 use std::marker::PhantomData;
@@ -225,6 +225,17 @@ pub trait DbContext: Sized {
         }
     }
 
+    fn raw<T>(&self, sql: impl Into<String>) -> RawQuery<T>
+    where
+        T: FromRow + Send,
+    {
+        RawQuery::new(self.shared_connection(), sql)
+    }
+
+    fn raw_exec(&self, sql: impl Into<String>) -> RawCommand {
+        RawCommand::new(self.shared_connection(), sql)
+    }
+
     fn transaction<F, Fut, T>(
         &self,
         operation: F,
@@ -372,7 +383,7 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_added(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + FromRow + Send,
+        E: Clone + EntityPersist + FromRow + Send + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -469,10 +480,10 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + TenantScopedEntity,
         I: Insertable<E>,
     {
-        let compiled = SqlServerCompiler::compile_insert(&self.insert_query(&insertable))?;
+        let compiled = SqlServerCompiler::compile_insert(&self.insert_query(&insertable)?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         let inserted = connection.fetch_one(compiled).await?;
@@ -579,9 +590,9 @@ impl<E: Entity> DbSet<E> {
         values: Vec<mssql_orm_core::ColumnValue>,
     ) -> Result<E, OrmError>
     where
-        E: FromRow + Send,
+        E: FromRow + Send + TenantScopedEntity,
     {
-        let compiled = SqlServerCompiler::compile_insert(&self.insert_query_values(values))?;
+        let compiled = SqlServerCompiler::compile_insert(&self.insert_query_values(values)?)?;
         let shared_connection = self.require_connection()?;
         let mut connection = shared_connection.lock().await?;
         let inserted = connection.fetch_one(compiled).await?;
@@ -591,7 +602,7 @@ impl<E: Entity> DbSet<E> {
 
     pub(crate) async fn insert_entity(&self, entity: &E) -> Result<E, OrmError>
     where
-        E: EntityPersist + FromRow + Send,
+        E: EntityPersist + FromRow + Send + TenantScopedEntity,
     {
         self.insert_entity_values(entity.insert_values()).await
     }
@@ -685,15 +696,93 @@ impl<E: Entity> DbSet<E> {
         Ok(SelectQuery::from_entity::<E>().filter(self.primary_key_predicate_value(key)?))
     }
 
-    fn insert_query<I>(&self, insertable: &I) -> InsertQuery
+    fn insert_query<I>(&self, insertable: &I) -> Result<InsertQuery, OrmError>
     where
+        E: TenantScopedEntity,
         I: Insertable<E>,
     {
-        InsertQuery::for_entity::<E, I>(insertable)
+        self.insert_query_values(insertable.values())
     }
 
-    fn insert_query_values(&self, values: Vec<mssql_orm_core::ColumnValue>) -> InsertQuery {
-        InsertQuery::for_entity::<E, _>(&RawInsertable(values))
+    fn insert_query_values(
+        &self,
+        values: Vec<mssql_orm_core::ColumnValue>,
+    ) -> Result<InsertQuery, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let active_tenant = self.active_tenant();
+        let values = self.tenant_insert_values(values, active_tenant.as_ref())?;
+        Ok(InsertQuery::for_entity::<E, _>(&RawInsertable(values)))
+    }
+
+    fn tenant_insert_values(
+        &self,
+        mut values: Vec<mssql_orm_core::ColumnValue>,
+        active_tenant: Option<&ActiveTenant>,
+    ) -> Result<Vec<mssql_orm_core::ColumnValue>, OrmError>
+    where
+        E: TenantScopedEntity,
+    {
+        let Some(policy) = E::tenant_policy() else {
+            return Ok(values);
+        };
+
+        if policy.columns.len() != 1 {
+            return Err(OrmError::new(
+                "tenant insert requires exactly one tenant policy column",
+            ));
+        }
+
+        let tenant_column = &policy.columns[0];
+        let active_tenant = active_tenant.ok_or_else(|| {
+            OrmError::new("tenant-scoped insert requires an active tenant in the DbContext")
+        })?;
+
+        if active_tenant.column_name != tenant_column.column_name {
+            return Err(OrmError::new(format!(
+                "active tenant column `{}` does not match entity tenant column `{}`",
+                active_tenant.column_name, tenant_column.column_name
+            )));
+        }
+
+        if !tenant_value_matches_column_type(&active_tenant.value, tenant_column) {
+            return Err(OrmError::new(format!(
+                "active tenant value is not compatible with entity tenant column `{}`",
+                tenant_column.column_name
+            )));
+        }
+
+        let mut tenant_value_position = None;
+        for (index, value) in values.iter().enumerate() {
+            if value.column_name == tenant_column.column_name {
+                if tenant_value_position.is_some() {
+                    return Err(OrmError::new(format!(
+                        "tenant-scoped insert contains duplicate tenant column `{}`",
+                        tenant_column.column_name
+                    )));
+                }
+
+                tenant_value_position = Some(index);
+            }
+        }
+
+        if let Some(index) = tenant_value_position {
+            if values[index].value != active_tenant.value {
+                return Err(OrmError::new(format!(
+                    "tenant-scoped insert value for column `{}` does not match the active tenant",
+                    tenant_column.column_name
+                )));
+            }
+
+            return Ok(values);
+        }
+
+        values.push(mssql_orm_core::ColumnValue::new(
+            tenant_column.column_name,
+            active_tenant.value.clone(),
+        ));
+        Ok(values)
     }
 
     #[cfg(test)]
@@ -1021,7 +1110,7 @@ mod tests {
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
-        OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
+        Insertable, OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
     };
     use mssql_orm_migrate::{
         ColumnSnapshot, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
@@ -1044,6 +1133,10 @@ mod tests {
     struct NewTestEntity {
         name: String,
         active: bool,
+    }
+    struct NewTenantWriteEntity {
+        name: String,
+        tenant_id: Option<i64>,
     }
     struct UpdateTestEntity {
         name: Option<String>,
@@ -1670,6 +1763,21 @@ mod tests {
         }
     }
 
+    impl mssql_orm_core::Insertable<TenantWriteEntity> for NewTenantWriteEntity {
+        fn values(&self) -> Vec<ColumnValue> {
+            let mut values = vec![ColumnValue::new(
+                "name",
+                SqlValue::String(self.name.clone()),
+            )];
+
+            if let Some(tenant_id) = self.tenant_id {
+                values.push(ColumnValue::new("tenant_id", SqlValue::I64(tenant_id)));
+            }
+
+            values
+        }
+    }
+
     impl mssql_orm_core::Changeset<TestEntity> for UpdateTestEntity {
         fn changes(&self) -> Vec<ColumnValue> {
             let mut values = Vec::new();
@@ -1906,7 +2014,7 @@ mod tests {
             active: true,
         };
 
-        let query = dbset.insert_query(&insertable);
+        let query = dbset.insert_query(&insertable).unwrap();
 
         assert_eq!(
             query,
@@ -1917,6 +2025,188 @@ mod tests {
                     ColumnValue::new("active", SqlValue::Bool(true)),
                 ],
             }
+        );
+    }
+
+    #[test]
+    fn dbset_insert_appends_active_tenant_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let insertable = NewTenantWriteEntity {
+            name: "tenant row".to_string(),
+            tenant_id: None,
+        };
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let values = dbset
+            .tenant_insert_values(insertable.values(), Some(&active_tenant))
+            .unwrap();
+
+        assert_eq!(
+            values,
+            vec![
+                ColumnValue::new("name", SqlValue::String("tenant row".to_string())),
+                ColumnValue::new("tenant_id", SqlValue::I64(42)),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_insert_accepts_matching_explicit_tenant_value() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let insertable = NewTenantWriteEntity {
+            name: "tenant row".to_string(),
+            tenant_id: Some(42),
+        };
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let values = dbset
+            .tenant_insert_values(insertable.values(), Some(&active_tenant))
+            .unwrap();
+
+        assert_eq!(
+            values,
+            vec![
+                ColumnValue::new("name", SqlValue::String("tenant row".to_string())),
+                ColumnValue::new("tenant_id", SqlValue::I64(42)),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_insert_rejects_mismatched_explicit_tenant_value() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let insertable = NewTenantWriteEntity {
+            name: "tenant row".to_string(),
+            tenant_id: Some(7),
+        };
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let error = dbset
+            .tenant_insert_values(insertable.values(), Some(&active_tenant))
+            .unwrap_err();
+
+        assert!(error.message().contains("does not match the active tenant"));
+    }
+
+    #[test]
+    fn dbset_insert_fails_closed_without_active_tenant_for_tenant_scoped_entities() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let insertable = NewTenantWriteEntity {
+            name: "tenant row".to_string(),
+            tenant_id: None,
+        };
+
+        let error = dbset
+            .tenant_insert_values(insertable.values(), None)
+            .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("tenant-scoped insert requires an active tenant")
+        );
+    }
+
+    #[test]
+    fn tenant_security_guardrail_keeps_write_sql_tenant_scoped() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let provider = TestSoftDeleteProvider;
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let insert_values = dbset
+            .tenant_insert_values(
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("tenant row".to_string()),
+                )],
+                Some(&active_tenant),
+            )
+            .unwrap();
+        let insert = super::SqlServerCompiler::compile_insert(&InsertQuery {
+            into: TableRef::for_entity::<TenantWriteEntity>(),
+            values: insert_values,
+        })
+        .unwrap();
+        let update = super::SqlServerCompiler::compile_update(
+            &dbset
+                .update_query_sql_value_with_active_tenant(
+                    SqlValue::I64(7),
+                    vec![ColumnValue::new(
+                        "name",
+                        SqlValue::String("tenant row updated".to_string()),
+                    )],
+                    None,
+                    Some(&active_tenant),
+                )
+                .unwrap(),
+        )
+        .unwrap();
+        let delete = super::SqlServerCompiler::compile_delete(
+            &dbset
+                .delete_query_sql_value_with_active_tenant(
+                    SqlValue::I64(7),
+                    None,
+                    Some(&active_tenant),
+                )
+                .unwrap(),
+        )
+        .unwrap();
+        let soft_delete = dbset
+            .delete_compiled_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                Some(SqlValue::Bytes(vec![9, 8, 7])),
+                Some(&provider),
+                None,
+                Some(&active_tenant),
+            )
+            .unwrap();
+
+        assert_eq!(
+            insert.sql,
+            "INSERT INTO [dbo].[tenant_write_entities] ([name], [tenant_id]) OUTPUT INSERTED.* VALUES (@P1, @P2)"
+        );
+        assert_eq!(
+            insert.params,
+            vec![
+                SqlValue::String("tenant row".to_string()),
+                SqlValue::I64(42),
+            ]
+        );
+
+        for compiled in [&update, &delete, &soft_delete] {
+            assert!(
+                compiled
+                    .sql
+                    .contains("[dbo].[tenant_write_entities].[tenant_id] = @P"),
+                "tenant-scoped write SQL must include tenant predicate: {}",
+                compiled.sql
+            );
+            assert!(
+                compiled.params.contains(&SqlValue::I64(42)),
+                "tenant-scoped write params must include active tenant value: {:?}",
+                compiled.params
+            );
+        }
+
+        assert!(
+            !delete.sql.contains("OUTPUT INSERTED.*"),
+            "physical delete should stay a DELETE statement while still tenant-scoped"
+        );
+        assert!(
+            soft_delete.sql.starts_with("UPDATE "),
+            "soft_delete route should remain logical UPDATE while tenant-scoped"
         );
     }
 

@@ -177,6 +177,29 @@ let total_active = db.users.query().filter(User::active.eq(true)).count().await?
 
 `count()` conserva el `from` y los filtros de la consulta base. En el estado actual no traslada joins, ordenamiento ni paginacion al `CountQuery` interno; usalo para conteos de la entidad base con filtros que no dependan de tablas joinadas.
 
+## Proyecciones tipadas
+
+La API publica actual materializa entidades completas. Para transformar una entidad cargada en un DTO puedes usar `map` en memoria despues de `all().await`, pero eso no reduce las columnas leidas desde SQL Server.
+
+Las proyecciones tipadas quedan planificadas como una etapa separada. El objetivo es que una consulta pueda seleccionar solo columnas o expresiones concretas y materializarlas en un struct que implemente `FromRow`, por ejemplo:
+
+```rust
+#[derive(Debug)]
+struct UserListItem {
+    id: i64,
+    email: String,
+}
+
+let users = db
+    .users
+    .query()
+    .select((User::id, User::email))
+    .all_as::<UserListItem>()
+    .await?;
+```
+
+Ese ejemplo describe la direccion de la API, no una surface disponible todavia. La implementacion debe resolver aliases estables para columnas, compatibilidad con joins y materializacion a DTOs sin romper `all()` / `first()` sobre entidades completas.
+
 ## Inspeccion del AST
 
 `DbSetQuery<T>` ya no expone publicamente el `SelectQuery` interno. La consulta efectiva puede incorporar filtros runtime obligatorios antes de compilar o ejecutar, por ejemplo visibilidad de `soft_delete` y filtros de seguridad por tenant.
@@ -191,6 +214,7 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 - No hay navigation properties ni carga automatica de relaciones.
 - `count()` no preserva joins en esta etapa.
 - La proyeccion publica de `DbSetQuery<T>` materializa entidades completas; proyecciones parciales quedan fuera del alcance actual.
+- Raw SQL tipado esta planificado como escape hatch previo a proyecciones complejas, pero no forma parte todavia del query builder publico.
 
 ## Referencias relacionadas
 

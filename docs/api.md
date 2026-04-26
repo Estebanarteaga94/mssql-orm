@@ -181,6 +181,44 @@ Surface avanzada reexportada desde `mssql_orm::query`:
 
 `mssql_orm::query` no genera SQL.
 
+### Etapa 17: raw SQL tipado
+
+Raw SQL tipado queda diseñado como escape hatch explicito para consultas o comandos que todavia no encajan en el query builder. La surface aprobada se documenta en `docs/raw-sql.md` y la direccion de API es:
+
+```rust
+let rows = db
+    .raw::<UserListItem>("SELECT id, email FROM dbo.users WHERE active = @P1 AND tenant_id = @P2")
+    .params((true, tenant_id))
+    .all()
+    .await?;
+
+db.raw_exec("UPDATE dbo.users SET active = @P1 WHERE id = @P2")
+    .params((false, 7_i64))
+    .execute()
+    .await?;
+```
+
+Esta surface ya existe en el `DbContext` trait y reexporta `RawQuery`, `RawCommand`, `RawParam` y `RawParams` desde `mssql_orm::prelude`. La implementacion reutiliza `SharedConnection`, `FromRow`, `SqlTypeMapping`, `SqlValue`, `CompiledQuery` y `ExecuteResult`. Raw SQL no aplica implicitamente filtros ORM de `tenant` ni `soft_delete`; el usuario debe escribir esos predicados de forma explicita en el SQL.
+
+Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para varios valores, repetir `@P1` es valido y reutiliza el mismo valor, los placeholders deben ser continuos desde `@P1` hasta `@Pn`, y la cantidad de parametros debe coincidir con el mayor placeholder usado. La implementacion debe validar por indices de placeholders, no por cantidad de ocurrencias.
+
+### Roadmap cercano: proyecciones tipadas
+
+Las proyecciones tipadas tambien quedan planificadas. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
+
+Direccion de API:
+
+```rust
+let users = db
+    .users
+    .query()
+    .select((User::id, User::email))
+    .all_as::<UserListItem>()
+    .await?;
+```
+
+El diseno debe preservar la ruta actual `all()` / `first()` para entidades completas, y agregar materializacion a DTOs mediante `FromRow`.
+
 ## Active Record
 
 La crate raiz expone `ActiveRecord` como capa de conveniencia sobre `DbSet`.
@@ -336,12 +374,13 @@ Esta surface no promete todavia:
 - navigation properties
 - lazy loading o eager loading automatico
 - aliases de tabla
+- raw SQL tipado publico
 - proyecciones parciales publicas desde `DbSetQuery<T>`
 - primary keys compuestas en CRUD publico
 - `save_changes()` estable
 - savepoints
 - transacciones publicas correctas sobre pool hasta resolver el pinning de conexion
-- soft delete, tenant scope o autollenado de auditoria
+- autollenado runtime de auditoria
 
 ## Guias relacionadas
 
@@ -352,3 +391,4 @@ Esta surface no promete todavia:
 - Transacciones: [docs/transactions.md](transactions.md)
 - Migraciones: [docs/migrations.md](migrations.md)
 - Entity Policies: [docs/entity-policies.md](entity-policies.md)
+- Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)

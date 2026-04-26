@@ -1,6 +1,7 @@
 use crate::error::{TiberiusErrorContext, map_tiberius_error};
 use mssql_orm_core::{OrmError, SqlValue};
 use mssql_orm_query::CompiledQuery;
+use std::collections::BTreeSet;
 use tiberius::numeric::Numeric;
 use tiberius::{Client, Query, QueryStream};
 
@@ -34,7 +35,7 @@ impl PreparedQuery {
     }
 
     pub fn validate_parameter_count(&self) -> Result<(), OrmError> {
-        let expected = count_sql_parameters(&self.sql);
+        let expected = sql_parameter_plan(&self.sql)?;
 
         if expected != self.params.len() {
             return Err(OrmError::new(
@@ -136,27 +137,48 @@ fn bind_sql_value<'a>(query: &mut Query<'a>, value: &'a BoundSqlValue) {
     }
 }
 
-fn count_sql_parameters(sql: &str) -> usize {
+fn sql_parameter_plan(sql: &str) -> Result<usize, OrmError> {
     let bytes = sql.as_bytes();
-    let mut count = 0;
     let mut index = 0;
+    let mut placeholders = BTreeSet::new();
 
     while index + 2 < bytes.len() {
         if bytes[index] == b'@' && bytes[index + 1] == b'P' && bytes[index + 2].is_ascii_digit() {
-            count += 1;
-            index += 3;
+            index += 2;
+            let start = index;
 
             while index < bytes.len() && bytes[index].is_ascii_digit() {
                 index += 1;
             }
 
+            let parameter_index = sql[start..index].parse::<usize>().map_err(|_| {
+                OrmError::new("compiled query placeholder index is larger than supported")
+            })?;
+
+            if parameter_index == 0 {
+                return Err(OrmError::new(
+                    "compiled query placeholders must start at @P1",
+                ));
+            }
+
+            placeholders.insert(parameter_index);
             continue;
         }
 
         index += 1;
     }
 
-    count
+    let max_index = placeholders.iter().next_back().copied().unwrap_or(0);
+    for expected in 1..=max_index {
+        if !placeholders.contains(&expected) {
+            return Err(OrmError::new(format!(
+                "compiled query placeholders must be continuous from @P1 to @P{}",
+                max_index
+            )));
+        }
+    }
+
+    Ok(max_index)
 }
 
 #[cfg(test)]
@@ -224,6 +246,16 @@ mod tests {
         let prepared = PreparedQuery::from_compiled(CompiledQuery::new(
             "SELECT @P1, @P2",
             vec![SqlValue::Bool(true), SqlValue::Bool(false)],
+        ));
+
+        assert!(prepared.validate_parameter_count().is_ok());
+    }
+
+    #[test]
+    fn validates_repeated_placeholders_by_max_index() {
+        let prepared = PreparedQuery::from_compiled(CompiledQuery::new(
+            "SELECT @P1 WHERE owner_id = @P1",
+            vec![SqlValue::I64(7)],
         ));
 
         assert!(prepared.validate_parameter_count().is_ok());

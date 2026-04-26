@@ -542,6 +542,7 @@ dependencies = [
 name = "mssql-orm"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "insta",
  "mssql-orm-core",
  "mssql-orm-macros",
@@ -549,8 +550,10 @@ dependencies = [
  "mssql-orm-query",
  "mssql-orm-sqlserver",
  "mssql-orm-tiberius",
+ "rust_decimal",
  "tokio",
  "trybuild",
+ "uuid",
 ]
 
 [[package]]

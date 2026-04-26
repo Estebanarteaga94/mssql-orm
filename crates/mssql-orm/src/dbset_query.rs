@@ -334,6 +334,7 @@ mod tests {
     use mssql_orm_query::{
         Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery, SortDirection, TableRef,
     };
+    use mssql_orm_sqlserver::SqlServerCompiler;
 
     struct TestEntity;
     struct JoinedEntity;
@@ -745,6 +746,43 @@ mod tests {
                     )),
                     Expr::Value(SqlValue::I64(42)),
                 ))
+        );
+    }
+
+    #[test]
+    fn tenant_security_guardrail_keeps_joined_read_sql_tenant_scoped() {
+        let query = DbSetQuery::<TenantEntity>::new(
+            None,
+            SelectQuery::from_entity::<TenantEntity>().inner_join::<JoinedEntity>(Predicate::eq(
+                Expr::value(SqlValue::Bool(true)),
+                Expr::value(SqlValue::Bool(true)),
+            )),
+        )
+        .with_active_tenant_for_test(ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        })
+        .effective_select_query()
+        .unwrap();
+
+        let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+        assert!(
+            compiled.sql.contains("INNER JOIN [dbo].[joined_entities]"),
+            "joined tenant read should preserve explicit joins: {}",
+            compiled.sql
+        );
+        assert!(
+            compiled
+                .sql
+                .contains("[sales].[tenant_entities].[tenant_id] = @P"),
+            "joined tenant read must include tenant predicate on the root entity: {}",
+            compiled.sql
+        );
+        assert!(
+            compiled.params.contains(&SqlValue::I64(42)),
+            "joined tenant read params must include active tenant value: {:?}",
+            compiled.params
         );
     }
 

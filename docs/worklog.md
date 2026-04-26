@@ -2,6 +2,136 @@
 
 ## 2026-04-26
 
+### Sesión: pruebas unitarias de parámetros raw SQL
+
+- Se ejecutó la tarea `Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, @P1 repetido y placeholders continuos desde @P1 hasta @Pn`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó un helper interno `compiled_raw_query(...)` para construir `CompiledQuery` desde SQL crudo y parametros normalizados sin requerir una conexión real.
+- La cobertura de `crates/mssql-orm/src/raw_sql.rs` ahora verifica continuidad de placeholders hasta `@P12`, `@P1` repetido, `@P0`, saltos como `@P1` + `@P3`, parametros extra, parametros faltantes, `Vec<T>`, `()`, `Option::None` como `NULL`, `Option::Some`, tipos soportados y preservacion de orden en `CompiledQuery`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La tarea de cobertura unitaria de parámetros raw SQL queda cerrada con 15 pruebas focalizadas en `raw_sql`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm raw_sql --lib -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check -p mssql-orm`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- No se realizó commit porque el árbol ya contiene cambios previos no aislados de otra sesión.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 17: Agregar pruebas públicas de raw<T>().first(), raw<T>().all() y raw_exec().execute() contra SQL Server real cuando MSSQL_ORM_TEST_CONNECTION_STRING esté configurado`.
+
+### Sesión: reexport de raw SQL en prelude
+
+- Se ejecutó la tarea `Etapa 17: Reexportar la surface raw SQL en mssql_orm::prelude y documentar que raw SQL no aplica automáticamente filtros ORM de tenant ni soft_delete`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `mssql_orm::prelude` ahora reexporta `RawQuery`, `RawCommand`, `RawParam` y `RawParams`.
+- La prueba interna de prelude en `crates/mssql-orm/src/lib.rs` ahora fija que esos tipos y traits son visibles desde la surface pública recomendada.
+- `docs/raw-sql.md` fue ajustado de diseño objetivo a surface disponible y remarca que raw SQL es un bypass explícito del query builder y de filtros implícitos.
+- `docs/api.md` y `docs/context.md` quedaron sincronizados con el reexport desde prelude.
+- `docs/tasks.md` quedó actualizado.
+
+### Resultado
+
+- La surface raw SQL ya está accesible desde `use mssql_orm::prelude::*`.
+- La advertencia de que raw SQL no aplica automáticamente `tenant` ni `soft_delete` quedó documentada en la guía específica y en el inventario de API.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check -p mssql-orm`
+- `cargo test -p mssql-orm exposes_public_prelude --lib -- --nocapture`
+- `cargo test -p mssql-orm raw_sql --lib -- --nocapture`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- No se realizó commit porque el árbol ya contiene cambios previos no aislados de otra sesión.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, @P1 repetido y placeholders continuos desde @P1 hasta @Pn`.
+
+### Sesión: implementación inicial de raw SQL tipado
+
+- Se ejecutó la tarea `Etapa 17: Implementar RawQuery<T> y RawCommand en la crate pública reutilizando SharedConnection, CompiledQuery, SqlValue, SqlTypeMapping, FromRow y ExecuteResult`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó `crates/mssql-orm/src/raw_sql.rs` con `RawQuery<T>`, `RawCommand`, `RawParam`, `RawParams` y validación de placeholders raw.
+- `DbContext` ahora expone métodos default `raw<T>(sql)` y `raw_exec(sql)` que capturan `SharedConnection`.
+- `RawQuery<T>::all()` y `RawQuery<T>::first()` construyen un `CompiledQuery`, validan placeholders y ejecutan mediante `fetch_all` / `fetch_one`.
+- `RawCommand::execute()` construye un `CompiledQuery`, valida placeholders y ejecuta mediante `execute`, retornando `ExecuteResult`.
+- `.params((p1, p2, ...))` queda soportado mediante tuplas hasta 12 valores y `.param(value)` permite armado incremental.
+- `RawParam` cubre tipos base soportados por `SqlTypeMapping`, `&str`, `SqlValue` y `Option<T>` como `NULL`.
+- `mssql-orm-tiberius::PreparedQuery` dejó de contar ocurrencias de `@P` y ahora valida por indice maximo y continuidad, permitiendo `@P1` repetido con un solo parametro.
+- Se agregaron dependencias directas en `crates/mssql-orm/Cargo.toml` a `chrono`, `rust_decimal` y `uuid` para poder implementar ergonomía raw sobre los mismos tipos base que ya soporta `mssql-orm-core`.
+- Se actualizaron `docs/tasks.md`, `docs/context.md` y `docs/api.md`.
+
+### Resultado
+
+- La crate pública ya tiene un primer corte funcional de raw SQL tipado sobre `SharedConnection`.
+- El reexport desde `mssql_orm::prelude` y la documentación pública completa siguen separados en la siguiente tarea del backlog.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check -p mssql-orm`
+- `cargo test -p mssql-orm raw_sql --lib -- --nocapture`
+- `cargo test -p mssql-orm-tiberius validates_ --lib -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- Todavía no se ejecutaron pruebas contra SQL Server real para `raw<T>().first()`, `raw<T>().all()` ni `raw_exec().execute()`; esa cobertura queda en una tarea posterior de Etapa 17.
+- No se realizó commit porque el árbol ya contiene cambios previos no aislados de otra sesión.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 17: Reexportar la surface raw SQL en mssql_orm::prelude y documentar que raw SQL no aplica automáticamente filtros ORM de tenant ni soft_delete`.
+
+### Sesión: diseño de raw SQL tipado
+
+- Se ejecutó la tarea `Etapa 17: Diseñar la surface pública de raw SQL tipado: DbContext::raw<T>(sql), RawQuery<T>::param(...), RawQuery<T>::params((...)), all(), first(), DbContext::raw_exec(sql) y RawCommand::execute()`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de dejar el diseño documentado.
+- Se agregó `docs/raw-sql.md` como diseño operativo de Etapa 17.
+- La surface aprobada queda en `DbContext::raw<T>(sql) -> RawQuery<T>` con `.param(...)`, `.params((...))`, `.all()` y `.first()`, y `DbContext::raw_exec(sql) -> RawCommand` con `.param(...)`, `.params((...))` y `.execute()`.
+- El diseño fija que `RawQuery<T>` materializa con `FromRow`, `RawCommand` retorna `ExecuteResult`, y ambos reutilizan `SharedConnection`, `CompiledQuery`, `SqlValue`, `SqlTypeMapping` y la ejecución Tiberius existente desde la crate pública `mssql-orm`.
+- Se dejó explícito que raw SQL no aplica automáticamente filtros ORM de `tenant` ni `soft_delete`; el consumidor debe escribir esos predicados manualmente.
+- Se documentó una regla de parámetros distinta de la validación actual del adaptador: raw SQL debe validar por índice máximo y continuidad de placeholders, permitiendo `@P1` repetido con un único valor, en vez de contar ocurrencias.
+- A partir de feedback posterior, se ajustó `docs/raw-sql.md` y `docs/api.md` para dejar `.params((p1, p2))` como forma recomendada para varios parametros, manteniendo `.param(...)` como alternativa incremental.
+- Se actualizó `docs/api.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- La Etapa 17 tiene contrato público y límites listos para la implementación de `RawQuery<T>` y `RawCommand`.
+- No se implementó código runtime en esta sesión porque la tarea activa era de diseño y la implementación está separada como la siguiente tarea del backlog.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- Hay cambios previos sin commitear en `README.md`, `crates/mssql-orm/src/context.rs`, `crates/mssql-orm/src/dbset_query.rs`, `docs/api.md`, `docs/context.md`, `docs/query-builder.md` y `docs/tasks.md`; esta sesión trabajó sobre esos cambios sin revertirlos.
+- No se realizó commit porque el árbol ya tenía cambios no aislados de una sesión anterior en archivos operativos compartidos. Conviene commitear cuando se decida agrupar esos cambios o separar commits manualmente.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 17: Implementar RawQuery<T> y RawCommand en la crate pública reutilizando SharedConnection, CompiledQuery, SqlValue, SqlTypeMapping, FromRow y ExecuteResult`.
+
 ### Sesión: filtros tenant obligatorios en escrituras
 
 - Se ejecutó la tarea `Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: update, delete, Active Record save/delete, save_changes() para Modified/Deleted, rowversion y soft_delete`.

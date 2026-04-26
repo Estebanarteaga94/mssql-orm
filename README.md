@@ -253,7 +253,8 @@ Estado resumido:
 - Etapa 13 cerrada: migraciones avanzadas
 - Etapa 14 cerrada: surface operativa de producción y ejemplo web `todo_app`
 - Etapa 15 cerrada: release, documentación pública, quickstart, guías y changelog
-- Etapa 16 en cierre: `Entity Policies` con auditoría como metadata/schema; quedan pendientes la validación final de etapa y diseño de extensiones diferidas
+- Etapa 16+ avanzada: `Entity Policies` ya cubre auditoría como metadata/schema, `soft_delete` runtime y filtros obligatorios `tenant`
+- Etapas siguientes en backlog: raw SQL tipado y proyecciones tipadas a DTOs
 
 La fuente de verdad del roadmap técnico sigue siendo [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md).
 
@@ -264,7 +265,9 @@ Este repo todavía no pretende vender humo. Hay límites explícitos en esta fas
 - SQL Server es el único backend objetivo
 - la API de change tracking sigue siendo experimental
 - `audit = Audit` no autollena valores en runtime ni agrega campos Rust visibles a las entidades
-- `soft_delete`, `tenant` y `AuditProvider` siguen como diseño futuro
+- `AuditProvider` runtime sigue como diseño futuro
+- no hay raw SQL tipado público todavía
+- no hay proyecciones tipadas a DTOs todavía; el query builder público materializa entidades completas
 - no se está intentando soportar múltiples motores de base de datos
 - algunas decisiones de UX futura siguen abiertas alrededor de policies con comportamiento runtime
 
