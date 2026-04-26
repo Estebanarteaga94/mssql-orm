@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 17: Agregar pruebas públicas de `raw<T>().first()`, `raw<T>().all()` y `raw_exec().execute()` contra SQL Server real cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esté configurado
 - [ ] Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad
 - [ ] Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas
 - [ ] Etapa 18: Extender el AST `SelectQuery` para proyecciones públicas de columnas/expresiones con alias estable suficiente para `FromRow`
@@ -12,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 17: Agregar pruebas públicas de `raw<T>().first()`, `raw<T>().all()` y `raw_exec().execute()` contra SQL Server real cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esté configurado
 - [x] Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, `@P1` repetido y placeholders continuos desde `@P1` hasta `@Pn`
 - [x] Etapa 17: Reexportar la surface raw SQL en `mssql_orm::prelude` y documentar que raw SQL no aplica automáticamente filtros ORM de `tenant` ni `soft_delete`
 - [x] Etapa 17: Implementar `RawQuery<T>` y `RawCommand` en la crate pública reutilizando `SharedConnection`, `CompiledQuery`, `SqlValue`, `SqlTypeMapping`, `FromRow` y `ExecuteResult`

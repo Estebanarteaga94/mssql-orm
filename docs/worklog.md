@@ -2,6 +2,40 @@
 
 ## 2026-04-26
 
+### Sesión: pruebas públicas reales de raw SQL tipado
+
+- Se ejecutó la tarea `Etapa 17: Agregar pruebas públicas de raw<T>().first(), raw<T>().all() y raw_exec().execute() contra SQL Server real cuando MSSQL_ORM_TEST_CONNECTION_STRING esté configurado`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó `crates/mssql-orm/tests/stage17_raw_sql.rs` como prueba de integración pública de la surface raw SQL.
+- La prueba define un `DbContext` mínimo, un anchor entity para satisfacer el derive y un DTO `RawSqlUser` materializado con `FromRow`.
+- La prueba crea `dbo.mssql_orm_public_raw_sql`, ejecuta DDL/DML con `raw_exec().execute()`, lee con `raw::<RawSqlUser>().all()` y `raw::<RawSqlUser>().first()`, valida filas afectadas y limpia la tabla salvo que `KEEP_TEST_TABLES` esté activo.
+- Se validó contra SQL Server real usando `MSSQL_ORM_TEST_CONNECTION_STRING` apuntando a `tempdb`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- La surface pública raw SQL queda cubierta con una prueba real de roundtrip SQL Server.
+
+### Validación
+
+- `cargo fmt --all`
+- `MSSQL_ORM_TEST_CONNECTION_STRING='...' cargo test -p mssql-orm --test stage17_raw_sql -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm raw_sql --lib -- --nocapture`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad`.
+
 ### Sesión: pruebas unitarias de parámetros raw SQL
 
 - Se ejecutó la tarea `Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, @P1 repetido y placeholders continuos desde @P1 hasta @Pn`.
