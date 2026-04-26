@@ -2,8 +2,10 @@ use crate::quoting::{quote_identifier, quote_table_ref};
 use mssql_orm_core::{ColumnValue, OrmError, SqlValue};
 use mssql_orm_query::{
     BinaryOp, CompiledQuery, CountQuery, DeleteQuery, Expr, InsertQuery, Join, JoinType, OrderBy,
-    Pagination, Predicate, Query, SelectQuery, SortDirection, TableRef, UnaryOp, UpdateQuery,
+    Pagination, Predicate, Query, SelectProjection, SelectQuery, SortDirection, TableRef, UnaryOp,
+    UpdateQuery,
 };
+use std::collections::BTreeSet;
 
 #[derive(Debug, Default)]
 struct ParameterBuilder {
@@ -164,16 +166,35 @@ fn compile_joins(
 }
 
 fn compile_projection(
-    projection: &[Expr],
+    projection: &[SelectProjection],
     parameters: &mut ParameterBuilder,
 ) -> Result<String, OrmError> {
     if projection.is_empty() {
         return Ok("*".to_string());
     }
 
+    let mut aliases = BTreeSet::new();
     let parts = projection
         .iter()
-        .map(|expr| compile_expr(expr, parameters))
+        .map(|projection| {
+            let alias = projection.alias.ok_or_else(|| {
+                OrmError::new("SQL Server projection expressions require an explicit alias")
+            })?;
+            if alias.trim().is_empty() {
+                return Err(OrmError::new("SQL Server projection alias cannot be empty"));
+            }
+            if !aliases.insert(alias) {
+                return Err(OrmError::new(format!(
+                    "SQL Server projection alias `{alias}` is duplicated"
+                )));
+            }
+
+            Ok(format!(
+                "{} AS {}",
+                compile_expr(&projection.expr, parameters)?,
+                quote_identifier(alias)?
+            ))
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(parts.join(", "))
 }
@@ -352,7 +373,7 @@ mod tests {
     };
     use mssql_orm_query::{
         BinaryOp, CountQuery, DeleteQuery, Expr, InsertQuery, OrderBy, Pagination, Predicate,
-        Query, SelectQuery, TableRef, UnaryOp, UpdateQuery,
+        Query, SelectProjection, SelectQuery, TableRef, UnaryOp, UpdateQuery,
     };
 
     #[allow(dead_code)]
@@ -588,7 +609,7 @@ mod tests {
 
         assert_eq!(
             compiled.sql,
-            "SELECT [sales].[customers].[id], [sales].[customers].[email] FROM [sales].[customers] WHERE (([sales].[customers].[active] = @P1) AND ([sales].[customers].[email] LIKE @P2)) ORDER BY [sales].[customers].[created_at] DESC OFFSET @P3 ROWS FETCH NEXT @P4 ROWS ONLY"
+            "SELECT [sales].[customers].[id] AS [id], [sales].[customers].[email] AS [email] FROM [sales].[customers] WHERE (([sales].[customers].[active] = @P1) AND ([sales].[customers].[email] LIKE @P2)) ORDER BY [sales].[customers].[created_at] DESC OFFSET @P3 ROWS FETCH NEXT @P4 ROWS ONLY"
         );
         assert_eq!(
             compiled.params,
@@ -645,7 +666,7 @@ mod tests {
 
         assert_eq!(
             compiled.sql,
-            "SELECT [sales].[customers].[email], [sales].[orders].[total_cents] FROM [sales].[customers] INNER JOIN [sales].[orders] ON ([sales].[customers].[id] = [sales].[orders].[customer_id]) WHERE ([sales].[orders].[total_cents] > @P1) ORDER BY [sales].[orders].[total_cents] DESC OFFSET @P2 ROWS FETCH NEXT @P3 ROWS ONLY"
+            "SELECT [sales].[customers].[email] AS [email], [sales].[orders].[total_cents] AS [total_cents] FROM [sales].[customers] INNER JOIN [sales].[orders] ON ([sales].[customers].[id] = [sales].[orders].[customer_id]) WHERE ([sales].[orders].[total_cents] > @P1) ORDER BY [sales].[orders].[total_cents] DESC OFFSET @P2 ROWS FETCH NEXT @P3 ROWS ONLY"
         );
         assert_eq!(
             compiled.params,
@@ -765,13 +786,16 @@ mod tests {
         let query = SelectQuery {
             from: TableRef::new("sales", "customers"),
             joins: vec![],
-            projection: vec![Expr::function(
-                "LOWER",
-                vec![Expr::binary(
-                    Expr::from(Customer::email),
-                    BinaryOp::Add,
-                    Expr::value(SqlValue::String("@example.com".to_string())),
-                )],
+            projection: vec![SelectProjection::expr_as(
+                Expr::function(
+                    "LOWER",
+                    vec![Expr::binary(
+                        Expr::from(Customer::email),
+                        BinaryOp::Add,
+                        Expr::value(SqlValue::String("@example.com".to_string())),
+                    )],
+                ),
+                "email_lower",
             )],
             predicate: Some(Predicate::and(vec![
                 Predicate::is_not_null(Expr::from(Customer::email)),
@@ -788,7 +812,7 @@ mod tests {
 
         assert_eq!(
             compiled.sql,
-            "SELECT LOWER(([sales].[customers].[email] + @P1)) FROM [sales].[customers] WHERE (([sales].[customers].[email] IS NOT NULL) AND (NOT ((- @P2) IS NULL)))"
+            "SELECT LOWER(([sales].[customers].[email] + @P1)) AS [email_lower] FROM [sales].[customers] WHERE (([sales].[customers].[email] IS NOT NULL) AND (NOT ((- @P2) IS NULL)))"
         );
         assert_eq!(
             compiled.params,
@@ -796,6 +820,48 @@ mod tests {
                 SqlValue::String("@example.com".to_string()),
                 SqlValue::I64(1),
             ]
+        );
+    }
+
+    #[test]
+    fn rejects_projection_expression_without_alias() {
+        let error = SqlServerCompiler::compile_select(
+            &SelectQuery::from_entity::<Customer>().select(vec![SelectProjection::expr(
+                Expr::function("LOWER", vec![Expr::from(Customer::email)]),
+            )]),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server projection expressions require an explicit alias"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_or_duplicate_projection_aliases() {
+        let empty_alias_error =
+            SqlServerCompiler::compile_select(&SelectQuery::from_entity::<Customer>().select(
+                vec![SelectProjection::expr_as(Expr::from(Customer::email), "")],
+            ))
+            .unwrap_err();
+
+        assert_eq!(
+            empty_alias_error.message(),
+            "SQL Server projection alias cannot be empty"
+        );
+
+        let duplicate_alias_error = SqlServerCompiler::compile_select(
+            &SelectQuery::from_entity::<Customer>().select(vec![
+                SelectProjection::column(Customer::id),
+                SelectProjection::expr_as(Expr::from(Customer::email), "id"),
+            ]),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            duplicate_alias_error.message(),
+            "SQL Server projection alias `id` is duplicated"
         );
     }
 

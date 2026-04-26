@@ -19,7 +19,7 @@ pub use join::{Join, JoinType};
 pub use order::{OrderBy, SortDirection};
 pub use pagination::Pagination;
 pub use predicate::Predicate;
-pub use select::{CountQuery, SelectQuery};
+pub use select::{CountQuery, SelectProjection, SelectQuery};
 pub use update::UpdateQuery;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,8 +55,8 @@ pub const CRATE_IDENTITY: CrateIdentity = CrateIdentity {
 mod tests {
     use super::{
         BinaryOp, CRATE_IDENTITY, ColumnRef, CompiledQuery, CountQuery, DeleteQuery, Expr,
-        InsertQuery, Join, JoinType, OrderBy, Pagination, Predicate, Query, SelectQuery,
-        SortDirection, TableRef, UpdateQuery,
+        InsertQuery, Join, JoinType, OrderBy, Pagination, Predicate, Query, SelectProjection,
+        SelectQuery, SortDirection, TableRef, UpdateQuery,
     };
     use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata,
@@ -344,7 +344,13 @@ mod tests {
 
         assert_eq!(query.from, TableRef::new("sales", "customers"));
         assert!(query.joins.is_empty());
-        assert_eq!(query.projection.len(), 2);
+        assert_eq!(
+            query.projection,
+            vec![
+                SelectProjection::column(Customer::id),
+                SelectProjection::column(Customer::email)
+            ]
+        );
         assert_eq!(
             query.order_by,
             vec![OrderBy::new(
@@ -379,6 +385,23 @@ mod tests {
         assert_eq!(query.joins[1].join_type, JoinType::Left);
         assert_eq!(query.joins[1].table, TableRef::new("sales", "orders"));
         assert!(matches!(query.joins[1].on, Predicate::Gt(_, _)));
+    }
+
+    #[test]
+    fn select_projection_captures_default_and_explicit_aliases() {
+        let column_projection = SelectProjection::column(Customer::email);
+        assert_eq!(column_projection.alias, Some("email"));
+        assert_eq!(column_projection.expr, Expr::from(Customer::email));
+
+        let expression_projection = SelectProjection::expr_as(
+            Expr::function("LOWER", vec![Expr::from(Customer::email)]),
+            "email_lower",
+        );
+        assert_eq!(expression_projection.alias, Some("email_lower"));
+
+        let unaliased_expression =
+            SelectProjection::expr(Expr::function("LOWER", vec![Expr::from(Customer::email)]));
+        assert_eq!(unaliased_expression.alias, None);
     }
 
     #[test]

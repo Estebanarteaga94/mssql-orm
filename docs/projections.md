@@ -6,13 +6,13 @@ Las proyecciones tipadas son la Etapa 18 del query builder publico. El objetivo 
 
 El AST ya tiene una base parcial:
 
-- `mssql-orm-query::SelectQuery` contiene `projection: Vec<Expr>`.
-- `SelectQuery::select(Vec<Expr>)` ya existe a nivel de AST.
-- `mssql-orm-sqlserver` ya compila `projection` cuando no esta vacia.
+- `mssql-orm-query::SelectQuery` contiene `projection: Vec<SelectProjection>`.
+- `SelectQuery::select(...)` ya acepta elementos convertibles a `SelectProjection`.
+- `mssql-orm-sqlserver` ya compila `projection` cuando no esta vacia, usando aliases estables.
 - Si `projection` esta vacia, el compilador emite `SELECT *`.
 - `DbSetQuery<E>::all()` y `first()` siempre materializan `E` y no exponen proyeccion publica.
 
-La pieza faltante no es solo "emitir menos columnas"; falta un contrato publico que preserve aliases estables para que `FromRow` pueda leer DTOs por nombre.
+La pieza faltante ya no esta en el AST sino en la API publica de `DbSetQuery`: falta exponer una forma ergonomica de construir proyecciones y ejecutar `all_as::<T>()` / `first_as::<T>()`.
 
 ## Objetivo
 
@@ -52,7 +52,7 @@ Esta separacion evita que una consulta parcial intente materializar accidentalme
 
 ## Contrato de AST
 
-El AST debe dejar de representar la proyeccion publica solo como `Vec<Expr>`, porque `Expr` no incluye alias. El siguiente paso recomendado es introducir un tipo en `mssql-orm-query`:
+El AST representa la proyeccion publica con un tipo dedicado:
 
 ```rust
 pub struct SelectProjection {
@@ -60,14 +60,6 @@ pub struct SelectProjection {
     pub alias: Option<&'static str>,
 }
 ```
-
-`SelectQuery` deberia pasar de:
-
-```rust
-pub projection: Vec<Expr>
-```
-
-a:
 
 ```rust
 pub projection: Vec<SelectProjection>
@@ -227,8 +219,6 @@ Raw SQL tipado sigue siendo el escape hatch para consultas mas complejas mientra
 
 ## Secuencia Recomendada
 
-1. Extender `mssql-orm-query` con `SelectProjection` y aliases estables.
-2. Ajustar `mssql-orm-sqlserver` para compilar `expr AS [alias]` y validar aliases.
-3. Agregar una API publica minima en `mssql-orm` para `.select(...)`, `all_as::<T>()` y `first_as::<T>()`.
-4. Cubrir snapshots SQL, orden de parametros, trybuild publico y materializacion de DTOs.
-5. Actualizar `docs/query-builder.md` y `docs/api.md` diferenciando proyecciones reales de `map` en memoria.
+1. Agregar una API publica minima en `mssql-orm` para `.select(...)`, `all_as::<T>()` y `first_as::<T>()`.
+2. Cubrir snapshots SQL, orden de parametros, `trybuild` publico y materializacion de DTOs.
+3. Actualizar `docs/query-builder.md` y `docs/api.md` diferenciando proyecciones reales de `map` en memoria.

@@ -3,13 +3,57 @@ use crate::join::Join;
 use crate::order::OrderBy;
 use crate::pagination::Pagination;
 use crate::predicate::Predicate;
-use mssql_orm_core::Entity;
+use mssql_orm_core::{Entity, EntityColumn};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectProjection {
+    pub expr: Expr,
+    pub alias: Option<&'static str>,
+}
+
+impl SelectProjection {
+    pub fn column<E: Entity>(column: EntityColumn<E>) -> Self {
+        let alias = column.column_name();
+        Self {
+            expr: Expr::from(column),
+            alias: Some(alias),
+        }
+    }
+
+    pub fn expr(expr: Expr) -> Self {
+        let alias = match &expr {
+            Expr::Column(column) => Some(column.column_name),
+            _ => None,
+        };
+
+        Self { expr, alias }
+    }
+
+    pub fn expr_as(expr: Expr, alias: &'static str) -> Self {
+        Self {
+            expr,
+            alias: Some(alias),
+        }
+    }
+}
+
+impl<E: Entity> From<EntityColumn<E>> for SelectProjection {
+    fn from(value: EntityColumn<E>) -> Self {
+        Self::column(value)
+    }
+}
+
+impl From<Expr> for SelectProjection {
+    fn from(value: Expr) -> Self {
+        Self::expr(value)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SelectQuery {
     pub from: TableRef,
     pub joins: Vec<Join>,
-    pub projection: Vec<Expr>,
+    pub projection: Vec<SelectProjection>,
     pub predicate: Option<Predicate>,
     pub order_by: Vec<OrderBy>,
     pub pagination: Option<Pagination>,
@@ -27,8 +71,12 @@ impl SelectQuery {
         }
     }
 
-    pub fn select(mut self, projection: Vec<Expr>) -> Self {
-        self.projection = projection;
+    pub fn select<P, I>(mut self, projection: I) -> Self
+    where
+        P: Into<SelectProjection>,
+        I: IntoIterator<Item = P>,
+    {
+        self.projection = projection.into_iter().map(Into::into).collect();
         self
     }
 

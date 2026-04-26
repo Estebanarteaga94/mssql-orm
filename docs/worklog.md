@@ -2,6 +2,42 @@
 
 ## 2026-04-26
 
+### Sesión: AST de proyecciones tipadas con alias estable
+
+- Se ejecutó la tarea `Etapa 18: Extender el AST SelectQuery para proyecciones públicas de columnas/expresiones con alias estable suficiente para FromRow`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `mssql-orm-query` ahora expone `SelectProjection` y `SelectQuery::projection` cambió de `Vec<Expr>` a `Vec<SelectProjection>`.
+- `SelectProjection::column(...)` asigna alias por defecto igual a `column_name`; `SelectProjection::expr_as(...)` permite alias explícito; `SelectProjection::expr(...)` conserva expresiones sin alias para que el compilador las rechace si llegan a SQL Server.
+- `SelectQuery::select(...)` ahora acepta cualquier iterable de elementos convertibles a `SelectProjection`, preservando compatibilidad con usos internos existentes basados en `Vec<Expr>` para columnas.
+- `mssql-orm-sqlserver` compila proyecciones como `expr AS [alias]` y valida aliases ausentes en expresiones, aliases vacíos y aliases duplicados.
+- Se actualizaron snapshots de SQL compilado para fijar aliases explícitos en `SELECT`.
+- Se actualizó `docs/projections.md`, `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- El AST y el compilador ya tienen aliases estables suficientes para que la siguiente tarea implemente `DbSetQuery::select(...)`, `all_as::<T>()` y `first_as::<T>()` sobre DTOs `FromRow`.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm-query -p mssql-orm-sqlserver --lib -- --nocapture`
+- `cargo test -p mssql-orm-sqlserver --test compiler_snapshots -- --nocapture`
+- `cargo test -p mssql-orm --test stage6_public_query_builder_snapshots -- --nocapture`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 18: Implementar API pública inicial de proyecciones: select(...) y ejecución all_as::<T>() / first_as::<T>() sobre DbSetQuery`.
+
 ### Sesión: diseño de proyecciones tipadas
 
 - Se ejecutó la tarea `Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas`.
