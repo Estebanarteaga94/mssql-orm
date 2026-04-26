@@ -2,6 +2,34 @@
 
 ## 2026-04-25
 
+### Sesión: sincronización de backlog de tenant runtime
+
+- Se detectó que `docs/tasks.md` no contenía los pasos inmediatos derivados de la implementación de metadata tenant.
+- Se descompuso el trabajo pendiente de tenant en subtareas ejecutables:
+  - transporte runtime con `with_tenant(...)` / `clear_tenant()` y `ActiveTenant`;
+  - cierre del bypass público potencial de `DbSetQuery::into_select_query()`;
+  - filtros tenant obligatorios en lecturas;
+  - filtros tenant obligatorios en escrituras existentes;
+  - inserts tenant-scoped;
+  - cobertura de seguridad.
+- No se modificó código en esta sesión; fue una corrección operativa del backlog.
+
+### Resultado
+
+- `docs/tasks.md` vuelve a reflejar los siguientes pasos reales antes de intentar inserts o pruebas integrales.
+
+### Validación
+
+- No aplica validación de Rust; solo se actualizó backlog operativo.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Implementar with_tenant(...) / clear_tenant() en SharedConnection y en #[derive(DbContext)], transportando un ActiveTenant { column_name, value } normalizado por SharedConnectionRuntime`.
+
 ### Sesión: base code-first de tenant opt-in
 
 - Se ejecutó una primera pieza implementable necesaria antes de los inserts tenant-scoped: `#[derive(TenantContext)]`, `#[orm(tenant = CurrentTenant)]`, metadata ordinaria y contrato auxiliar `TenantScopedEntity`.

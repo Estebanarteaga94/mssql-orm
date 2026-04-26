@@ -1,6 +1,10 @@
 # Tasks
 
 ## Pendientes
+- [ ] Etapa 16+: Implementar `with_tenant(...)` / `clear_tenant()` en `SharedConnection` y en `#[derive(DbContext)]`, transportando un `ActiveTenant { column_name, value }` normalizado por `SharedConnectionRuntime`
+- [ ] Etapa 16+: Cerrar el bypass público de `DbSetQuery::into_select_query()` antes de aplicar tenant runtime, haciéndolo interno/testing o reemplazándolo por una API falible que materialice filtros obligatorios
+- [ ] Etapa 16+: Aplicar filtro tenant obligatorio en lecturas de entidades opt-in: `query()`, `query_with(...)`, `all()`, `first()`, `count()`, `find`, Active Record `query/find` y `find_tracked`
+- [ ] Etapa 16+: Aplicar filtro tenant obligatorio en escrituras existentes de entidades opt-in: `update`, `delete`, Active Record `save/delete`, `save_changes()` para `Modified`/`Deleted`, `rowversion` y `soft_delete`
 - [ ] Etapa 16+: Garantizar que inserts de entidades con `#[orm(tenant = CurrentTenant)]` reciban automáticamente la columna tenant desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto
 - [ ] Etapa 16+: Cubrir `tenant` con pruebas de seguridad para `query().all()`, `find`, joins, `update`, `delete`, Active Record, tracking y SQL compilado, demostrando que no hay rutas públicas que omitan el filtro en entidades tenant-scoped
 
