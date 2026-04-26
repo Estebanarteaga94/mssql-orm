@@ -131,6 +131,14 @@ It should avoid presenting planned-only behavior as shipped. Claims about audit 
 
 The public README can safely link to this audit and to `docs/core-concepts.md` once created, but should not duplicate the full inventory.
 
+## Related Documents
+
+- Core concepts: [core-concepts.md](core-concepts.md)
+- Public API guide: [api.md](api.md)
+- Quickstart: [quickstart.md](quickstart.md)
+- Code-first guide: [code-first.md](code-first.md)
+- Project README: [../README.md](../README.md)
+
 ## Verification Commands Used
 
 - `rg --files`

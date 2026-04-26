@@ -273,3 +273,12 @@ No entran en el corte actual:
 - validacion compile-time de que el DTO contiene exactamente los campos proyectados.
 
 Raw SQL tipado sigue siendo el escape hatch para consultas mas complejas mientras el AST crece.
+
+## Referencias relacionadas
+
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
+- API publica: [docs/api.md](api.md)
+- Query builder publico: [docs/query-builder.md](query-builder.md)
+- Relaciones y joins: [docs/relationships.md](relationships.md)
+- Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
+- Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

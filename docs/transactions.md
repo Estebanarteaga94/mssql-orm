@@ -176,8 +176,10 @@ Esas pruebas se ejecutan cuando `MSSQL_ORM_TEST_CONNECTION_STRING` apunta a una 
 
 ## Referencias relacionadas
 
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
 - API publica: [docs/api.md](api.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
 - Query builder publico: [docs/query-builder.md](query-builder.md)
 - Guia de migraciones: [docs/migrations.md](migrations.md)
+- Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

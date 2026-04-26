@@ -329,7 +329,9 @@ Para cambios delicados:
 
 ## Referencias relacionadas
 
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
 - API publica: [docs/api.md](api.md)
 - Guia `code-first`: [docs/code-first.md](code-first.md)
 - Quickstart: [docs/quickstart.md](quickstart.md)
+- Entity Policies: [docs/entity-policies.md](entity-policies.md)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

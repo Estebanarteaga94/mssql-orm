@@ -336,3 +336,17 @@ These are intentional limits of the current implementation:
 - `migration.rs` is not implemented.
 
 When documenting or using the project, treat these as unavailable unless the code and audit are updated first.
+
+## Related Guides
+
+- Public API inventory: [api.md](api.md)
+- Quickstart: [quickstart.md](quickstart.md)
+- Code-first guide: [code-first.md](code-first.md)
+- Query builder: [query-builder.md](query-builder.md)
+- Typed projections: [projections.md](projections.md)
+- Typed raw SQL: [raw-sql.md](raw-sql.md)
+- Relationships and joins: [relationships.md](relationships.md)
+- Transactions: [transactions.md](transactions.md)
+- Migrations: [migrations.md](migrations.md)
+- Entity policies: [entity-policies.md](entity-policies.md)
+- Repository audit: [repository-audit.md](repository-audit.md)

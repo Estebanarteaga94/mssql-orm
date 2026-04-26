@@ -291,3 +291,12 @@ La API esta cubierta por:
 - pruebas unitarias de parametros en `crates/mssql-orm/src/raw_sql.rs`;
 - validacion de `@P1` repetido, continuidad de placeholders, `NULL`, tuplas, `Vec<T>` y orden de parametros;
 - prueba publica real en `crates/mssql-orm/tests/stage17_raw_sql.rs`, ejecutada contra SQL Server cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esta configurado.
+
+## Referencias relacionadas
+
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
+- API publica: [docs/api.md](api.md)
+- Query builder publico: [docs/query-builder.md](query-builder.md)
+- Proyecciones tipadas: [docs/projections.md](projections.md)
+- Transacciones runtime: [docs/transactions.md](transactions.md)
+- Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

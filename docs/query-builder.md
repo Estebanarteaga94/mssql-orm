@@ -264,10 +264,12 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 
 ## Referencias relacionadas
 
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
 - API publica: [docs/api.md](api.md)
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
 - Relaciones y joins: [docs/relationships.md](relationships.md)
 - Proyecciones tipadas: [docs/projections.md](projections.md)
+- Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
 - Ejemplo real con queries: [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

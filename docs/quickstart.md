@@ -168,3 +168,11 @@ cargo run
 Si quieres ver una integración más realista con HTTP, health checks, pool y relaciones entre tablas, revisa [examples/todo-app/README.md](../examples/todo-app/README.md).
 
 Para revisar el inventario de la API publica disponible en la crate raiz, consulta [docs/api.md](api.md).
+
+## Referencias relacionadas
+
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
+- Guia code-first: [docs/code-first.md](code-first.md)
+- Query builder publico: [docs/query-builder.md](query-builder.md)
+- Migraciones: [docs/migrations.md](migrations.md)
+- Uso sin clonar manualmente: [docs/use-without-downloading.md](use-without-downloading.md)

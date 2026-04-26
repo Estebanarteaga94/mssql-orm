@@ -401,6 +401,7 @@ Esta surface no promete todavia:
 
 ## Guias relacionadas
 
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Code-first: [docs/code-first.md](code-first.md)
 - Query builder: [docs/query-builder.md](query-builder.md)
@@ -410,3 +411,4 @@ Esta surface no promete todavia:
 - Entity Policies: [docs/entity-policies.md](entity-policies.md)
 - Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
 - Proyecciones tipadas: [docs/projections.md](projections.md)
+- Auditoria del repositorio: [docs/repository-audit.md](repository-audit.md)

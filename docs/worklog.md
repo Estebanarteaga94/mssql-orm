@@ -2,6 +2,35 @@
 
 ## 2026-04-26
 
+### Sesión: enlaces internos de documentación
+
+- Se ejecutó la tarea `Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related docs guides`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se añadieron referencias cruzadas hacia `docs/core-concepts.md` desde guías públicas clave: `docs/api.md`, `docs/code-first.md`, `docs/query-builder.md`, `docs/migrations.md`, `docs/relationships.md`, `docs/transactions.md`, `docs/raw-sql.md`, `docs/projections.md` y `docs/quickstart.md`.
+- `docs/core-concepts.md` ahora cierra con un mapa de guías relacionadas para navegar hacia API pública, quickstart, code-first, query builder, proyecciones, raw SQL, relaciones, transacciones, migraciones, entity policies y auditoría.
+- `docs/repository-audit.md` y `docs/use-without-downloading.md` ahora enlazan los documentos conceptuales y operativos principales.
+- Se preservaron como excepciones existentes de nombre no `kebab-case` los archivos históricos `docs/ai/README.md` y `docs/plan_orm_sqlserver_tiberius_code_first.md`; no son documentos nuevos de esta tarea y el plan maestro conserva su ruta operativa actual.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Los documentos recientes quedan descubribles desde README y desde las guías relacionadas, sin duplicar contenido ni cambiar claims funcionales.
+
+### Validación
+
+- Script local de enlaces markdown: `checked 26 markdown files; all local links resolve`.
+- `rg -n "core-concepts|repository-audit|use-without-downloading|raw-sql|projections|entity-policies" README.md docs/*.md docs/architecture/*.md docs/ai/*.md`
+- `find docs -type f | sed 's#^docs/##' | rg -v '(^|/)[a-z0-9]+([-.][a-z0-9]+)*\\.md$'`
+- `cargo fmt --all --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Documentation prompt: Validate documentation consistency with repository state using targeted rg checks plus cargo fmt --all --check and cargo check --workspace`.
+
 ### Sesión: README como navegación breve
 
 - Se ejecutó la tarea `Documentation prompt: Update README.md as a brief navigation document linking to docs/core-concepts.md without duplicating detailed docs`.

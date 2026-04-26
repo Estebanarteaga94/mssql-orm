@@ -174,3 +174,11 @@ For normal application usage, a pinned Git dependency is enough.
   are still limited.
 - If a behavior is unclear in the current code, treat it as `Pending
   verification` rather than relying on it in production.
+
+## Related Documents
+
+- Core concepts: [core-concepts.md](core-concepts.md)
+- Quickstart: [quickstart.md](quickstart.md)
+- Public API guide: [api.md](api.md)
+- Migrations guide: [migrations.md](migrations.md)
+- Repository audit: [repository-audit.md](repository-audit.md)

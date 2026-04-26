@@ -22,7 +22,7 @@ La Etapa 12 quedó cerrada con surface, persistencia, cobertura y límites docum
 
 `docs/repository-audit.md` registra el inventario verificado del workspace antes de escribir documentación conceptual nueva. La auditoría confirma que existen las ocho crates objetivo, que la API pública se concentra en `mssql-orm::prelude::*`, que `query` mantiene AST sin SQL, que `sqlserver` compila SQL Server y que `tiberius` concentra ejecución. También deja marcados como límites o diferidos: `AuditProvider` runtime, columnas auditables visibles como campos/símbolos de entidad, navigation properties, aliases automáticos para self-joins, agregaciones tipadas de alto nivel, persistencia completa con PK compuesta, `migration.rs`, multi-base de datos y transacciones sobre contextos creados desde pool.
 
-`docs/core-concepts.md` ya existe como guía conceptual en inglés. Describe el flujo real `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity`, las responsabilidades de cada crate, el rol de `DbContext`/`DbSet`, metadata, AST, compilación SQL Server, ejecución Tiberius, materialización con `FromRow`, escrituras, proyecciones, raw SQL, migraciones, entity policies y límites actuales. La siguiente tarea documental debe revisar docs públicos existentes y marcar claims no verificables antes de enlazar ampliamente la guía nueva.
+`docs/core-concepts.md` ya existe como guía conceptual en inglés. Describe el flujo real `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity`, las responsabilidades de cada crate, el rol de `DbContext`/`DbSet`, metadata, AST, compilación SQL Server, ejecución Tiberius, materialización con `FromRow`, escrituras, proyecciones, raw SQL, migraciones, entity policies y límites actuales. La navegación interna ya enlaza esta guía y documentos recientes desde README y desde las guías públicas relacionadas.
 
 La revisión de claims públicos ya corrigió documentos que seguían presentando estados antiguos como actuales: `docs/architecture/overview.md` ya no dice que las crates siguen en placeholder, `docs/entity-policies.md` distingue el MVP inicial de auditoría del estado implementado posterior para `soft_delete` y `tenant`, `docs/api.md` lista `SoftDeleteFields` y `TenantContext`, y `README.md` marca como `Pending verification` las afirmaciones de validación real del ejemplo `todo-app` que deben reejecutarse en el entorno actual antes de usarse como evidencia fresca.
 
@@ -445,6 +445,5 @@ La base code-first de tenant opt-in ya existe en codigo: la crate publica expone
 
 ## Próximo Enfoque Recomendado
 
-1. Actualizar enlaces internos para que `docs/core-concepts.md` y documentos nuevos sean descubribles desde README y guias relacionadas.
-2. Ejecutar la validacion documental final con busquedas dirigidas, `cargo fmt --all --check` y `cargo check --workspace`.
-3. Preservar las fronteras arquitectonicas actuales: `query` solo AST, `sqlserver` compilacion, `tiberius` ejecucion y `mssql-orm` como API publica.
+1. Ejecutar la validacion documental final con busquedas dirigidas, `cargo fmt --all --check` y `cargo check --workspace`.
+2. Preservar las fronteras arquitectonicas actuales: `query` solo AST, `sqlserver` compilacion, `tiberius` ejecucion y `mssql-orm` como API publica.

@@ -226,8 +226,10 @@ Las consultas reutilizables estan en [examples/todo-app/src/queries.rs](../examp
 
 ## Referencias relacionadas
 
+- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
 - API publica: [docs/api.md](api.md)
 - Query builder publico: [docs/query-builder.md](query-builder.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
 - Migraciones: [docs/migrations.md](migrations.md)
+- Proyecciones tipadas: [docs/projections.md](projections.md)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)
