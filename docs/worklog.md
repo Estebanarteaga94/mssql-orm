@@ -2,6 +2,34 @@
 
 ## 2026-04-26
 
+### Sesión: documentación pública de proyecciones SQL reales
+
+- Se ejecutó la tarea `Etapa 18: Documentar la diferencia entre map en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `docs/projections.md` quedó actualizado como guía pública vigente: estado implementado, ejemplos de `select(...)`, diferencia entre `map` en memoria y proyección SQL real, contrato de aliases, joins y límites de agregaciones.
+- `docs/query-builder.md` ahora documenta la ruta `select(...)` + `all_as::<T>()` / `first_as::<T>()`, incluyendo el contraste con transformar entidades completas en memoria.
+- `docs/api.md`, `docs/relationships.md` y `README.md` quedaron sincronizados con la existencia real de raw SQL tipado y proyecciones tipadas.
+- `docs/context.md` se actualizó para dejar Etapa 18 cerrada y registrar que no quedan pendientes operativos inmediatos en `docs/tasks.md`.
+
+### Resultado
+
+- La documentación pública ya explica cuándo usar `map` en memoria, cuándo usar proyecciones SQL reales y qué límites iniciales existen para joins, aliases y agregaciones.
+
+### Validación
+
+- `rg -n "no hay raw SQL tipado|no hay proyecciones|queda planificada|pendiente ahora|siguiente tarea es cobertura|cobertura publica amplia.*queda|planificadas como Etapa 18|La pieza pendiente" README.md docs --glob '!docs/worklog.md'`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Revisar el plan maestro y descomponer la siguiente etapa de roadmap en `docs/tasks.md` antes de iniciar nueva implementación.
+
 ### Sesión: cobertura pública de proyecciones tipadas
 
 - Se ejecutó la tarea `Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, trybuild de API pública y materialización a DTOs FromRow`.

@@ -179,15 +179,40 @@ let total_active = db.users.query().filter(User::active.eq(true)).count().await?
 
 ## Proyecciones tipadas
 
-La API publica actual materializa entidades completas. Para transformar una entidad cargada en un DTO puedes usar `map` en memoria despues de `all().await`, pero eso no reduce las columnas leidas desde SQL Server.
+La API publica soporta dos rutas distintas:
 
-Las proyecciones tipadas quedan planificadas como Etapa 18 y su diseño operativo vive en [docs/projections.md](projections.md). El objetivo es que una consulta pueda seleccionar solo columnas o expresiones concretas y materializarlas en un struct que implemente `FromRow`, por ejemplo:
+- `all()` / `first()` materializan entidades completas.
+- `select(...)` + `all_as::<T>()` / `first_as::<T>()` materializa DTOs `T: FromRow` desde una proyeccion SQL.
+
+Transformar despues con `map` en memoria sigue siendo valido, pero ocurre despues de leer entidades completas desde SQL Server:
+
+```rust
+let entities = db.users.query().all().await?;
+let rows = entities
+    .into_iter()
+    .map(|user| UserListItem {
+        id: user.id,
+        email: user.email,
+    })
+    .collect::<Vec<_>>();
+```
+
+Una proyeccion SQL reduce el `SELECT` emitido:
 
 ```rust
 #[derive(Debug)]
 struct UserListItem {
     id: i64,
     email: String,
+}
+
+impl FromRow for UserListItem {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            id: row.get_required_typed::<i64>("id")?,
+            email: row.get_required_typed::<String>("email")?,
+        })
+    }
 }
 
 let users = db
@@ -198,7 +223,28 @@ let users = db
     .await?;
 ```
 
-Esa API inicial ya esta disponible. `all()` / `first()` siguen materializando entidades completas; usa `all_as::<T>()` / `first_as::<T>()` cuando hayas llamado `select(...)` y quieras materializar un DTO `FromRow`.
+Columnas proyectadas reciben alias por defecto igual al nombre de columna. Para expresiones, usa alias explicito:
+
+```rust
+use mssql_orm::query::Expr;
+
+let rows = db
+    .users
+    .query()
+    .select(SelectProjection::expr_as(
+        Expr::function("LOWER", vec![Expr::from(User::email)]),
+        "email_lower",
+    ))
+    .first_as::<LowerEmail>()
+    .await?;
+```
+
+Limites iniciales:
+
+- no hay aliases de tabla, self-joins ni repeticion de la misma tabla en una consulta;
+- si dos columnas proyectadas comparten nombre, asigna alias explicito con `SelectProjection::expr_as(...)`;
+- no hay API tipada de alto nivel para agregaciones, `GROUP BY` o `HAVING`;
+- para agregaciones complejas o SQL Server especifico, usa raw SQL tipado.
 
 ## Inspeccion del AST
 
@@ -215,7 +261,6 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 - `count()` no preserva joins en esta etapa.
 - La proyeccion publica inicial existe, pero no hay aliases de tabla ni agregaciones tipadas de alto nivel.
 - Raw SQL tipado sigue siendo el escape hatch para consultas que todavia exceden el AST del query builder.
-- La cobertura publica amplia de proyecciones, incluyendo `trybuild` y materializacion real a DTOs, queda en la siguiente tarea de Etapa 18.
 
 ## Referencias relacionadas
 

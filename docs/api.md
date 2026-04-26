@@ -206,7 +206,7 @@ Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para
 
 Las proyecciones tipadas tienen diseño operativo en `docs/projections.md`. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
 
-Direccion de API:
+Ejemplo de API:
 
 ```rust
 let users = db
@@ -218,6 +218,22 @@ let users = db
 ```
 
 La API inicial ya existe en `DbSetQuery`: `select(...)` construye la proyeccion y `all_as::<T>()` / `first_as::<T>()` materializan DTOs mediante `FromRow`. `all()` / `first()` siguen siendo la ruta de entidades completas. El AST transporta aliases estables para que `FromRow` lea DTOs por nombre.
+
+Surface publica relacionada:
+
+- `DbSetQuery::select(...)`
+- `DbSetQuery::all_as::<T>()`
+- `DbSetQuery::first_as::<T>()`
+- `SelectProjection` desde `mssql_orm::prelude`
+- `Expr` desde `mssql_orm::query`
+
+Reglas operativas:
+
+- columnas proyectadas con `EntityColumn` reciben alias por defecto igual al nombre de columna;
+- expresiones requieren alias explicito con `SelectProjection::expr_as(...)`;
+- `map` despues de `all().await` transforma entidades ya cargadas, pero no reduce columnas leidas desde SQL Server;
+- proyecciones reales reducen el `SELECT` y materializan DTOs `FromRow`;
+- no hay aliases de tabla ni agregaciones tipadas de alto nivel en este corte.
 
 ## Active Record
 

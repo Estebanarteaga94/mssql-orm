@@ -29,6 +29,7 @@ Hoy el repositorio ya tiene soporte funcional para:
 - CRUD base: `find`, `insert`, `update`, `delete`
 - query builder público con `filter`, `order_by`, `limit`, `take`, `paginate`, `count`, `inner_join`, `left_join`
 - raw SQL tipado con `raw<T>()`, `raw_exec()`, parametros `@P1..@Pn` y materializacion mediante `FromRow`
+- proyecciones tipadas con `select(...)`, `all_as::<T>()` y `first_as::<T>()` hacia DTOs `FromRow`
 - Active Record base: `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.save(&db)`, `entity.delete(&db)`
 - concurrencia optimista con `rowversion`
 - change tracking experimental con `Tracked<T>` y `save_changes()`
@@ -88,6 +89,7 @@ Si quieres reutilizar columnas transversales con `Entity Policies`, revisa [docs
 Si quieres ver el inventario de API publicada por la crate raíz, revisa [docs/api.md](docs/api.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
 Si necesitas SQL Server escrito a mano con DTOs tipados y comandos parametrizados, revisa [docs/raw-sql.md](docs/raw-sql.md).
+Si quieres seleccionar columnas o expresiones concretas y materializarlas en DTOs, revisa [docs/projections.md](docs/projections.md).
 Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
 Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
 
@@ -187,7 +189,8 @@ Guía práctica para:
 - usar `take`, `limit` y `paginate`
 - declarar joins explícitos
 - ejecutar `all`, `first` y `count`
-- entender límites actuales como aliases, proyección parcial y conteos con joins
+- proyectar columnas a DTOs con `select(...)`, `all_as::<T>()` y `first_as::<T>()`
+- entender límites actuales como aliases de tabla, agregaciones y conteos con joins
 
 Documento: [docs/query-builder.md](docs/query-builder.md)
 
@@ -268,7 +271,8 @@ Estado resumido:
 - Etapa 14 cerrada: surface operativa de producción y ejemplo web `todo_app`
 - Etapa 15 cerrada: release, documentación pública, quickstart, guías y changelog
 - Etapa 16+ avanzada: `Entity Policies` ya cubre auditoría como metadata/schema, `soft_delete` runtime y filtros obligatorios `tenant`
-- Etapas siguientes en backlog: raw SQL tipado y proyecciones tipadas a DTOs
+- Etapa 17 cerrada: raw SQL tipado
+- Etapa 18 avanzada: proyecciones tipadas a DTOs con cobertura publica
 
 La fuente de verdad del roadmap técnico sigue siendo [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md).
 
@@ -280,8 +284,8 @@ Este repo todavía no pretende vender humo. Hay límites explícitos en esta fas
 - la API de change tracking sigue siendo experimental
 - `audit = Audit` no autollena valores en runtime ni agrega campos Rust visibles a las entidades
 - `AuditProvider` runtime sigue como diseño futuro
-- no hay raw SQL tipado público todavía
-- no hay proyecciones tipadas a DTOs todavía; el query builder público materializa entidades completas
+- no hay aliases de tabla para joins ni self-joins
+- no hay agregaciones tipadas de alto nivel en el query builder
 - no se está intentando soportar múltiples motores de base de datos
 - algunas decisiones de UX futura siguen abiertas alrededor de policies con comportamiento runtime
 

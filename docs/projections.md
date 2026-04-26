@@ -4,7 +4,7 @@ Las proyecciones tipadas son la Etapa 18 del query builder publico. El objetivo 
 
 ## Estado Actual
 
-El AST ya tiene una base parcial:
+La base publica de proyecciones ya esta implementada:
 
 - `mssql-orm-query::SelectQuery` contiene `projection: Vec<SelectProjection>`.
 - `SelectQuery::select(...)` ya acepta elementos convertibles a `SelectProjection`.
@@ -12,12 +12,9 @@ El AST ya tiene una base parcial:
 - Si `projection` esta vacia, el compilador emite `SELECT *`.
 - `DbSetQuery<E>::all()` y `first()` siempre materializan `E`.
 - `DbSetQuery<E>::select(...)`, `all_as::<T>()` y `first_as::<T>()` ya exponen la API publica inicial de proyecciones.
+- La cobertura publica vive en `crates/mssql-orm/tests/stage18_public_projections.rs` y `crates/mssql-orm/tests/ui/query_projection_public_valid.rs`.
 
-La pieza pendiente ahora es cobertura publica amplia: snapshots SQL dedicados, `trybuild` de API publica y materializacion a DTOs `FromRow`.
-
-## Objetivo
-
-La direccion de API publica es:
+## Ejemplo Base
 
 ```rust
 #[derive(Debug, Clone, PartialEq)]
@@ -108,9 +105,9 @@ El quoting de aliases pertenece a `mssql-orm-sqlserver` usando la infraestructur
 
 ## API Publica de Proyeccion
 
-La API publica debe vivir en `mssql-orm`, encima de `DbSetQuery<E>`, y convertir formas ergonomicas a `SelectProjection`.
+La API publica vive en `mssql-orm`, encima de `DbSetQuery<E>`, y convierte formas ergonomicas a `SelectProjection`.
 
-Forma inicial suficiente:
+Forma recomendada para columnas:
 
 ```rust
 db.users
@@ -127,18 +124,15 @@ use mssql_orm::query::Expr;
 
 db.users
     .query()
-    .select((
-        User::id,
-        projection_as(
-            Expr::function("LOWER", vec![Expr::from(User::email)]),
-            "email_lower",
-        ),
+    .select(SelectProjection::expr_as(
+        Expr::function("LOWER", vec![Expr::from(User::email)]),
+        "email_lower",
     ))
     .all_as::<UserEmailSearchItem>()
     .await?;
 ```
 
-El helper exacto puede llamarse `projection_as`, `expr_as` o exponerse como constructor de un tipo publico. La decision de nombre debe tomarse en la tarea de implementacion de API, no en `core`.
+`SelectProjection` esta reexportado desde `mssql_orm::prelude`. `Expr` sigue disponible desde `mssql_orm::query`.
 
 ## Integracion con Filtros Obligatorios
 
@@ -178,7 +172,7 @@ Esta regla evita DTOs ambiguos cuando dos tablas tienen columnas como `id`, `cre
 
 ## Relacion con `map` en Memoria
 
-Esto:
+`map` en memoria transforma datos despues de leerlos:
 
 ```rust
 let rows = db.users.query().all().await?;
@@ -191,20 +185,82 @@ let dtos = rows
     .collect::<Vec<_>>();
 ```
 
-materializa entidades completas y lee todas las columnas que devuelve `SELECT *`.
+Esa forma sigue siendo valida cuando ya necesitas la entidad completa, pero no es una proyeccion SQL. Primero ejecuta `all()`, materializa `User` y lee todas las columnas que devuelve `SELECT *`.
 
-Una proyeccion real debe cambiar el SQL:
+Una proyeccion SQL cambia el `SELECT` que llega a SQL Server:
+
+```rust
+let dtos = db
+    .users
+    .query()
+    .select((User::id, User::email))
+    .all_as::<UserListItem>()
+    .await?;
+```
 
 ```sql
 SELECT [dbo].[users].[id] AS [id], [dbo].[users].[email] AS [email]
 FROM [dbo].[users]
 ```
 
-La documentacion publica posterior debe explicar esta diferencia, porque `map` en memoria sigue siendo valido pero no reduce el ancho de fila ni el costo de lectura desde SQL Server.
+Usa proyecciones SQL cuando quieres reducir ancho de fila, evitar materializar campos no usados o mapear directamente a un DTO de lectura. Usa `map` en memoria cuando el flujo de negocio realmente necesita cargar entidades completas y despues derivar otro shape local.
 
-## Fuera del MVP
+`all()` / `first()` y `all_as::<T>()` / `first_as::<T>()` son rutas distintas a proposito:
 
-No entran en el primer corte:
+- `all()` y `first()` materializan entidades completas `E`.
+- `all_as::<T>()` y `first_as::<T>()` materializan DTOs `T: FromRow` desde la proyeccion actual.
+- llamar `select(...)` no cambia el tipo de `all()`; para DTOs usa siempre la ruta `*_as`.
+
+## Aliases y DTOs
+
+Los aliases son parte del contrato entre SQL compilado y `FromRow`.
+
+- columnas proyectadas con `User::email` reciben alias por defecto `"email"`;
+- expresiones como `LOWER(email)` requieren `SelectProjection::expr_as(..., "alias")`;
+- aliases vacios o duplicados fallan antes de ejecutar la consulta;
+- el DTO debe leer los mismos nombres en `FromRow`, por ejemplo `row.get_required_typed::<String>("email_lower")`.
+
+Si una consulta con join proyecta dos columnas con el mismo `column_name`, como `User::id` y `Order::id`, una de ellas debe usar alias explicito:
+
+```rust
+db.users
+    .query()
+    .inner_join::<Order>(Predicate::eq(
+        Expr::from(User::id),
+        Expr::from(Order::user_id),
+    ))
+    .select((
+        SelectProjection::expr_as(Expr::from(User::id), "user_id"),
+        SelectProjection::expr_as(Expr::from(Order::id), "order_id"),
+    ))
+    .all_as::<UserOrderRow>()
+    .await?;
+```
+
+## Limites Iniciales
+
+Joins:
+
+- se soportan joins explicitos ya disponibles en `DbSetQuery`;
+- no hay aliases de tabla publicos;
+- no hay self-joins ni repeticion de la misma tabla en una consulta;
+- el filtro automatico de `tenant` y `soft_delete` aplica a la entidad raiz segun las reglas ya existentes; filtros adicionales sobre tablas joinadas deben escribirse explicitamente.
+
+Aliases:
+
+- no hay inferencia automatica de aliases para resolver colisiones entre tablas;
+- no hay validacion compile-time de que el DTO lea exactamente todos los aliases proyectados;
+- la validacion real ocurre al compilar la consulta y al materializar `FromRow`.
+
+Agregaciones:
+
+- no existe todavia API tipada de alto nivel para `COUNT`, `SUM`, `AVG`, `GROUP BY` o `HAVING` dentro de proyecciones;
+- expresiones simples se pueden proyectar con `SelectProjection::expr_as(...)` cuando el AST actual pueda representarlas;
+- para agregaciones complejas, grouping, ventanas o SQL especifico de SQL Server, usa raw SQL tipado con `db.raw::<T>(...)`.
+
+## Fuera del Corte Actual
+
+No entran en el corte actual:
 
 - aliases de tabla;
 - navigation properties;
@@ -217,8 +273,3 @@ No entran en el primer corte:
 - validacion compile-time de que el DTO contiene exactamente los campos proyectados.
 
 Raw SQL tipado sigue siendo el escape hatch para consultas mas complejas mientras el AST crece.
-
-## Secuencia Recomendada
-
-1. Cubrir snapshots SQL, orden de parametros, `trybuild` publico y materializacion de DTOs.
-2. Actualizar `docs/query-builder.md` y `docs/api.md` diferenciando proyecciones reales de `map` en memoria.

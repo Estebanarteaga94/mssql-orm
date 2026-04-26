@@ -209,7 +209,7 @@ La materializacion publica actual de `DbSetQuery<T>` sigue devolviendo entidades
 - No hay lazy loading ni eager loading automatico.
 - No hay inferencia automatica de joins desde `ForeignKeyMetadata`.
 - No hay aliases de tabla en el AST; SQL Server rechaza self-joins o repetir la misma tabla en una consulta hasta que exista soporte de aliases.
-- `DbSetQuery<T>` materializa entidades completas de `T`; no hay proyecciones parciales publicas ni DTOs derivados por join.
+- `DbSetQuery<T>::all()` y `first()` materializan entidades completas de `T`; para DTOs derivados de columnas de la entidad base o de joins explicitos usa `select(...)` con `all_as::<DTO>()` / `first_as::<DTO>()`.
 - La sintaxis publica del derive no genera foreign keys compuestas automaticamente, aunque el pipeline interno de snapshots/diff/DDL ya tenga soporte para representarlas.
 - `count()` sobre `DbSetQuery<T>` conserva filtros de la entidad base, pero no traslada joins al `CountQuery` interno en esta etapa.
 
