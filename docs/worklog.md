@@ -2,6 +2,35 @@
 
 ## 2026-04-26
 
+### Sesión: auditoría documental del repositorio real
+
+- Se ejecutó la tarea `Documentation prompt: Audit the repository before writing docs by identifying existing crates, real public APIs, implemented features, incomplete features and planned-only features`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no existe en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó `docs/repository-audit.md` en inglés como inventario verificable del estado real del workspace, API pública, features implementadas, límites explícitos y features diferidas.
+- La auditoría confirma que existen las ocho crates objetivo y que se mantienen los boundaries arquitectónicos: `query` transporta AST, `sqlserver` compila SQL, `tiberius` ejecuta y la API normal de usuario se concentra en `mssql-orm`.
+- Se actualizó `docs/context.md` con el estado vigente de la auditoría documental.
+
+### Resultado
+
+- La siguiente tarea documental (`docs/core-concepts.md`) ya tiene una base trazable para no presentar como implementado lo que sigue limitado o diferido.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `rg -n "Repository Audit|Workspace Crates|Implemented Features|Incomplete Or Explicitly Limited Features|Planned-Only Or Deferred Features|docs/plan_orm_sqlserver_tiberius_code_first.md" docs/repository-audit.md docs/tasks.md docs/context.md docs/worklog.md`
+- Búsquedas dirigidas sobre crates y docs para exports públicos, manifests, features implementadas y límites documentales.
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- El archivo `prompt` ya aparece modificado en el working tree y se preservó sin cambios.
+
+### Próximo paso recomendado
+
+- Crear `docs/core-concepts.md` en inglés usando `docs/repository-audit.md` como fuente de verificación.
+
 ### Sesión: documentación de licencia, seguridad, contribución y uso sin descarga manual
 
 - Se ejecutó la tarea `Documentation prompt: Add root project governance docs for MIT license, security policy, contribution workflow and a no-manual-download usage guide for humans and AI agents`.
