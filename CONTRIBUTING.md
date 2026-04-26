@@ -1,81 +1,47 @@
 # Contributing
 
-Thanks for helping improve `mssql-orm`. This repository is built as a
-SQL Server-first Rust ORM with strict crate boundaries and documentation-driven
-workflow.
-
-## Project Goals
-
-`mssql-orm` aims to provide:
-
-- code-first entities in Rust;
-- a public `DbContext` / `DbSet` API;
-- a typed query builder that builds AST, not SQL strings;
-- SQL Server compilation in a dedicated crate;
-- execution through Tiberius in a dedicated adapter crate;
-- code-first migrations;
-- clear documentation for users and AI-assisted maintainers.
-
-Do not broaden the project into a multi-database ORM unless the roadmap is
-explicitly changed.
+This repository is a Rust workspace for a SQL Server-first, code-first ORM built on Tiberius. Contributions should preserve the project architecture and keep changes small, traceable, and validated.
 
 ## Architecture Rules
 
-Follow these boundaries:
+- `mssql-orm-core` owns contracts, metadata, shared types, and errors.
+- `mssql-orm-macros` owns derives and generated metadata.
+- `mssql-orm-query` owns the query AST and must not generate SQL.
+- `mssql-orm-sqlserver` owns SQL Server query and DDL compilation.
+- `mssql-orm-tiberius` owns execution, connections, rows, transactions, and Tiberius adaptation.
+- `mssql-orm-migrate` owns migration snapshots, diffs, operations, and filesystem helpers.
+- `mssql-orm-cli` owns command-line workflows.
+- `mssql-orm` owns the public user-facing API and prelude.
 
-- `mssql-orm-core`: contracts, metadata, values, errors and base traits.
-- `mssql-orm-macros`: derives and compile-time metadata generation.
-- `mssql-orm-query`: query AST only; no SQL generation.
-- `mssql-orm-sqlserver`: SQL Server SQL and DDL compilation.
-- `mssql-orm-tiberius`: connection, execution, rows, transactions and Tiberius.
-- `mssql-orm-migrate`: snapshots, diff, migration operations and migration IO.
-- `mssql-orm-cli`: command-line entry points.
-- `mssql-orm`: public API and reexports.
+Do not introduce multi-database abstractions in this phase. SQL Server is the only target.
 
-Prefer existing local patterns over new abstractions. Keep changes scoped to the
-task being implemented.
+## Before Changing Code
+
+Read the operational documentation first:
+
+- `docs/instructions.md`
+- `docs/tasks.md`
+- `docs/worklog.md`
+- `docs/context.md`
+- `docs/plan_orm_sqlserver_tiberius_code_first.md`
+
+If there is a conflict about contracts, metadata shape, or crate responsibilities, the master plan wins.
 
 ## Workflow
 
-Before changing code or docs:
+1. Pick one concrete task from `docs/tasks.md`.
+2. Move it to `En Progreso` before implementation when that file is part of the active tracked workflow.
+3. Inspect the current code before editing.
+4. Make the smallest change that completes the task.
+5. Validate with the narrowest relevant checks, and broaden validation when the blast radius is larger.
+6. Update operational documentation when behavior, state, or decisions change.
+7. Commit completed and validated work.
 
-1. Read `docs/instructions.md`.
-2. Read `docs/tasks.md`.
-3. Read `docs/context.md`.
-4. Check recent entries in `docs/worklog.md`.
-5. Verify whether the requested behavior already exists in code.
+When a file is intentionally ignored by `.gitignore`, do not modify it as part of a repository-wide documentation change unless the user explicitly asks for local-only notes.
 
-For task-driven work:
+## Validation
 
-1. Move one task to `En Progreso` in `docs/tasks.md`.
-2. Implement only that task and the minimum support required.
-3. Validate with focused tests and broader checks when appropriate.
-4. Update `docs/tasks.md`, `docs/worklog.md` and `docs/context.md`.
-5. Commit completed and validated work.
-
-## Documentation Contributions
-
-Documentation should help both normal users and AI agents.
-
-Use English for public documentation unless a task explicitly says otherwise.
-Use kebab-case filenames under `docs/`.
-
-Documentation must distinguish:
-
-- implemented and validated behavior;
-- experimental behavior;
-- planned behavior;
-- `Pending verification` when code or tests do not make the claim clear.
-
-Keep the root `README.md` short and navigational. Put detailed explanations in
-`docs/`.
-
-## Testing
-
-Run the narrowest useful validation first, then broader checks when the change
-can affect shared behavior.
-
-Common commands:
+Use the checks that apply to the change:
 
 ```bash
 cargo fmt --all --check
@@ -84,33 +50,35 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features
 ```
 
-SQL Server integration tests may require:
+For targeted changes, run focused tests first. For public API, macros, migrations, or query compilation, prefer adding or updating focused unit tests, snapshot tests, and `trybuild` fixtures.
 
-```bash
-MSSQL_ORM_TEST_CONNECTION_STRING="Server=localhost;Database=tempdb;User Id=SA;Password=...;TrustServerCertificate=True;Encrypt=False;"
-```
+Real SQL Server tests require `MSSQL_ORM_TEST_CONNECTION_STRING`.
 
-Do not commit real credentials.
+## Documentation
 
-## Pull Request Checklist
+Documentation should describe implemented behavior accurately. If a claim is not verified in the current repository state, mark it as pending verification or keep it out of public docs.
 
-- The change follows crate boundaries.
-- Public APIs are documented when they change.
-- Tests or documentation validation match the risk of the change.
-- `docs/tasks.md` and `docs/worklog.md` are updated for task-driven work.
-- Experimental behavior is labeled as experimental.
-- Planned behavior is not described as available.
-- Secrets and local connection strings are not committed.
+Keep public docs aligned with:
 
-## Guidance for AI Agents
+- `README.md`
+- `docs/core-concepts.md`
+- `docs/repository-audit.md`
+- feature guides under `docs/`
+- examples under `examples/`
 
-AI agents should operate as maintainers, not as abstract advisors:
+## Git Hygiene
 
-- read the repo before editing;
-- do not invent architecture;
-- do not document unverified behavior as real;
-- preserve user changes already present in the working tree;
-- use `rg` for search;
-- prefer focused patches;
-- leave traceability in `docs/`;
-- keep final summaries concrete: task, changes, validation and next step.
+- Do not revert unrelated user changes.
+- Do not use destructive Git commands unless explicitly requested.
+- Keep generated or local-only files out of Git.
+- Commit only the files needed for the task.
+
+## Pull Request Expectations
+
+A useful PR should include:
+
+- a clear problem statement;
+- a small implementation scope;
+- tests or a reason tests are not applicable;
+- documentation updates when public behavior changes;
+- notes about any remaining limits or risks.

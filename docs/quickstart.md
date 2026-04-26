@@ -1,178 +1,151 @@
 # Quickstart
 
-Guía mínima para conectar `mssql-orm`, crear un modelo, usar `DbContext`, hacer CRUD base y ejecutar una consulta con el query builder público.
+This guide shows the minimum path for connecting `mssql-orm`, defining a model, using `DbContext`, running basic CRUD, and executing a public query-builder query.
 
-Este quickstart está pensado para el estado real actual del repositorio:
+It is written against the current repository state:
 
-- SQL Server como único backend
-- crate pública `mssql-orm`
-- `#[derive(Entity)]`, `#[derive(DbContext)]`, `#[derive(Insertable)]`, `#[derive(Changeset)]`
-- `DbSet::find/insert/update/delete`
-- `DbSet::query().filter().order_by().take().all()`
+- SQL Server is the only database target.
+- The normal user API is `mssql_orm::prelude::*`.
+- `#[derive(Entity)]`, `#[derive(Insertable)]`, `#[derive(Changeset)]`, and `#[derive(DbContext)]` are available.
+- SQL is compiled by `mssql-orm-sqlserver` and executed by the Tiberius adapter.
 
-## 1. Preparar una tabla de prueba
+See also [Core concepts](core-concepts.md).
 
-Usa una base como `tempdb` y crea una tabla mínima:
+## 1. Add the Dependency
 
-```sql
-IF OBJECT_ID('dbo.quickstart_users', 'U') IS NOT NULL
-BEGIN
-    DROP TABLE dbo.quickstart_users;
-END;
-GO
-
-CREATE TABLE dbo.quickstart_users (
-    id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-    name NVARCHAR(120) NOT NULL,
-    active BIT NOT NULL
-);
-GO
-```
-
-Si estás en tu entorno local:
-
-```bash
-sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -Q "IF OBJECT_ID('dbo.quickstart_users', 'U') IS NOT NULL DROP TABLE dbo.quickstart_users; CREATE TABLE dbo.quickstart_users (id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL);"
-```
-
-## 2. Crear un proyecto Rust
-
-```bash
-cargo new quickstart-app
-cd quickstart-app
-```
-
-Mientras el crate no esté publicado, dentro de un checkout local del repo puedes apuntar por `path`:
+From an external project, use the root crate:
 
 ```toml
 [dependencies]
-mssql-orm = { path = "../mssql-orm/crates/mssql-orm" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm" }
 ```
 
-## 3. Definir entidad, modelos de persistencia y contexto
+If you want optional pooling:
+
+```toml
+[dependencies]
+mssql-orm = { git = "https://github.com/<owner>/<repo>.git", package = "mssql-orm", features = ["pool-bb8"] }
+```
+
+## 2. Import the Prelude
+
+```rust
+use mssql_orm::prelude::*;
+```
+
+The prelude contains the public derives, `DbContext`, `DbSet`, query extensions, errors, metadata contracts, and common SQL values.
+
+## 3. Define an Entity, Write Models, and Context
 
 ```rust
 use mssql_orm::prelude::*;
 
 #[derive(Entity, Debug, Clone, PartialEq)]
-#[orm(table = "quickstart_users", schema = "dbo")]
-struct User {
+#[orm(table = "customers", schema = "sales")]
+pub struct Customer {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
+    pub id: i64,
+
+    #[orm(length = 160)]
+    #[orm(unique)]
+    pub email: String,
 
     #[orm(length = 120)]
-    name: String,
+    pub full_name: String,
 
-    active: bool,
+    #[orm(nullable)]
+    #[orm(length = 30)]
+    pub phone: Option<String>,
 }
 
-#[derive(Insertable, Debug, Clone)]
-#[orm(entity = User)]
-struct NewUser {
-    name: String,
-    active: bool,
+#[derive(Insertable)]
+#[orm(entity = Customer)]
+pub struct NewCustomer {
+    pub email: String,
+    pub full_name: String,
+    pub phone: Option<String>,
 }
 
-#[derive(Changeset, Debug, Clone)]
-#[orm(entity = User)]
-struct UpdateUser {
-    name: Option<String>,
-    active: Option<bool>,
+#[derive(Changeset)]
+#[orm(entity = Customer)]
+pub struct UpdateCustomer {
+    pub full_name: Option<String>,
+    pub phone: Option<Option<String>>,
 }
 
-#[derive(DbContext, Debug, Clone)]
-struct AppDb {
-    pub users: DbSet<User>,
+#[derive(DbContext)]
+pub struct AppDb {
+    pub customers: DbSet<Customer>,
 }
 ```
 
-Configura la conexión mediante una cadena propia de tu entorno, por ejemplo:
+## 4. Connect
 
-```text
-Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;
-```
-
-## 4. Conectar y ejecutar CRUD + query builder
+Use a connection string from your own environment:
 
 ```rust
-use mssql_orm::prelude::*;
+let db = AppDb::connect(
+    "Server=localhost;Database=tempdb;User Id=sa;Password=Password123;\
+     TrustServerCertificate=True;Encrypt=False"
+).await?;
+```
 
-#[tokio::main]
-async fn main() -> Result<(), OrmError> {
-    let db = AppDb::connect(
-        "Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;"
+For examples and integration tests, prefer environment variables such as `DATABASE_URL` or `MSSQL_ORM_TEST_CONNECTION_STRING`.
+
+## 5. Insert and Find
+
+```rust
+let saved = db
+    .customers
+    .insert(NewCustomer {
+        email: "ana@example.com".to_string(),
+        full_name: "Ana Perez".to_string(),
+        phone: None,
+    })
+    .await?;
+
+let found = db.customers.find(saved.id).await?;
+```
+
+## 6. Update and Delete
+
+```rust
+let updated = db
+    .customers
+    .update(
+        saved.id,
+        UpdateCustomer {
+            full_name: Some("Ana Maria Perez".to_string()),
+            phone: Some(Some("+57 300 000 0000".to_string())),
+        },
     )
     .await?;
 
-    let inserted = db
-        .users
-        .insert(NewUser {
-            name: "Ana".to_string(),
-            active: true,
-        })
-        .await?;
-
-    let found = db.users.find(inserted.id).await?;
-
-    let active_users = db
-        .users
-        .query()
-        .filter(User::active.eq(true))
-        .order_by(User::name.asc())
-        .take(10)
-        .all()
-        .await?;
-
-    let updated = db
-        .users
-        .update(
-            inserted.id,
-            UpdateUser {
-                name: Some("Ana Maria".to_string()),
-                active: Some(false),
-            },
-        )
-        .await?;
-
-    let deleted = db.users.delete(inserted.id).await?;
-
-    println!("found: {found:?}");
-    println!("active users: {}", active_users.len());
-    println!("updated: {updated:?}");
-    println!("deleted: {deleted}");
-
-    Ok(())
-}
+let deleted = db.customers.delete(saved.id).await?;
 ```
 
-## 5. Ejecutar
+`update` returns `Ok(None)` when no row matches in the simple non-concurrency case. Entities with `rowversion` can return `OrmError::ConcurrencyConflict` when the primary key still exists but the token is stale.
 
-```bash
-cargo run
+## 7. Query
+
+```rust
+let customers = db
+    .customers
+    .query()
+    .filter(Customer::email.contains("@example.com"))
+    .order_by(Customer::email.asc())
+    .take(20)
+    .all()
+    .await?;
 ```
 
-## Qué demuestra este quickstart
+The public query builder produces an AST. SQL Server SQL is generated only by `mssql-orm-sqlserver`.
 
-- metadata y `FromRow` generados desde `#[derive(Entity)]`
-- conexión pública vía `DbContext::connect(...)`
-- insert materializado con retorno tipado
-- `find` por primary key simple
-- query builder público con `filter`, `order_by` y `take`
-- `update` con `Changeset`
-- `delete` por primary key simple
+## 8. Next Reading
 
-## Siguiente paso
-
-Si quieres ver una integración más realista con HTTP, health checks, pool y relaciones entre tablas, revisa [examples/todo-app/README.md](../examples/todo-app/README.md).
-
-Para revisar el inventario de la API publica disponible en la crate raiz, consulta [docs/api.md](api.md).
-
-## Referencias relacionadas
-
-- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
-- Guia code-first: [docs/code-first.md](code-first.md)
-- Query builder publico: [docs/query-builder.md](query-builder.md)
-- Migraciones: [docs/migrations.md](migrations.md)
-- Uso sin clonar manualmente: [docs/use-without-downloading.md](use-without-downloading.md)
+- Public API inventory: [docs/api.md](api.md)
+- Code-first guide: [docs/code-first.md](code-first.md)
+- Query builder guide: [docs/query-builder.md](query-builder.md)
+- Migrations guide: [docs/migrations.md](migrations.md)
+- Raw SQL guide: [docs/raw-sql.md](raw-sql.md)

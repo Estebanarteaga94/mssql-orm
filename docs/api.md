@@ -1,18 +1,20 @@
-# API Publica
+# Public API
 
-Inventario minimo de la surface publica actual expuesta por la crate raiz `mssql-orm`.
+This document is a compact inventory of the current public surface exposed by the root crate `mssql-orm`.
 
-Para codigo consumidor, el punto de entrada recomendado es:
+For consumer code, the recommended entry point is:
 
 ```rust
 use mssql_orm::prelude::*;
 ```
 
-La crate raiz concentra la API de usuario y reexporta internals seleccionados para pruebas, tooling y casos avanzados. Las responsabilidades siguen separadas por crate: `query` construye AST, `sqlserver` compila SQL, `tiberius` ejecuta, `migrate` gestiona snapshots/diff/migraciones y `core` define contratos compartidos.
+The root crate concentrates the user API and reexports selected internals for tests, tooling, and advanced cases. Responsibilities remain separated by crate: `query` builds ASTs, `sqlserver` compiles SQL, `tiberius` executes, `migrate` manages snapshots/diffs/migrations, and `core` defines shared contracts.
 
-## Derives publicos
+See also [Core concepts](core-concepts.md).
 
-Estos derives se usan desde la crate publica:
+## Public Derives
+
+The following derives are available from the public crate:
 
 - `#[derive(Entity)]`
 - `#[derive(Insertable)]`
@@ -22,7 +24,7 @@ Estos derives se usan desde la crate publica:
 - `#[derive(SoftDeleteFields)]`
 - `#[derive(TenantContext)]`
 
-Ejemplo base:
+Basic example:
 
 ```rust
 use mssql_orm::prelude::*;
@@ -56,9 +58,9 @@ struct AppDb {
 }
 ```
 
-## Contratos de modelo
+## Model Contracts
 
-La `prelude` expone los contratos principales de metadata y mapping:
+The prelude exposes the main metadata and mapping contracts:
 
 - `Entity`
 - `EntityMetadata`
@@ -82,7 +84,7 @@ La `prelude` expone los contratos principales de metadata y mapping:
 - `Changeset`
 - `OrmError`
 
-Uso tipico:
+Typical use:
 
 ```rust
 let metadata = User::metadata();
@@ -92,9 +94,9 @@ assert_eq!(metadata.table, "users");
 assert_eq!(email_column.column_name(), "email");
 ```
 
-## DbContext y DbSet
+## DbContext and DbSet
 
-La API principal de acceso a datos esta en:
+The main data-access API is:
 
 - `DbContext`
 - `DbSet<T>`
@@ -105,7 +107,7 @@ La API principal de acceso a datos esta en:
 - `connect_shared_with_options(...)`
 - `connect_shared_with_config(...)`
 
-`#[derive(DbContext)]` genera metodos inherentes sobre tu contexto:
+`#[derive(DbContext)]` generates inherent methods on your context:
 
 - `connect(...)`
 - `connect_with_options(...)`
@@ -115,9 +117,9 @@ La API principal de acceso a datos esta en:
 - `health_check().await`
 - `transaction(|tx| async move { ... }).await`
 - `save_changes().await`
-- `from_pool(...)` cuando el feature `pool-bb8` esta activo
+- `from_pool(...)` when `pool-bb8` is enabled
 
-`DbSet<T>` expone la ruta CRUD y de consulta:
+`DbSet<T>` exposes CRUD and query operations:
 
 - `find(key).await`
 - `insert(model).await`
@@ -130,200 +132,95 @@ La API principal de acceso a datos esta en:
 - `add_tracked(entity)`
 - `remove_tracked(&mut tracked)`
 
-Limites relevantes:
+Relevant limits:
 
-- `find`, `update`, `delete`, Active Record y tracking publico siguen orientados a primary key simple.
-- `save_changes()` y `Tracked<T>` son surface experimental.
-- `db.transaction(...)` sobre `from_pool(...)` no debe considerarse soportado hasta pinnear una conexion fisica durante todo el closure.
+- `find`, `update`, `delete`, Active Record, and public tracking remain oriented around simple primary keys.
+- `save_changes()` and `Tracked<T>` are experimental.
+- `db.transaction(...)` is blocked for contexts created from pools until one physical connection can be pinned for the full closure.
 
-## Query builder
+## Query Builder
 
-La `prelude` expone extensiones ergonomicas para columnas y predicados:
+The public query extensions include:
 
 - `EntityColumnPredicateExt`
-- `EntityColumnOrderExt`
 - `PredicateCompositionExt`
+- `EntityColumnOrderExt`
 - `PageRequest`
-- `Join`
-- `JoinType`
+- `SelectProjections`
 
-Uso recomendado:
+Common query methods:
 
-```rust
-let users = db
-    .users
-    .query()
-    .filter(User::email.contains("@example.com"))
-    .order_by(User::email.asc())
-    .take(20)
-    .all()
-    .await?;
-```
+- `filter(...)`
+- `order_by(...)`
+- `limit(...)`
+- `take(...)`
+- `paginate(...)`
+- `inner_join::<T>(...)`
+- `left_join::<T>(...)`
+- `select(...)`
+- `all().await`
+- `first().await`
+- `count().await`
+- `all_as::<T>().await`
+- `first_as::<T>().await`
 
-Para construir predicados de joins o AST avanzado, usa el modulo reexportado:
+The query builder produces AST values. SQL generation belongs to `mssql-orm-sqlserver`.
 
-```rust
-use mssql_orm::query::{Expr, Predicate};
-```
+## Raw SQL
 
-Surface avanzada reexportada desde `mssql_orm::query`:
+Raw SQL is exposed through:
 
-- `SelectQuery`
-- `CountQuery`
-- `InsertQuery`
-- `UpdateQuery`
-- `DeleteQuery`
-- `Expr`
-- `Predicate`
-- `OrderBy`
-- `Pagination`
-- `TableRef`
-- `ColumnRef`
-- `CompiledQuery`
+- `DbContext::raw<T>(sql)`
+- `DbContext::raw_exec(sql)`
+- `RawQuery<T>`
+- `RawCommand`
+- `RawParam`
+- `RawParams`
 
-`mssql_orm::query` no genera SQL.
+Raw SQL uses `@P1..@Pn` parameters and materializes query rows through `FromRow`. It does not automatically apply tenant or soft-delete filters.
 
-### Etapa 17: raw SQL tipado
+## Entity Policies
 
-Raw SQL tipado es el escape hatch explicito para consultas o comandos que todavia no encajan en el query builder. La guia publica esta en `docs/raw-sql.md` y la API disponible es:
+Public policy-related contracts and derives include:
 
-```rust
-let rows = db
-    .raw::<UserListItem>("SELECT id, email FROM dbo.users WHERE active = @P1 AND tenant_id = @P2")
-    .params((true, tenant_id))
-    .all()
-    .await?;
+- `EntityPolicy`
+- `EntityPolicyMetadata`
+- `AuditFields`
+- `SoftDeleteFields`
+- `TenantContext`
+- `SoftDeleteEntity`
+- `TenantScopedEntity`
+- `SoftDeleteProvider`
+- `SoftDeleteContext`
+- `SoftDeleteOperation`
+- `SoftDeleteRequestValues`
+- `ActiveTenant`
 
-db.raw_exec("UPDATE dbo.users SET active = @P1 WHERE id = @P2")
-    .params((false, 7_i64))
-    .execute()
-    .await?;
-```
+Implemented behavior:
 
-Esta surface existe en el `DbContext` trait y reexporta `RawQuery`, `RawCommand`, `RawParam` y `RawParams` desde `mssql_orm::prelude`. La implementacion reutiliza `SharedConnection`, `FromRow`, `SqlTypeMapping`, `SqlValue`, `CompiledQuery` y `ExecuteResult`. Raw SQL no aplica implicitamente filtros ORM de `tenant` ni `soft_delete`; el usuario debe escribir esos predicados de forma explicita en el SQL.
+- `audit = Audit` contributes metadata/schema columns only.
+- `soft_delete = SoftDelete` changes delete behavior and read visibility for the root entity.
+- `tenant = CurrentTenant` adds fail-closed tenant filtering and tenant insert validation/fill for opt-in entities.
 
-Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para varios valores, repetir `@P1` es valido y reutiliza el mismo valor, los placeholders deben ser continuos desde `@P1` hasta `@Pn`, y la cantidad de parametros debe coincidir con el mayor placeholder usado. La implementacion debe validar por indices de placeholders, no por cantidad de ocurrencias.
+Deferred behavior:
 
-### Etapa 18: proyecciones tipadas
+- runtime audit auto-fill through `AuditProvider`;
+- automatic policy filters over manually joined entities;
+- global tenant conventions without a user-defined tenant type.
 
-Las proyecciones tipadas tienen diseño operativo en `docs/projections.md`. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
+## Migrations
 
-Ejemplo de API:
-
-```rust
-let users = db
-    .users
-    .query()
-    .select((User::id, User::email))
-    .all_as::<UserListItem>()
-    .await?;
-```
-
-La API inicial ya existe en `DbSetQuery`: `select(...)` construye la proyeccion y `all_as::<T>()` / `first_as::<T>()` materializan DTOs mediante `FromRow`. `all()` / `first()` siguen siendo la ruta de entidades completas. El AST transporta aliases estables para que `FromRow` lea DTOs por nombre.
-
-Surface publica relacionada:
-
-- `DbSetQuery::select(...)`
-- `DbSetQuery::all_as::<T>()`
-- `DbSetQuery::first_as::<T>()`
-- `SelectProjection` desde `mssql_orm::prelude`
-- `Expr` desde `mssql_orm::query`
-
-Reglas operativas:
-
-- columnas proyectadas con `EntityColumn` reciben alias por defecto igual al nombre de columna;
-- expresiones requieren alias explicito con `SelectProjection::expr_as(...)`;
-- `map` despues de `all().await` transforma entidades ya cargadas, pero no reduce columnas leidas desde SQL Server;
-- proyecciones reales reducen el `SELECT` y materializan DTOs `FromRow`;
-- no hay aliases de tabla ni agregaciones tipadas de alto nivel en este corte.
-
-## Active Record
-
-La crate raiz expone `ActiveRecord` como capa de conveniencia sobre `DbSet`.
-
-```rust
-let user = User::find(&db, 1_i64).await?;
-
-let users = User::query(&db)
-    .filter(User::email.ends_with("@example.com"))
-    .all()
-    .await?;
-```
-
-Metodos disponibles:
-
-- `Entity::query(&db)`
-- `Entity::find(&db, key).await`
-- `entity.save(&db).await`
-- `entity.delete(&db).await`
-
-El derive `Entity` genera los contratos internos necesarios para `save` y `delete`. La capa Active Record no reemplaza la ruta base `DbSet`; reutiliza su implementacion.
-
-## Tracking experimental
-
-La surface experimental actual incluye:
-
-- `Tracked<T>`
-- `EntityState`
-- `DbSet::find_tracked(...)`
-- `DbSet::add_tracked(...)`
-- `DbSet::remove_tracked(...)`
-- `DbContext::save_changes().await`
-
-Estados actuales:
-
-- `Added`
-- `Unchanged`
-- `Modified`
-- `Deleted`
-
-Limites principales:
-
-- no hay proxies
-- no hay tracking automatico global
-- descartar el wrapper `Tracked<T>` elimina su participacion en la unidad de trabajo experimental
-- las rutas de persistencia reutilizan `DbSet` y mantienen los limites de primary key simple
-
-## Migraciones code-first
-
-La crate raiz expone la fuente de metadata para migraciones:
+Migration-related public helpers include:
 
 - `MigrationModelSource`
 - `model_snapshot_from_source::<C>()`
 - `model_snapshot_json_from_source::<C>()`
 
-`#[derive(DbContext)]` implementa `MigrationModelSource` para el contexto derivado.
+Advanced migration types are reexported through the `migrate` module for tooling.
 
-```rust
-let json = model_snapshot_json_from_source::<AppDb>()?;
-println!("{json}");
-```
+## Operational Types
 
-Para tooling avanzado, la crate raiz reexporta:
-
-```rust
-use mssql_orm::migrate;
-```
-
-Surface relevante en `mssql_orm::migrate`:
-
-- `ModelSnapshot`
-- `SchemaSnapshot`
-- `TableSnapshot`
-- `ColumnSnapshot`
-- `IndexSnapshot`
-- `ForeignKeySnapshot`
-- `MigrationOperation`
-- `diff_schema_and_table_operations`
-- `diff_column_operations`
-- `diff_relational_operations`
-- helpers de filesystem de migraciones
-
-La CLI `mssql-orm-cli` es la entrada operativa para `migration add`, `migration list` y `database update`.
-
-## SQL Server y Tiberius
-
-Para configuracion operacional desde la crate publica:
+The public crate reexports Tiberius adapter configuration types such as:
 
 - `MssqlConnectionConfig`
 - `MssqlOperationalOptions`
@@ -336,79 +233,27 @@ Para configuracion operacional desde la crate publica:
 - `MssqlParameterLogMode`
 - `MssqlPoolOptions`
 - `MssqlPoolBackend`
+- `MssqlPool`, `MssqlPoolBuilder`, and `MssqlPooledConnection` when `pool-bb8` is enabled
 
-Con `pool-bb8` activo:
+## Advanced Reexports
 
-- `MssqlPool`
-- `MssqlPoolBuilder`
-- `MssqlPooledConnection`
-- `connect_shared_from_pool(...)`
-
-Para casos avanzados:
-
-```rust
-use mssql_orm::sqlserver::SqlServerCompiler;
-use mssql_orm::tiberius::MssqlConnection;
-```
-
-`mssql_orm::sqlserver` compila AST y DDL SQL Server. `mssql_orm::tiberius` ejecuta contra SQL Server. La API normal de aplicacion deberia pasar por `DbContext` y `DbSet`.
-
-## Entity Policies
-
-La surface inicial de policies incluye:
-
-- `EntityPolicy`
-- `EntityPolicyMetadata`
-- `#[derive(AuditFields)]`
-- `#[orm(audit = Audit)]` sobre `#[derive(Entity)]`
-
-En el MVP, `audit = Audit` genera columnas de metadata/schema. No autollena valores en runtime y no agrega campos Rust visibles ni simbolos de columna sobre la entidad.
-
-## Reexports de crates internas
-
-La crate raiz expone estos modulos:
+The root crate also reexports selected internal crates:
 
 - `mssql_orm::core`
-- `mssql_orm::macros`
 - `mssql_orm::query`
 - `mssql_orm::sqlserver`
 - `mssql_orm::tiberius`
 - `mssql_orm::migrate`
-- `mssql_orm::tokio`
+- `mssql_orm::macros`
 
-La regla practica:
+These are useful for tests, tooling, snapshots, and advanced diagnostics. Normal application code should prefer the prelude.
 
-- usa `mssql_orm::prelude::*` para aplicacion normal
-- usa `mssql_orm::query` para AST o predicados avanzados
-- usa `mssql_orm::migrate` para tooling de migraciones
-- usa `mssql_orm::sqlserver` solo para compilar/validar SQL en tests o tooling
-- usa `mssql_orm::tiberius` solo para configuracion/ejecucion avanzada
+## Current Exclusions
 
-## Exclusiones explicitas
-
-Esta surface no promete todavia:
-
-- soporte multi-base de datos
-- navigation properties
-- lazy loading o eager loading automatico
-- aliases de tabla
-- proyecciones parciales publicas desde `DbSetQuery<T>`
-- primary keys compuestas en CRUD publico
-- `save_changes()` estable
-- savepoints
-- transacciones publicas correctas sobre pool hasta resolver el pinning de conexion
-- autollenado runtime de auditoria
-
-## Guias relacionadas
-
-- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
-- Quickstart: [docs/quickstart.md](quickstart.md)
-- Code-first: [docs/code-first.md](code-first.md)
-- Query builder: [docs/query-builder.md](query-builder.md)
-- Relaciones y joins: [docs/relationships.md](relationships.md)
-- Transacciones: [docs/transactions.md](transactions.md)
-- Migraciones: [docs/migrations.md](migrations.md)
-- Entity Policies: [docs/entity-policies.md](entity-policies.md)
-- Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
-- Proyecciones tipadas: [docs/projections.md](projections.md)
-- Auditoria del repositorio: [docs/repository-audit.md](repository-audit.md)
+- SQL Server is the only backend.
+- Navigation properties are not available.
+- Lazy loading and automatic eager loading are not available.
+- Table aliases in joins are not available.
+- High-level typed aggregations are not available.
+- Composite primary-key persistence is not complete across public CRUD and Active Record.
+- `migration.rs` is not generated.

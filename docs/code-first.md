@@ -1,304 +1,146 @@
-# Code-First
+# Code-First Guide
 
-Guia del enfoque `code-first` actual de `mssql-orm`, alineada con la API publica real del workspace.
+`mssql-orm` treats Rust code as the source of truth for the model. Entities, policies, relationships, and contexts are declared in Rust and expanded into static metadata by proc macros.
 
-Esta guia no describe features futuras como si ya existieran. Describe lo que hoy ya puedes modelar y ejecutar desde la crate raiz `mssql-orm`.
+See also [Core concepts](core-concepts.md).
 
-## Que significa `code-first` aqui
-
-En este proyecto, `code-first` significa:
-
-- la forma del modelo vive primero en structs Rust
-- `#[derive(Entity)]` genera metadata estatica y `FromRow`
-- `#[derive(Insertable)]` y `#[derive(Changeset)]` describen payloads de escritura
-- `#[derive(DbContext)]` conecta esas entidades con `DbSet<T>`
-- el query builder construye AST, no SQL directo
-- la generacion SQL queda en `mssql-orm-sqlserver`
-- la ejecucion queda en `mssql-orm-tiberius`
-
-El punto de entrada para consumidores sigue siendo la crate publica `mssql-orm`.
-
-## 1. Modelar entidades
-
-La entidad define tabla, schema, primary key y metadata de columnas.
+## Entity
 
 ```rust
 use mssql_orm::prelude::*;
 
 #[derive(Entity, Debug, Clone)]
-#[orm(table = "users", schema = "todo")]
-struct User {
+#[orm(table = "users", schema = "dbo")]
+pub struct User {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
+    pub id: i64,
 
     #[orm(length = 180)]
     #[orm(unique)]
-    email: String,
+    pub email: String,
 
-    #[orm(nullable)]
-    display_name: Option<String>,
-
-    #[orm(rowversion)]
-    version: Vec<u8>,
-}
-```
-
-Hoy la surface publica soporta al menos estos atributos relevantes del modelo:
-
-- `table`
-- `schema`
-- `column`
-- `primary_key`
-- `identity`
-- `length`
-- `nullable`
-- `sql_type`
-- `precision` y `scale`
-- `default_sql`
-- `computed_sql`
-- `rowversion`
-- `index` y `unique`
-- `foreign_key`
-- `on_delete`
-- `renamed_from`
-- `audit`
-
-`#[derive(Entity)]` tambien genera simbolos de columna como `User::email`, que despues se reutilizan desde el query builder publico.
-
-## 2. Reutilizar columnas con Entity Policies
-
-La Etapa 16 introduce `Entity Policies` como una extension conservadora del modelo `code-first`. El primer caso soportado es auditoria como columnas generadas de metadata/schema.
-
-El usuario define un struct reusable de auditoria con `#[derive(AuditFields)]`:
-
-```rust
-use mssql_orm::prelude::*;
-
-#[derive(AuditFields)]
-struct Audit {
-    #[orm(default_sql = "SYSUTCDATETIME()")]
-    #[orm(sql_type = "datetime2")]
-    #[orm(updatable = false)]
-    created_at: String,
-
-    #[orm(column = "created_by_user_id")]
-    #[orm(nullable)]
-    created_by: Option<i64>,
-
-    #[orm(nullable)]
     #[orm(length = 120)]
-    updated_by: Option<String>,
+    pub name: String,
 }
 ```
 
-Luego una entidad puede declarar esa policy con `audit = Audit`:
+`#[derive(Entity)]` generates:
+
+- `Entity` metadata;
+- `FromRow` materialization for real Rust fields;
+- static column symbols such as `User::email`;
+- internal persistence contracts used by the public crate.
+
+## Supported Column Attributes
+
+Common field attributes include:
+
+- `#[orm(primary_key)]`
+- `#[orm(identity)]`
+- `#[orm(column = "db_column")]`
+- `#[orm(length = 120)]`
+- `#[orm(nullable)]`
+- `#[orm(default_sql = "...")]`
+- `#[orm(sql_type = "datetime2")]`
+- `#[orm(precision = 18)]`
+- `#[orm(scale = 2)]`
+- `#[orm(computed_sql = "...")]`
+- `#[orm(rowversion)]`
+- `#[orm(index(name = "..."))]`
+- `#[orm(unique)]`
+- `#[orm(foreign_key(entity = User, column = id))]`
+- `#[orm(on_delete = "cascade" | "set null" | "no action")]`
+- `#[orm(renamed_from = "...")]`
+
+Entity-level attributes include `table`, `schema`, explicit table `renamed_from`, composite indexes, and entity policies such as `audit`, `soft_delete`, and `tenant`.
+
+## Insertable and Changeset
+
+Use separate write models to avoid mixing database-generated fields with user-provided payloads.
 
 ```rust
-use mssql_orm::prelude::*;
-
-#[derive(Entity, Debug, Clone)]
-#[orm(table = "todos", schema = "todo", audit = Audit)]
-struct Todo {
-    #[orm(primary_key)]
-    #[orm(identity)]
-    id: i64,
-
-    #[orm(length = 200)]
-    title: String,
-}
-```
-
-Con esa declaracion, las columnas de `Audit` se expanden dentro de `Todo::metadata().columns` despues de las columnas propias de la entidad. Para migraciones y DDL se comportan como `ColumnMetadata` normales: aparecen en snapshots, diff y SQL Server DDL sin un pipeline paralelo.
-
-El ejemplo anterior esta respaldado por el fixture compilable `crates/mssql-orm/tests/ui/entity_audit_public_valid.rs`, que usa solo `mssql_orm::prelude::*`, `#[derive(AuditFields)]` y `#[orm(audit = Audit)]`.
-
-Limites del MVP:
-
-- `audit = Audit` no agrega campos Rust visibles al entity.
-- Las columnas auditables no generan simbolos asociados como `Todo::created_at`.
-- `FromRow` materializa solo los campos reales de la entidad; ignora columnas auditables si vienen en la fila.
-- `DbSet::insert`, `DbSet::update`, Active Record y `save_changes` no autollenan `created_at`, `created_by`, `updated_at` ni `updated_by`.
-- Si una columna de `AuditFields` colisiona con una columna propia de la entidad, el derive falla en compile-time.
-
-## 3. Modelar payloads de escritura
-
-La entidad no se usa directamente para todas las escrituras. La forma publica actual separa inserciones y updates parciales.
-
-```rust
-use mssql_orm::prelude::*;
-
-#[derive(Insertable, Debug, Clone)]
+#[derive(Insertable)]
 #[orm(entity = User)]
-struct NewUser {
-    email: String,
-    display_name: Option<String>,
+pub struct NewUser {
+    pub email: String,
+    pub name: String,
 }
 
-#[derive(Changeset, Debug, Clone)]
+#[derive(Changeset)]
 #[orm(entity = User)]
-struct UpdateUser {
-    email: Option<String>,
-    display_name: Option<Option<String>>,
+pub struct UpdateUser {
+    pub email: Option<String>,
+    pub name: Option<String>,
 }
 ```
 
-Reglas practicas importantes:
+`Insertable` extracts insert values. `Changeset` extracts update values and can carry a `rowversion` concurrency token when the target entity has one.
 
-- `Insertable` materializa columnas insertables para una entidad concreta.
-- `Changeset` requiere `Option<T>` en el nivel externo de cada campo para distinguir "no tocar" de "actualizar".
-- `Option<Option<T>>` sirve para expresar "actualizar a NULL".
-- columnas `rowversion` participan como token de concurrencia, pero no entran al `SET`.
-- columnas generadas por `audit = Audit` no se agregan automaticamente a `Insertable` ni `Changeset`; si necesitas valores runtime debes modelarlos explicitamente o esperar el futuro `AuditProvider`.
-
-## 4. Declarar el `DbContext`
-
-El contexto publico actual se define con `#[derive(DbContext)]` sobre una struct con campos `DbSet<T>`.
+## DbContext
 
 ```rust
-use mssql_orm::prelude::*;
-
-#[derive(DbContext, Debug, Clone)]
-struct TodoDb {
+#[derive(DbContext)]
+pub struct AppDb {
     pub users: DbSet<User>,
 }
 ```
 
-Ese derive genera la surface operativa minima para consumidores:
+The derive generates:
 
-- `TodoDb::connect(...)`
-- `TodoDb::connect_with_options(...)`
-- `TodoDb::connect_with_config(...)`
-- `TodoDb::from_connection(...)`
-- `TodoDb::from_shared_connection(...)`
-- `db.health_check().await`
-- `db.transaction(|tx| async move { ... }).await`
+- connection constructors;
+- typed `DbSet<T>` fields;
+- public helpers for runtime state such as tenant and soft-delete values;
+- `MigrationModelSource` for snapshot export.
 
-Cada `DbSet<T>` mantiene la entrada tipada hacia CRUD, query builder y tracking experimental.
+## Entity Policies
 
-## 5. Usar `DbSet<T>` como frontera tipada
+Entity Policies add reusable model concerns without creating a second schema pipeline.
 
-`DbSet<T>` es la pieza publica que conecta el modelo con las operaciones de lectura y escritura.
+### Audit Metadata
 
 ```rust
-use mssql_orm::prelude::*;
+#[derive(AuditFields)]
+pub struct Audit {
+    #[orm(default_sql = "SYSUTCDATETIME()")]
+    #[orm(sql_type = "datetime2")]
+    #[orm(updatable = false)]
+    pub created_at: String,
 
-async fn load_and_update(db: &TodoDb) -> Result<(), OrmError> {
-    let inserted = db
-        .users
-        .insert(NewUser {
-            email: "ana@example.com".to_string(),
-            display_name: Some("Ana".to_string()),
-        })
-        .await?;
-
-    let _found = db.users.find(inserted.id).await?;
-
-    let _slice = db
-        .users
-        .query()
-        .filter(User::email.contains("@example.com"))
-        .order_by(User::email.asc())
-        .take(20)
-        .all()
-        .await?;
-
-    let _updated = db
-        .users
-        .update(
-            inserted.id,
-            UpdateUser {
-                email: None,
-                display_name: Some(Some("Ana Maria".to_string())),
-            },
-        )
-        .await?;
-
-    let _deleted = db.users.delete(inserted.id).await?;
-
-    Ok(())
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    pub updated_by: Option<String>,
 }
-```
 
-La surface publica actual ya incluye:
-
-- `find`
-- `insert`
-- `update`
-- `delete`
-- `query`
-- `find_tracked`
-- `add_tracked`
-- `remove_tracked`
-- `save_changes` desde `DbContext`
-
-## 6. Modelar relaciones en metadata
-
-Las relaciones uno-a-muchos actuales se declaran sobre la entidad dependiente con `foreign_key`.
-
-```rust
-use mssql_orm::prelude::*;
-
-#[derive(Entity, Debug, Clone)]
-#[orm(table = "todo_lists", schema = "todo")]
-struct TodoList {
+#[derive(Entity)]
+#[orm(table = "todos", schema = "todo", audit = Audit)]
+pub struct Todo {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
+    pub id: i64,
 
-    #[orm(foreign_key(entity = User, column = id))]
-    #[orm(on_delete = "cascade")]
-    owner_user_id: i64,
-
-    #[orm(length = 160)]
-    title: String,
+    pub title: String,
 }
 ```
 
-Hoy esa metadata sirve para:
+Audit columns are metadata/schema columns. They do not become visible Rust fields on `Todo`, do not generate `Todo::created_at`, and are not auto-filled at runtime in the current release.
 
-- derivar `ForeignKeyMetadata`
-- usar joins explicitos en el query builder
-- alimentar snapshots, diff y DDL de migraciones
+### Soft Delete
 
-No existe todavia una API publica de navigation properties ni eager loading estilo ORM clasico.
+`#[derive(SoftDeleteFields)]` plus `#[orm(soft_delete = SoftDelete)]` enables runtime soft-delete behavior for the root entity. Deletes become updates, default reads hide logically deleted rows, and explicit APIs can include or select deleted rows.
 
-## 7. Flujo real de trabajo `code-first`
+### Tenant
 
-El flujo recomendado hoy queda asi:
+`#[derive(TenantContext)]` plus `#[orm(tenant = CurrentTenant)]` enables explicit tenant scoping. Tenant-scoped entities fail closed when no compatible active tenant exists. Root-entity reads and writes apply mandatory tenant predicates.
 
-1. Declarar entidades con `#[derive(Entity)]`.
-2. Declarar policies reutilizables como `AuditFields` cuando quieras columnas transversales de metadata/schema.
-3. Declarar `Insertable` y `Changeset` para cada forma de escritura publica que necesite tu app.
-4. Declarar un `DbContext` con `DbSet<T>` para cada tabla expuesta.
-5. Conectar con `DbContext::connect(...)` o con opciones/config explicitas.
-6. Usar `DbSet<T>` y `DbSetQuery<T>` para CRUD y consultas.
-7. Cuando el modelo cambie, usar la pipeline de migraciones `code-first` de la CLI y del crate `migrate`.
+## Migrations
 
-El quickstart cubre el caso mas corto. Esta guia fija el modelo conceptual y las piezas publicas que componen ese flujo.
+`ModelSnapshot::from_entities(...)` consumes generated metadata. Policy columns enter snapshots as normal columns, so migrations do not need a separate schema path for policies.
 
-## Limites explicitos actuales
+## Limits
 
-Para esta etapa del release, conviene asumir estos limites:
-
-- SQL Server es el unico backend objetivo.
-- La API `code-first` publica vive en atributos y derives; no existe todavia una capa de fluent configuration estilo `EntityConfiguration`.
-- La sintaxis publica de relaciones sigue centrada en foreign keys declaradas por atributo.
-- `audit = Audit` solo genera columnas de metadata/schema; el autollenado runtime queda fuera del MVP.
-- `DbSet::find`, `update` y `delete` estan pensados para primary key simple.
-- `entity.save(&db)` y `entity.delete(&db)` existen, pero esta guia se centra en la ruta explicita `DbSet` porque es la surface base mas estable.
-- El change tracking sigue siendo experimental aunque ya este disponible.
-- No existe soporte multibase de datos en esta fase.
-
-## Referencias relacionadas
-
-- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
-- API publica: [docs/api.md](api.md)
-- Quickstart reproducible: [docs/quickstart.md](quickstart.md)
-- Query builder publico: [docs/query-builder.md](query-builder.md)
-- Relaciones y joins: [docs/relationships.md](relationships.md)
-- Transacciones runtime: [docs/transactions.md](transactions.md)
-- Migraciones: [docs/migrations.md](migrations.md)
-- Entity Policies: [docs/entity-policies.md](entity-policies.md)
-- Ejemplo real con relaciones y HTTP: [examples/todo-app/README.md](../examples/todo-app/README.md)
-- Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)
+- SQL Server is the only backend.
+- Public CRUD and Active Record are oriented around simple primary keys.
+- Audit runtime auto-fill is deferred.
+- Audit policy columns are not Rust fields.
+- `migration.rs` is outside the current MVP.

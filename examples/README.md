@@ -1,39 +1,23 @@
-# Ejemplos
+# Examples
 
-Estado actual del árbol `examples/`:
+This directory contains runnable examples for `mssql-orm`.
 
-- `todo-app/`
-  ejemplo web async realista con `DbContext`, pool opcional, health check, dominio relacional, queries públicas y smoke reproducible contra SQL Server real
+## Available Examples
 
-## Ejemplo disponible hoy
+- [`todo-app`](todo-app/README.md): async web-style example with a relational domain, public query builder usage, HTTP handlers, optional pooling, health checks, and migration snapshot export.
 
-### `todo-app`
+## Running Examples
 
-Variables de entorno principales:
-
-- `DATABASE_URL`
-- `APP_ADDR`
-- `RUST_LOG`
-
-Ejecutar:
+Examples that talk to SQL Server require a real connection string. Use local environment variables rather than committing credentials:
 
 ```bash
-cargo run --manifest-path examples/todo-app/Cargo.toml
+export DATABASE_URL='Server=localhost;Database=tempdb;User Id=sa;Password=Password123;TrustServerCertificate=True;Encrypt=False'
 ```
 
-Smoke local:
+See each example README for its own setup and smoke-test instructions.
 
-```bash
-sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
+## Notes
 
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
-APP_ADDR='127.0.0.1:4011' \
-RUST_LOG='warn,todo_app=info,mssql_orm=warn' \
-cargo run --manifest-path examples/todo-app/Cargo.toml
-```
-
-Más detalle en [todo-app/README.md](todo-app/README.md).
-
-## Nota
-
-Históricamente el backlog y el worklog registran trabajo sobre un ejemplo `basic-crud`, pero ese ejemplo no está presente en el árbol actual del repositorio. La documentación operativa vigente de Etapa 15 ya toma `todo-app` como ejemplo ejecutable real disponible.
+- Examples are consumers of the public crate API.
+- They should not rely on private crate internals.
+- If an example documents a feature, keep it aligned with the corresponding guide under `docs/`.

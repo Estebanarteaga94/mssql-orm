@@ -1,52 +1,52 @@
 # todo-app
 
-Base del ejemplo web async realista de Etapa 14.
+Realistic async web example introduced during Stage 14.
 
-Estado actual:
+Current state:
 
-1. Define configuración de arranque desde variables de entorno.
-2. Fija la configuración operativa de SQL Server/Tiberius (`timeouts`, `retry`, `tracing`, `slow_query`, `health`, `pool`).
-3. Define el dominio base `todo_app` con entidades `users`, `todo_lists` y `todo_items`, incluyendo relaciones y metadata estática.
-4. Incluye `audit_events` como entidad code-first dedicada para mostrar `#[orm(audit = TodoAudit)]` y columnas auditables generadas como metadata/schema.
-5. Expone queries reutilizables del ejemplo usando la surface real del consumidor (`db.todo_lists.query()...`, `db.todo_items.query()...`).
-6. Expone `TodoAppDbContext` derivado, un endpoint HTTP real `GET /health` y endpoints mínimos de lectura para listas e ítems.
-7. Integra `MssqlPool` y `TodoAppDbContext::from_pool(...)` en `main.rs`, reutilizando la configuración operativa del ejemplo.
-8. Ya fue validado contra SQL Server real con fixture reproducible y smoke HTTP.
+1. Defines startup configuration from environment variables.
+2. Fixes operational SQL Server/Tiberius settings (`timeouts`, `retry`, `tracing`, `slow_query`, `health`, `pool`).
+3. Defines the base `todo_app` domain with `users`, `todo_lists`, and `todo_items`, including relationships and static metadata.
+4. Includes `audit_events` as a dedicated code-first entity that demonstrates `#[orm(audit = TodoAudit)]` and generated audit columns as metadata/schema.
+5. Exposes reusable example queries through the real consumer surface (`db.todo_lists.query()...`, `db.todo_items.query()...`).
+6. Exposes the derived `TodoAppDbContext`, a real `GET /health` HTTP endpoint, and minimal read endpoints for lists and items.
+7. Integrates `MssqlPool` and `TodoAppDbContext::from_pool(...)` in `main.rs`, reusing the example operational configuration.
+8. Has been validated against real SQL Server with a reproducible fixture and HTTP smoke flow.
 
-La siguiente etapa del backlog ya no es del ejemplo en sí, sino del release/documentación pública del proyecto.
+The next backlog stage is no longer specific to the example itself; it belongs to project release and public documentation work.
 
-Índice de ejemplos disponibles en el repo: [../README.md](../README.md).
+Available examples index: [../README.md](../README.md).
 
-## Variables de entorno
+## Environment Variables
 
-- `DATABASE_URL` obligatoria
-- `APP_ADDR` opcional, default `127.0.0.1:3000`
-- `RUST_LOG` opcional, default `info,todo_app=debug,mssql_orm=debug`
+- `DATABASE_URL` is required.
+- `APP_ADDR` is optional and defaults to `127.0.0.1:3000`.
+- `RUST_LOG` is optional and defaults to `info,todo_app=debug,mssql_orm=debug`.
 
-## Ejecutar
+## Run
 
 ```bash
 cargo run --manifest-path examples/todo-app/Cargo.toml
 ```
 
-## Smoke reproducible en SQL Server local
+## Reproducible Local SQL Server Smoke
 
-Preparar fixture:
+Prepare the fixture:
 
 ```bash
-sqlcmd -S localhost -U '<usuario>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
+sqlcmd -S localhost -U '<user>' -P '<password>' -d tempdb -C -b -i examples/todo-app/scripts/smoke_setup.sql
 ```
 
-Levantar el ejemplo:
+Start the example:
 
 ```bash
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<user>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
 APP_ADDR='127.0.0.1:4011' \
 RUST_LOG='warn,todo_app=info,mssql_orm=warn' \
 cargo run --manifest-path examples/todo-app/Cargo.toml
 ```
 
-Verificar endpoints:
+Verify endpoints:
 
 ```bash
 curl -i 'http://127.0.0.1:4011/health'
@@ -56,29 +56,29 @@ curl -i 'http://127.0.0.1:4011/todo-lists/10/items/preview?limit=2'
 curl -i 'http://127.0.0.1:4011/todo-lists/10/open-items/count'
 ```
 
-También queda una prueba ignorada, útil para repetir la lectura real sin pasar por HTTP:
+An ignored test is also available for repeating the real read flow without HTTP:
 
 ```bash
-DATABASE_URL='Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
+DATABASE_URL='Server=localhost;Database=tempdb;User Id=<user>;Password=<password>;TrustServerCertificate=True;Encrypt=False;Connection Timeout=30;MultipleActiveResultSets=true;' \
 cargo test --manifest-path examples/todo-app/Cargo.toml smoke_preview_query_runs_against_sql_server_fixture -- --ignored --nocapture
 ```
 
-## Migraciones automáticas del ejemplo
+## Automatic Example Migrations
 
-El ejemplo incluye un binario exportador de snapshot para validar el flujo code-first real:
+The example includes a snapshot-export binary for validating the real code-first flow:
 
 ```bash
 cargo run --manifest-path examples/todo-app/Cargo.toml --bin model_snapshot
 ```
 
-También hay un script reproducible que genera una migración inicial desde el modelo actual, una segunda migración incremental no-op y el script acumulado de `database update`:
+It also includes a reproducible script that generates an initial migration from the current model, a second incremental no-op migration, and the accumulated `database update` script:
 
 ```bash
 examples/todo-app/scripts/migration_e2e.sh
 ```
 
-El script valida además que `model_snapshot.json` capture `audit_events` y las columnas auditables generadas por `TodoAudit`. También imprime el directorio temporal usado y el `database_update.sql` generado. Si configuras `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER`, `MSSQL_ORM_SQLCMD_PASSWORD` y opcionalmente `MSSQL_ORM_SQLCMD_DATABASE`, también intenta aplicar el script con `sqlcmd`.
+The script also validates that `model_snapshot.json` captures `audit_events` and the audit columns generated by `TodoAudit`. It prints the temporary directory and generated `database_update.sql`. If `MSSQL_ORM_SQLCMD_SERVER`, `MSSQL_ORM_SQLCMD_USER`, `MSSQL_ORM_SQLCMD_PASSWORD`, and optionally `MSSQL_ORM_SQLCMD_DATABASE` are configured, it also tries to apply the script with `sqlcmd`.
 
-Nota operativa:
+Operational note:
 
-- El dominio del ejemplo usa `NO ACTION` para `completed_by_user_id` porque SQL Server rechaza `SET NULL` en esa relación dentro de este esquema mínimo por `multiple cascade paths`.
+- The example domain uses `NO ACTION` for `completed_by_user_id` because SQL Server rejects `SET NULL` for that relationship in this minimal schema due to multiple cascade paths.

@@ -1,107 +1,137 @@
 # mssql-orm
 
-ORM `code-first` para Rust y Microsoft SQL Server, con metadata generada por `proc_macros`, query builder tipado, migraciones y ejecución sobre Tiberius.
+`mssql-orm` is a Rust code-first ORM for Microsoft SQL Server. It uses Tiberius as the low-level driver and keeps the public application API centered on `DbContext`, `DbSet<T>`, derives, a typed query builder, migrations, typed raw SQL, and typed projections.
 
-El modelo operativo central es:
+The verified API and implementation inventory lives in [docs/repository-audit.md](docs/repository-audit.md). The conceptual guide starts at [docs/core-concepts.md](docs/core-concepts.md).
 
-```text
-Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity
-```
+## Current Shape
 
-Para entender ese flujo, los límites entre crates y el modelo mental del ORM, empieza por [docs/core-concepts.md](docs/core-concepts.md).
+The workspace is split by responsibility:
 
-## Estado
+- `mssql-orm-core`: contracts, metadata, shared types, and errors.
+- `mssql-orm-macros`: derives and metadata generation.
+- `mssql-orm-query`: query AST and builder types, without SQL generation.
+- `mssql-orm-sqlserver`: SQL Server query and DDL compilation.
+- `mssql-orm-tiberius`: execution, connections, rows, transactions, and Tiberius adaptation.
+- `mssql-orm-migrate`: snapshots, diffs, operations, and migration filesystem helpers.
+- `mssql-orm-cli`: migration and database-update commands.
+- `mssql-orm`: public crate and normal user-facing API.
 
-El repositorio ya contiene las crates principales del diseño:
+SQL Server is the only supported database target in this phase.
 
-- `mssql-orm`: crate pública y `prelude`
-- `mssql-orm-core`: contratos, metadata, tipos y errores
-- `mssql-orm-macros`: derives
-- `mssql-orm-query`: AST y query builder, sin SQL directo
-- `mssql-orm-sqlserver`: compilación SQL Server
-- `mssql-orm-tiberius`: conexión y ejecución
-- `mssql-orm-migrate`: snapshots, diff y migraciones
-- `mssql-orm-cli`: comandos operativos
-
-El inventario verificado de APIs reales, features implementadas, límites y features diferidas está en [docs/repository-audit.md](docs/repository-audit.md).
-
-## Ejemplo mínimo
+## Minimal Example
 
 ```rust
 use mssql_orm::prelude::*;
 
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "users", schema = "dbo")]
-struct User {
+pub struct User {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
+    pub id: i64,
 
     #[orm(length = 180)]
-    email: String,
+    #[orm(unique)]
+    pub email: String,
 
-    active: bool,
+    #[orm(length = 120)]
+    pub name: String,
 }
 
-#[derive(DbContext, Debug, Clone)]
-struct AppDb {
+#[derive(Insertable)]
+#[orm(entity = User)]
+pub struct NewUser {
+    pub email: String,
+    pub name: String,
+}
+
+#[derive(DbContext)]
+pub struct AppDb {
     pub users: DbSet<User>,
-}
-
-#[tokio::main]
-async fn main() -> Result<(), OrmError> {
-    let db = AppDb::connect(
-        "Server=localhost;Database=tempdb;User Id=<usuario>;Password=<password>;TrustServerCertificate=True;Encrypt=False;"
-    )
-    .await?;
-
-    let users = db
-        .users
-        .query()
-        .filter(User::active.eq(true))
-        .order_by(User::email.asc())
-        .take(10)
-        .all()
-        .await?;
-
-    println!("loaded {} users", users.len());
-    Ok(())
 }
 ```
 
-## Documentación principal
+```rust
+# use mssql_orm::prelude::*;
+# #[derive(Entity, Debug, Clone)]
+# #[orm(table = "users", schema = "dbo")]
+# pub struct User {
+#     #[orm(primary_key)]
+#     #[orm(identity)]
+#     pub id: i64,
+#     #[orm(length = 180)]
+#     pub email: String,
+#     #[orm(length = 120)]
+#     pub name: String,
+# }
+# #[derive(Insertable)]
+# #[orm(entity = User)]
+# pub struct NewUser {
+#     pub email: String,
+#     pub name: String,
+# }
+# #[derive(DbContext)]
+# pub struct AppDb {
+#     pub users: DbSet<User>,
+# }
+# async fn run(connection_string: &str) -> Result<(), OrmError> {
+let db = AppDb::connect(connection_string).await?;
 
-- Conceptos centrales: [docs/core-concepts.md](docs/core-concepts.md)
-- Quickstart reproducible: [docs/quickstart.md](docs/quickstart.md)
-- Code-first y derives: [docs/code-first.md](docs/code-first.md)
-- API pública: [docs/api.md](docs/api.md)
-- Query builder: [docs/query-builder.md](docs/query-builder.md)
-- Proyecciones tipadas: [docs/projections.md](docs/projections.md)
-- Raw SQL tipado: [docs/raw-sql.md](docs/raw-sql.md)
-- Relaciones y joins: [docs/relationships.md](docs/relationships.md)
-- Transacciones: [docs/transactions.md](docs/transactions.md)
-- Migraciones: [docs/migrations.md](docs/migrations.md)
-- Entity Policies: [docs/entity-policies.md](docs/entity-policies.md)
-- Uso desde otro proyecto sin clonar manualmente: [docs/use-without-downloading.md](docs/use-without-downloading.md)
+let saved = db
+    .users
+    .insert(NewUser {
+        email: "ana@example.com".to_string(),
+        name: "Ana".to_string(),
+    })
+    .await?;
 
-## Ejemplos
+let active_users = db
+    .users
+    .query()
+    .filter(User::email.contains("@example.com"))
+    .order_by(User::email.asc())
+    .take(20)
+    .all()
+    .await?;
+# let _ = (saved, active_users);
+# Ok(())
+# }
+```
 
-- Índice de ejemplos: [examples/README.md](examples/README.md)
-- Ejemplo web `todo-app`: [examples/todo-app/README.md](examples/todo-app/README.md)
+## Documentation Map
 
-Pending verification: la validación histórica de `todo-app` contra SQL Server real está registrada en [docs/worklog.md](docs/worklog.md), pero debe reejecutarse con un connection string real en el entorno actual antes de usarse como evidencia fresca.
+- [Core concepts](docs/core-concepts.md): mental model and end-to-end flow.
+- [Quickstart](docs/quickstart.md): connection, CRUD, and query builder basics.
+- [Code-first](docs/code-first.md): entities, derives, `DbContext`, `DbSet`, and model metadata.
+- [Public API](docs/api.md): exported surface from the root crate and prelude.
+- [Query builder](docs/query-builder.md): predicates, ordering, pagination, joins, and projections.
+- [Typed projections](docs/projections.md): `select(...)`, `all_as::<T>()`, `first_as::<T>()`, aliases, and DTOs.
+- [Typed raw SQL](docs/raw-sql.md): `raw<T>()`, `raw_exec()`, parameters, DTOs, and safety rules.
+- [Relationships](docs/relationships.md): foreign keys and explicit joins.
+- [Transactions](docs/transactions.md): runtime transaction behavior and pool limits.
+- [Migrations](docs/migrations.md): snapshots, diff, `migration add`, and `database update`.
+- [Entity Policies](docs/entity-policies.md): audit metadata, soft delete, tenant scoping, and deferred runtime audit provider design.
+- [Use without manual download](docs/use-without-downloading.md): Git dependency usage from another project.
 
-## Límites actuales
+## Examples
 
-- SQL Server es el único backend objetivo.
-- `Tracked<T>` y `save_changes()` son experimentales.
-- Las rutas públicas de CRUD, Active Record y tracking siguen centradas en primary keys simples.
-- `AuditProvider` runtime no está implementado.
-- No hay navigation properties, joins inferidos, aliases automáticos para self-joins ni agregaciones tipadas de alto nivel.
-- `raw<T>()` y `raw_exec()` no aplican automáticamente filtros ORM de `tenant` ni `soft_delete`.
-- `migration.rs` está diferido; el MVP de migraciones usa `up.sql`, `down.sql` y `model_snapshot.json`.
+- [examples/README.md](examples/README.md)
+- [examples/todo-app/README.md](examples/todo-app/README.md)
 
-## Validación local
+Pending verification: historical validation of `todo-app` against real SQL Server is recorded in [docs/worklog.md](docs/worklog.md), but it should be rerun with a real connection string in the current environment before using it as fresh evidence.
+
+## Current Limits
+
+- SQL Server only.
+- No navigation properties, lazy loading, or automatic eager loading.
+- Public CRUD, Active Record, and tracking are still focused on simple primary keys.
+- `AuditProvider` runtime is not implemented.
+- `raw<T>()` and `raw_exec()` do not automatically apply ORM `tenant` or `soft_delete` filters.
+- `migration.rs` is deferred; the migration MVP uses `up.sql`, `down.sql`, and `model_snapshot.json`.
+- `db.transaction(...)` is blocked on contexts created from pools until pooled transactions pin one physical connection for the full closure.
+
+## Local Validation
 
 ```bash
 cargo fmt --all --check
@@ -110,13 +140,10 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features
 ```
 
-## Proyecto
+Real SQL Server tests require `MSSQL_ORM_TEST_CONNECTION_STRING`.
 
-- Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md)
-- Arquitectura: [docs/architecture/overview.md](docs/architecture/overview.md)
-- Backlog: [docs/tasks.md](docs/tasks.md)
-- Contexto operativo: [docs/context.md](docs/context.md)
-- Worklog: [docs/worklog.md](docs/worklog.md)
-- Contribución: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Seguridad: [SECURITY.md](SECURITY.md)
-- Licencia: [LICENSE](LICENSE)
+## Project Documents
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SECURITY.md](SECURITY.md)
+- [LICENSE](LICENSE)

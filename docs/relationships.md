@@ -1,235 +1,113 @@
-# Relaciones y Joins
+# Relationships and Joins
 
-Guia de uso de relaciones code-first y joins explicitos en la API publica actual.
+In `mssql-orm`, a relationship declared with `foreign_key` produces relational metadata, migration snapshots, diffs, and SQL Server DDL. Queries remain explicit: declaring a foreign key does not add navigation properties or automatic joins.
 
-En `mssql-orm`, una relacion declarada con `foreign_key` produce metadata relacional, snapshots, diff y DDL de SQL Server. Las consultas siguen siendo explicitas: declarar una foreign key no agrega navigation properties ni hace joins automaticos.
+See also [Core concepts](core-concepts.md).
 
-## Modelo actual
+## Declaring a Foreign Key
 
-La relacion uno-a-muchos se declara sobre la entidad dependiente, en el campo que contiene la columna local.
+A one-to-many relationship is declared on the dependent entity field that stores the local column.
 
 ```rust
-use mssql_orm::prelude::*;
-
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "users", schema = "todo")]
-struct User {
+pub struct User {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
-
-    #[orm(length = 180)]
-    email: String,
+    pub id: i64,
 }
 
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "todo_lists", schema = "todo")]
-struct TodoList {
+pub struct TodoList {
     #[orm(primary_key)]
     #[orm(identity)]
-    id: i64,
+    pub id: i64,
 
     #[orm(foreign_key(entity = User, column = id))]
-    #[orm(on_delete = "cascade")]
-    owner_user_id: i64,
-
-    #[orm(length = 160)]
-    title: String,
+    pub owner_id: i64,
 }
 ```
 
-La forma estructurada recomendada es:
+The structured form is preferred because it points to a Rust entity type and a generated target column symbol. The macro validates at compile time that the referenced column exists.
 
-```rust
-#[orm(foreign_key(entity = User, column = id))]
-```
+## Legacy String Syntax
 
-El `entity` apunta al tipo Rust referenciado y `column` apunta al simbolo de columna generado por `#[derive(Entity)]` en esa entidad. Esta forma valida en compile-time que la columna exista.
-
-## Forma legacy con strings
-
-La sintaxis string sigue soportada por compatibilidad:
+The string syntax remains supported for compatibility:
 
 ```rust
 #[orm(foreign_key = "users.id")]
-```
+pub owner_id: i64,
 
-```rust
 #[orm(foreign_key = "todo.users.id")]
+pub owner_id: i64,
 ```
 
-Con dos segmentos, el schema referenciado por defecto es `dbo`. Con tres segmentos, el primer segmento es el schema. La forma estructurada es preferible porque usa tipos Rust y detecta columnas inexistentes antes.
+With two segments, the referenced schema defaults to `dbo`. With three segments, the first segment is the schema.
 
-## Nombre de constraint
+## Constraint Names
 
-Si no declaras nombre, el derive genera uno estable usando tabla local, columna local y tabla referenciada.
+If no name is declared, the derive generates a stable name from the local table, local column, and referenced table.
 
-```rust
-#[orm(foreign_key(entity = User, column = id))]
-owner_user_id: i64,
-```
+Generated names are intended for deterministic metadata and migration output, not as a public naming convention guarantee for all future releases.
 
-Ejemplo de nombre generado:
+## Delete Behavior
+
+The current public surface supports:
+
+- `#[orm(on_delete = "no action")]`
+- `#[orm(on_delete = "cascade")]`
+- `#[orm(on_delete = "set null")]`
+
+`set null` requires the local column to be nullable. The derive rejects non-nullable `set null` at compile time.
+
+## Metadata Helpers
+
+`ForeignKeyMetadata` and `EntityMetadata` expose helpers for inspecting relationships by name, local column, or referenced table. These helpers are for inspection, migrations, and tooling; they do not execute queries.
+
+## Migrations and DDL
+
+Derived foreign keys enter the code-first pipeline as normal metadata:
 
 ```text
-fk_todo_lists_owner_user_id_users
+EntityMetadata -> ModelSnapshot -> MigrationOperation -> SQL Server DDL
 ```
 
-También puedes declarar el nombre de forma explicita:
+Generated DDL uses:
 
-```rust
-#[orm(foreign_key(entity = User, column = id, name = "fk_todo_lists_owner"))]
-owner_user_id: i64,
+```sql
+ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...
 ```
 
-## Acciones referenciales
+and preserves `ON DELETE` when applicable.
 
-El atributo `on_delete` soporta estas acciones en la surface publica actual:
+The public derive syntax declares foreign keys from individual fields. Snapshots, diffs, and DDL already have shapes for composite foreign keys, but automatically deriving them from public attributes is outside this phase.
 
-- `"no action"`
-- `"cascade"`
-- `"set null"`
+## Explicit Joins
 
-```rust
-#[derive(Entity, Debug, Clone)]
-#[orm(table = "todo_items", schema = "todo")]
-struct TodoItem {
-    #[orm(primary_key)]
-    #[orm(identity)]
-    id: i64,
-
-    #[orm(foreign_key(entity = TodoList, column = id))]
-    #[orm(on_delete = "cascade")]
-    list_id: i64,
-
-    #[orm(nullable)]
-    #[orm(foreign_key(entity = User, column = id))]
-    #[orm(on_delete = "set null")]
-    completed_by_user_id: Option<i64>,
-}
-```
-
-`on_delete = "set null"` requiere que la columna local sea nullable. El derive rechaza en compile-time el caso no nullable.
-
-En esta etapa, `on_update` se mantiene como `NoAction` desde el derive publico.
-
-## Metadata derivada
-
-`#[derive(Entity)]` convierte cada `foreign_key` en `ForeignKeyMetadata`.
+Foreign keys describe the model. Joins decide how a specific query uses related tables.
 
 ```rust
-let metadata = TodoList::metadata();
-let owner_fk = metadata
-    .foreign_key("fk_todo_lists_owner_user_id_users")
-    .expect("owner relationship");
-
-assert_eq!(owner_fk.columns, &["owner_user_id"]);
-assert_eq!(owner_fk.referenced_schema, "todo");
-assert_eq!(owner_fk.referenced_table, "users");
-assert_eq!(owner_fk.referenced_columns, &["id"]);
-```
-
-Helpers disponibles sobre `EntityMetadata`:
-
-- `foreign_key(name)`
-- `foreign_keys_for_column(column_name)`
-- `foreign_keys_referencing(schema, table)`
-
-Estos helpers son para inspeccion, migraciones y tooling. No ejecutan consultas.
-
-## Migraciones
-
-Las foreign keys derivadas entran al pipeline code-first como metadata normal:
-
-1. `EntityMetadata`
-2. `ModelSnapshot`
-3. diff relacional
-4. `MigrationOperation::AddForeignKey` o `DropForeignKey`
-5. DDL SQL Server en `mssql-orm-sqlserver`
-
-El DDL generado usa `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...` y conserva `ON DELETE` cuando aplica.
-
-La sintaxis publica del derive declara foreign keys desde campos individuales. Aunque snapshots, diff y DDL ya tienen shape para foreign keys compuestas, derivarlas automaticamente desde atributos publicos todavia queda fuera de esta fase.
-
-## Joins explicitos
-
-Para consultar usando una relacion, escribe el join explicitamente desde el query builder.
-
-```rust
-use mssql_orm::prelude::*;
-use mssql_orm::query::{Expr, Predicate};
-
-async fn list_items_for_owner(
-    db: &TodoDb,
-    owner_user_id: i64,
-    list_id: i64,
-) -> Result<Vec<TodoItem>, OrmError> {
-    db.todo_items
-        .query()
-        .inner_join::<TodoList>(Predicate::eq(
-            Expr::from(TodoItem::list_id),
-            Expr::from(TodoList::id),
-        ))
-        .filter(
-            TodoList::owner_user_id
-                .eq(owner_user_id)
-                .and(TodoItem::list_id.eq(list_id)),
-        )
-        .order_by(TodoItem::id.asc())
-        .all()
-        .await
-}
-```
-
-La foreign key declara la relacion del modelo; el join decide como usarla en una consulta concreta.
-
-## Left joins
-
-Usa `left_join::<T>(...)` cuando la relacion puede no tener fila referenciada o cuando quieres preservar filas de la entidad base.
-
-```rust
-let items = db
-    .todo_items
+let rows = db
+    .todo_lists
     .query()
-    .left_join::<User>(Predicate::eq(
-        Expr::from(TodoItem::completed_by_user_id),
-        Expr::from(User::id),
-    ))
-    .filter(TodoItem::list_id.eq(list_id))
-    .order_by(TodoItem::id.asc())
+    .inner_join::<User>(TodoList::owner_id.eq(User::id))
+    .filter(User::id.eq(7_i64))
     .all()
     .await?;
 ```
 
-La materializacion publica actual de `DbSetQuery<T>` sigue devolviendo entidades de la tabla base (`T`). El join sirve para filtrar u ordenar usando tablas relacionadas, no para construir automaticamente un grafo de objetos.
+Use `left_join::<T>(...)` when the relationship can be missing or when you need to preserve rows from the base entity.
 
-## Limites actuales
+## Materialization
 
-- No hay navigation properties.
-- No hay lazy loading ni eager loading automatico.
-- No hay inferencia automatica de joins desde `ForeignKeyMetadata`.
-- No hay aliases de tabla en el AST; SQL Server rechaza self-joins o repetir la misma tabla en una consulta hasta que exista soporte de aliases.
-- `DbSetQuery<T>::all()` y `first()` materializan entidades completas de `T`; para DTOs derivados de columnas de la entidad base o de joins explicitos usa `select(...)` con `all_as::<DTO>()` / `first_as::<DTO>()`.
-- La sintaxis publica del derive no genera foreign keys compuestas automaticamente, aunque el pipeline interno de snapshots/diff/DDL ya tenga soporte para representarlas.
-- `count()` sobre `DbSetQuery<T>` conserva filtros de la entidad base, pero no traslada joins al `CountQuery` interno en esta etapa.
+The current public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables; they do not automatically construct object graphs.
 
-## Ejemplo real
+## Limits
 
-El ejemplo `todo-app` usa exactamente este modelo:
-
-- `TodoList.owner_user_id -> User.id`
-- `TodoItem.list_id -> TodoList.id`
-- `TodoItem.created_by_user_id -> User.id`
-- `TodoItem.completed_by_user_id -> User.id`
-
-Las consultas reutilizables estan en [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs), y el dominio esta en [examples/todo-app/src/domain.rs](../examples/todo-app/src/domain.rs).
-
-## Referencias relacionadas
-
-- Conceptos centrales: [docs/core-concepts.md](core-concepts.md)
-- API publica: [docs/api.md](api.md)
-- Query builder publico: [docs/query-builder.md](query-builder.md)
-- Guia code-first: [docs/code-first.md](code-first.md)
-- Migraciones: [docs/migrations.md](migrations.md)
-- Proyecciones tipadas: [docs/projections.md](projections.md)
-- Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)
+- No navigation properties.
+- No lazy loading or automatic eager loading.
+- No automatic join inference from `ForeignKeyMetadata`.
+- No table aliases in the AST; SQL Server rejects repeated table references without aliases.
+- No automatic projection of joined entity graphs.
+- Tenant and soft-delete automatic filters apply to the root entity only; filters on joined entities must be explicit.
