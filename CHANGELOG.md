@@ -41,6 +41,8 @@ Release inicial del ORM `code-first` para Rust y SQL Server basado en Tiberius.
   - `first`
   - `count`
   - joins explicitos (`inner_join`, `left_join`)
+- Proyecciones tipadas publicas sobre `DbSetQuery` con `select(...)`, `all_as::<T>()` y `first_as::<T>()` para DTOs que implementan `FromRow`.
+- Raw SQL tipado con `DbContext::raw<T>(...)`, `DbContext::raw_exec(...)`, parametros `@P1..@Pn`, materializacion `FromRow` y ejecucion de comandos.
 - AST en `mssql-orm-query` sin generacion SQL directa.
 - Compilador SQL Server en `mssql-orm-sqlserver` para queries y DDL de migraciones, con parametros `@P1..@Pn`.
 - Adaptador Tiberius con conexion, ejecucion, mapping de filas, transacciones, timeouts, tracing, slow query logs, retry acotado, health checks y pool opcional bajo feature `pool-bb8`.
@@ -85,6 +87,8 @@ Release inicial del ORM `code-first` para Rust y SQL Server basado en Tiberius.
 - `#[derive(AuditFields)]` permite definir columnas reutilizables de auditoria.
 - `#[orm(audit = Audit)]` expande columnas auditables dentro de `EntityMetadata.columns`.
 - Las columnas auditables participan como metadata/schema normal en snapshots, diff y DDL.
+- `#[derive(SoftDeleteFields)]` y `#[orm(soft_delete = SoftDelete)]` agregan borrado logico runtime, visibilidad de lectura por defecto y schema como columnas ordinarias.
+- `#[derive(TenantContext)]` y `#[orm(tenant = CurrentTenant)]` agregan tenant opt-in con filtros obligatorios sobre la entidad raiz y autollenado/validacion de inserts tenant-scoped.
 
 ### Exclusiones explicitas
 
@@ -93,7 +97,7 @@ Release inicial del ORM `code-first` para Rust y SQL Server basado en Tiberius.
 - No hay navigation properties.
 - No hay lazy loading ni eager loading automatico.
 - No hay aliases de tabla en joins.
-- No hay proyecciones parciales publicas desde `DbSetQuery<T>`.
+- No hay agregaciones tipadas de alto nivel ni aliases automaticos para self-joins.
 - `count()` no conserva joins en esta etapa.
 - CRUD publico, Active Record y tracking siguen orientados a primary key simple.
 - `save_changes()` y `Tracked<T>` son experimentales.
@@ -101,7 +105,8 @@ Release inicial del ORM `code-first` para Rust y SQL Server basado en Tiberius.
 - `db.transaction(...)` no debe considerarse soportado sobre contextos creados desde `from_pool(...)` hasta pinnear una conexion fisica durante todo el closure.
 - No hay autollenado runtime de campos auditables.
 - `audit = Audit` no agrega campos Rust visibles ni simbolos de columna sobre la entidad.
-- `soft_delete`, `tenant`, `timestamps`, `AuditProvider` y policies de comportamiento runtime quedan diferidas.
+- `AuditProvider`, `timestamps`, autollenado runtime de auditoria y filtros automaticos de `soft_delete`/`tenant` sobre entidades unidas manualmente quedan diferidos.
+- `raw<T>()` y `raw_exec()` no aplican automaticamente filtros ORM de `tenant` ni `soft_delete`.
 - `down.sql` no se ejecuta automaticamente.
 - No existe `database downgrade`.
 - `migration.rs` queda fuera del MVP actual.

@@ -28,6 +28,8 @@ La revisión de claims públicos ya corrigió documentos que seguían presentand
 
 `README.md` ahora funciona como documento breve de navegación: enlaza `docs/core-concepts.md`, `docs/repository-audit.md`, guías públicas principales, ejemplos, límites actuales y documentos operativos sin duplicar el detalle extenso de cada guía.
 
+`CHANGELOG.md` fue resincronizado el 2026-04-26 con el estado vigente: proyecciones tipadas y raw SQL tipado aparecen como surface disponible, `soft_delete` y `tenant` aparecen como `Entity Policies` implementadas en Etapa 16+, y las exclusiones quedan acotadas a `AuditProvider`, `timestamps`, autollenado runtime de auditoría, filtros automáticos sobre entidades unidas manualmente, raw SQL sin filtros ORM automáticos y demás límites reales del release.
+
 ### Estado vigente de valores nulos tipados
 
 `SqlValue` ahora distingue `Null` no tipado de `TypedNull(SqlServerType)`. La ruta de persistencia derivada desde `Option<T>::None` usa `SqlTypeMapping` para emitir `TypedNull(T::SQL_SERVER_TYPE)`, de modo que `Insertable`, `Changeset` y cualquier valor producido por el contrato core conservan el tipo SQL Server esperado hasta el binding Tiberius. `mssql-orm-tiberius` liga esos valores como `Option::<tipo>::None`, incluyendo tipos base, `Decimal` mediante `Numeric`, fechas, `Uuid`, binarios y `rowversion` como `varbinary`. `SqlValue::Null` se mantiene como escape hatch explicito no tipado, especialmente para raw SQL manual, y conserva el fallback `Option::<String>::None`.

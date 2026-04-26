@@ -2,6 +2,35 @@
 
 ## 2026-04-26
 
+### Sesión: sincronización de `CHANGELOG.md`
+
+- Se agregó y ejecutó la tarea `Operativo: Sincronizar CHANGELOG.md con el estado actual de soft_delete, tenant y proyecciones tipadas para no listarlos como features diferidas o ausentes`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no existe en la raíz; la ruta real vigente sigue siendo `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `CHANGELOG.md` ahora lista proyecciones tipadas y raw SQL tipado dentro de la surface disponible.
+- `CHANGELOG.md` ahora lista `SoftDeleteFields`/`soft_delete` y `TenantContext`/`tenant` como Entity Policies implementadas, con límites explícitos.
+- Se corrigió la sección de exclusiones para mantener diferidos solo `AuditProvider`, `timestamps`, autollenado runtime de auditoría y filtros automáticos sobre entidades unidas manualmente.
+- Se dejó explícito que raw SQL no aplica automáticamente filtros ORM de `tenant` ni `soft_delete`.
+
+### Resultado
+
+- El changelog queda sincronizado con el estado operativo documentado en `docs/context.md`, `docs/entity-policies.md` y `docs/repository-audit.md`.
+
+### Validación
+
+- `rg -n "Proyecciones tipadas|Raw SQL tipado|SoftDeleteFields|TenantContext|raw<T>\\(\\)" CHANGELOG.md`
+- Búsqueda negativa en `CHANGELOG.md` para `No hay proyecciones parciales` y para la forma obsoleta de listar `soft_delete` junto a `tenant` como features diferidas: sin coincidencias.
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Seleccionar una nueva tarea explícita desde los límites restantes, priorizando `AuditProvider` runtime solo si antes se divide en subtareas pequeñas y verificables.
+
 ### Sesión: `NULL` tipado para `Option<T>`
 
 - Se agregó y ejecutó la tarea `Operativo: Tipar los valores nulos generados desde Option<T> para que el binding Tiberius no trate todos los NULL como nvarchar`.
