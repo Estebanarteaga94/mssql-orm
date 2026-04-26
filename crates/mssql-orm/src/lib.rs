@@ -85,7 +85,9 @@ pub mod prelude {
         IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
         SqlServerType, SqlTypeMapping, SqlValue,
     };
-    pub use mssql_orm_macros::{AuditFields, Changeset, DbContext, Entity, Insertable};
+    pub use mssql_orm_macros::{
+        AuditFields, Changeset, DbContext, Entity, Insertable, SoftDeleteFields,
+    };
     pub use mssql_orm_query::{Join, JoinType};
 }
 
@@ -97,7 +99,8 @@ mod tests {
         EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable,
         MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions,
         MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt,
-        PrimaryKeyMetadata, SoftDeleteEntity, SqlServerType, SqlTypeMapping, SqlValue, Tracked,
+        PrimaryKeyMetadata, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
+        SqlValue, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -133,6 +136,17 @@ mod tests {
         fn columns() -> &'static [super::core::ColumnMetadata] {
             &[]
         }
+    }
+
+    #[allow(dead_code)]
+    #[derive(SoftDeleteFields)]
+    struct PublicSoftDelete {
+        #[orm(sql_type = "datetime2")]
+        deleted_at: Option<String>,
+
+        #[orm(nullable)]
+        #[orm(length = 120)]
+        deleted_by: Option<String>,
     }
 
     #[allow(dead_code)]

@@ -11,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Agregar `#[derive(SoftDeleteFields)]` para que el usuario defina el struct de borrado lógico y sus columnas se creen automáticamente sin implementar `EntityPolicy` a mano
 - [x] Etapa 16+: Cubrir `soft_delete` en rutas runtime públicas de alto riesgo: `DbSet::delete`, Active Record `delete`, change tracking `save_changes()` con `Deleted` y `ConcurrencyConflict` con `rowversion`
 - [x] Etapa 16+: Integrar `soft_delete` en snapshots, diff y DDL como columnas ordinarias sin abrir un segundo pipeline de esquema
 - [x] Etapa 16+: Agregar rutas internas sin filtro implícito de `soft_delete` para comprobaciones de existencia y `ConcurrencyConflict` sin exponer bypass público accidental

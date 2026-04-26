@@ -268,6 +268,16 @@ El diseno vigente para `soft_delete = SoftDelete` debe respetar la arquitectura 
 Forma publica objetivo:
 
 ```rust
+#[derive(SoftDeleteFields)]
+struct SoftDelete {
+    #[orm(sql_type = "datetime2")]
+    deleted_at: Option<String>,
+
+    #[orm(nullable)]
+    #[orm(length = 120)]
+    deleted_by: Option<String>,
+}
+
 #[derive(Entity)]
 #[orm(table = "todos", schema = "todo", soft_delete = SoftDelete)]
 struct Todo {
@@ -278,6 +288,10 @@ struct Todo {
     title: String,
 }
 ```
+
+Estado actual: `#[derive(SoftDeleteFields)]` ya implementa `EntityPolicy` para el struct de borrado logico y expone sus campos como `ColumnMetadata` reutilizable con `POLICY_NAME = "soft_delete"`. Por defecto, las columnas de `SoftDeleteFields` son `insertable = false` y `updatable = true`, porque no deben participar en inserts normales pero si deben poder actualizarse durante el borrado logico. Esos defaults pueden sobrescribirse con `#[orm(insertable = ...)]` y `#[orm(updatable = ...)]` si una policy especifica lo necesita.
+
+La forma publica esperada es que el usuario defina el shape con `SoftDeleteFields` y luego lo conecte con `#[orm(soft_delete = SoftDelete)]`; implementar `EntityPolicy` manualmente queda como capacidad avanzada, no como camino ergonomico principal.
 
 La policy sigue siendo explicita y declarativa. No se activa por detectar columnas llamadas `deleted_at`, `deleted_by` o `is_deleted`.
 

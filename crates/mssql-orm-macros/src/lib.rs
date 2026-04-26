@@ -41,28 +41,77 @@ pub fn derive_changeset(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(AuditFields, attributes(orm))]
 pub fn derive_audit_fields(input: TokenStream) -> TokenStream {
-    match derive_audit_fields_impl(parse_macro_input!(input as DeriveInput)) {
+    match derive_policy_fields_impl(
+        parse_macro_input!(input as DeriveInput),
+        PolicyFieldsKind::Audit,
+    ) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
 }
 
-fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
+#[proc_macro_derive(SoftDeleteFields, attributes(orm))]
+pub fn derive_soft_delete_fields(input: TokenStream) -> TokenStream {
+    match derive_policy_fields_impl(
+        parse_macro_input!(input as DeriveInput),
+        PolicyFieldsKind::SoftDelete,
+    ) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum PolicyFieldsKind {
+    Audit,
+    SoftDelete,
+}
+
+impl PolicyFieldsKind {
+    fn derive_name(self) -> &'static str {
+        match self {
+            Self::Audit => "AuditFields",
+            Self::SoftDelete => "SoftDeleteFields",
+        }
+    }
+
+    fn policy_name(self) -> &'static str {
+        match self {
+            Self::Audit => "audit",
+            Self::SoftDelete => "soft_delete",
+        }
+    }
+
+    fn default_insertable(self) -> bool {
+        match self {
+            Self::Audit => true,
+            Self::SoftDelete => false,
+        }
+    }
+
+    fn default_updatable(self) -> bool {
+        true
+    }
+}
+
+fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Result<TokenStream2> {
     let ident = input.ident;
+    let derive_name = kind.derive_name();
+    let policy_name = kind.policy_name();
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
             Fields::Named(fields) => fields.named,
             _ => {
                 return Err(Error::new_spanned(
                     ident,
-                    "AuditFields solo soporta structs con campos nombrados",
+                    format!("{derive_name} solo soporta structs con campos nombrados"),
                 ));
             }
         },
         _ => {
             return Err(Error::new_spanned(
                 ident,
-                "AuditFields solo soporta structs",
+                format!("{derive_name} solo soporta structs"),
             ));
         }
     };
@@ -72,11 +121,10 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut seen_column_names = std::collections::BTreeSet::new();
 
     for field in fields.iter() {
-        let field_ident = field
-            .ident
-            .as_ref()
-            .ok_or_else(|| Error::new_spanned(field, "AuditFields requiere campos nombrados"))?;
-        let config = parse_audit_field_config(field)?;
+        let field_ident = field.ident.as_ref().ok_or_else(|| {
+            Error::new_spanned(field, format!("{derive_name} requiere campos nombrados"))
+        })?;
+        let config = parse_policy_field_config(field, kind)?;
         let type_info = analyze_type(&field.ty)?;
         let field_ty = &field.ty;
         let rust_field = LitStr::new(&field_ident.to_string(), field_ident.span());
@@ -87,7 +135,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
         if !seen_column_names.insert(column_name.value()) {
             return Err(Error::new_spanned(
                 &column_name,
-                "AuditFields no permite columnas duplicadas",
+                format!("{derive_name} no permite columnas duplicadas"),
             ));
         }
         column_names.push(column_name.clone());
@@ -110,8 +158,8 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
             || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_SCALE },
             |scale| quote! { Some(#scale) },
         );
-        let insertable = config.insertable.unwrap_or(true);
-        let updatable = config.updatable.unwrap_or(true);
+        let insertable = config.insertable.unwrap_or(kind.default_insertable());
+        let updatable = config.updatable.unwrap_or(kind.default_updatable());
 
         columns.push(quote! {
             ::mssql_orm::core::ColumnMetadata {
@@ -136,7 +184,7 @@ fn derive_audit_fields_impl(input: DeriveInput) -> Result<TokenStream2> {
 
     Ok(quote! {
         impl ::mssql_orm::core::EntityPolicy for #ident {
-            const POLICY_NAME: &'static str = "audit";
+            const POLICY_NAME: &'static str = #policy_name;
             const COLUMN_NAMES: &'static [&'static str] = &[#(#column_names),*];
 
             fn columns() -> &'static [::mssql_orm::core::ColumnMetadata] {
@@ -1432,8 +1480,9 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
     Ok(config)
 }
 
-fn parse_audit_field_config(field: &Field) -> Result<AuditFieldConfig> {
+fn parse_policy_field_config(field: &Field, kind: PolicyFieldsKind) -> Result<AuditFieldConfig> {
     let mut config = AuditFieldConfig::default();
+    let derive_name = kind.derive_name();
 
     for attr in &field.attrs {
         if !attr.path().is_ident("orm") {
@@ -1462,7 +1511,9 @@ fn parse_audit_field_config(field: &Field) -> Result<AuditFieldConfig> {
             } else if meta.path.is_ident("updatable") {
                 config.updatable = Some(parse_bool_expr(meta.value()?.parse()?)?);
             } else {
-                return Err(meta.error("atributo orm no soportado en campos de AuditFields"));
+                return Err(meta.error(format!(
+                    "atributo orm no soportado en campos de {derive_name}"
+                )));
             }
 
             Ok(())

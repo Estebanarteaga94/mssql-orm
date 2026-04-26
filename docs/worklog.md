@@ -2,6 +2,49 @@
 
 ## 2026-04-25
 
+### Sesión: derive público `SoftDeleteFields`
+
+- Se corrigió una brecha de ergonomía señalada durante la revisión de `soft_delete`: aunque `#[orm(soft_delete = SoftDelete)]` ya consumía un `EntityPolicy`, el camino público esperado es que el usuario defina un struct de columnas y derive la policy, igual que con `AuditFields`.
+- Se agregó `#[derive(SoftDeleteFields)]` en `mssql-orm-macros`, reutilizando la generación de columnas de policies pero con `POLICY_NAME = "soft_delete"`.
+- Los campos de `SoftDeleteFields` soportan los mismos atributos estructurales de columna ya usados por policies (`column`, `length`, `nullable`, `default_sql`, `renamed_from`, `sql_type`, `precision`, `scale`, `insertable`, `updatable`).
+- Los defaults de `SoftDeleteFields` son específicos de borrado lógico: `insertable = false` y `updatable = true`, para que columnas como `deleted_at` y `deleted_by` no participen en inserts normales pero sí puedan ser asignadas por la ruta de soft delete.
+- Se reexportó `SoftDeleteFields` desde `mssql_orm::prelude::*`.
+- Se actualizó el fixture público `entity_soft_delete_attr_valid.rs` para usar `#[derive(SoftDeleteFields)]` en vez de implementar `EntityPolicy` manualmente.
+- Se agregó el fixture `soft_delete_fields_valid.rs` para validar directamente el contrato generado.
+- Se actualizó `docs/entity-policies.md` y `docs/context.md` para dejar explícita la forma pública esperada.
+- Se movió la subtarea a `Completadas` tras validar.
+
+### Resultado
+
+- La API de `soft_delete` ya permite el uso esperado:
+
+```rust
+#[derive(SoftDeleteFields)]
+struct SoftDelete {
+    deleted_at: Option<String>,
+    deleted_by: Option<String>,
+}
+
+#[derive(Entity)]
+#[orm(soft_delete = SoftDelete)]
+struct Todo { /* ... */ }
+```
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar la tarea agregada final de seguridad de `soft_delete`, ahora usando `SoftDeleteFields` como forma pública en los fixtures que correspondan.
+
 ### Sesión: cobertura runtime de alto riesgo para `soft_delete`
 
 - Se descompuso la tarea amplia `Etapa 16+: Cubrir soft_delete con pruebas de metadata, SQL compilado, CRUD público, Active Record, change tracking, ConcurrencyConflict y migraciones...` en una subtarea runtime concreta y una tarea paraguas final de seguridad.
