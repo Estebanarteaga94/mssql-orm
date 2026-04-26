@@ -930,6 +930,46 @@ La transformacion debe trabajar contra columnas auditables declaradas por la ent
 
 No se debe inferir auditoria por convencion de nombres como `created_at` o `updated_by` sobre cualquier entidad. Una entidad solo participa en autollenado cuando declara `#[orm(audit = Audit)]` y el contexto tiene un `AuditProvider` configurado.
 
+## Evaluacion de `tenant = TenantScope`
+
+`tenant = TenantScope` es valida como extension de `Entity Policies`, pero debe tratarse como feature de seguridad, no como comodidad de schema. Su responsabilidad no seria solo aportar una columna `tenant_id`; tambien debe impedir que una ruta publica lea, modifique, borre o inserte datos fuera del tenant activo.
+
+La decision vigente es implementarla solo bajo semantica **fail-closed**. Si una entidad declara `#[orm(tenant = TenantScope)]` y no hay tenant activo en el contexto, las rutas publicas deben fallar antes de compilar o ejecutar SQL. Ejecutar una query sin filtro de tenant por ausencia de contexto seria un bug de seguridad.
+
+Rutas que deben quedar cubiertas:
+
+- `DbSet::query()` y `DbSet::query_with(...)`
+- `DbSetQuery::all()`, `first()` y `count()`
+- `DbSet::find(...)` y `find_tracked(...)`
+- `DbSet::update(...)`
+- `DbSet::delete(...)`, incluyendo entidades que tambien tengan `soft_delete`
+- Active Record: `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.save(&db)` y `entity.delete(&db)`
+- `save_changes()` para entidades `Added`, `Modified` y `Deleted`
+- inserts via `DbSet::insert(...)`, Active Record y tracking `Added`
+
+La columna de tenant debe venir de una policy declarativa similar a las otras policies de columnas generadas, pero el runtime necesita un contrato separado para conocer el tenant activo. La opcion mas alineada con el estado actual es extender la infraestructura de `SharedConnectionRuntime` o un runtime config equivalente en `mssql-orm`, porque hoy ese objeto ya viaja por `DbContext`, `DbSet`, Active Record, tracking y transacciones.
+
+El comportamiento esperado para inserts debe ser estricto:
+
+- Si la entidad tenant-scoped no recibe un `tenant_id` explicito, el ORM debe agregarlo desde el tenant activo.
+- Si el usuario aporta un `tenant_id`, debe coincidir con el tenant activo.
+- Si no hay tenant activo, el insert debe fallar.
+- La validacion debe ocurrir antes de construir `InsertQuery`, no en `tiberius` ni en SQL crudo.
+
+El comportamiento esperado para lecturas y escrituras debe agregar siempre el predicate `tenant_id = current_tenant` sobre la entidad raiz. Para updates y deletes, este predicate debe combinarse con primary key, `rowversion` y `soft_delete` cuando existan. Para queries con joins, el primer corte debe filtrar obligatoriamente la entidad raiz `E`; filtrar automaticamente todas las entidades unidas requiere diseno adicional de aliases y metadata por join. Hasta tener ese diseno, las entidades unidas tenant-scoped deben exigir filtros explicitos o una restriccion clara para no dar falsa seguridad.
+
+No debe existir un bypass publico accidental equivalente a “ignorar tenant”. Cualquier bypass interno para comprobaciones de existencia o `ConcurrencyConflict` debe seguir aplicando tenant si la operacion es tenant-scoped; a diferencia de `soft_delete`, el tenant no representa visibilidad de fila sino frontera de seguridad. Una comprobacion interna que ignore tenant podria convertir una ausencia legitima en `ConcurrencyConflict` o filtrar informacion entre tenants.
+
+Riesgos principales:
+
+- `query_with(select_query)` podria aceptar un AST custom sin filtro si el tenant se aplica demasiado temprano o solo en `query()`.
+- `find(...)`, Active Record y tracking reutilizan helpers internos; esos helpers no pueden convertirse en bypass de tenant.
+- `save_changes()` puede mezclar entidades de varios tipos; cada tipo tenant-scoped debe validar tenant de forma independiente.
+- Inserts deben evitar tanto omitir `tenant_id` como aceptar un tenant arbitrario aportado por el usuario.
+- Entidades con `soft_delete` y `tenant` deben combinar ambos predicates sin cambiar responsabilidades: tenant es seguridad obligatoria; soft delete es visibilidad configurable.
+
+Conclusion: `tenant = TenantScope` debe avanzar, pero no debe implementarse como simple derive de columnas. Primero hay que fijar el contrato de tenant activo y las reglas de fallar cerrado en `DbContext`/`SharedConnection` o provider dedicado. Luego se puede integrar en queries, writes, Active Record y tracking con pruebas de seguridad por ruta.
+
 ### Transacciones
 
 Dentro de `db.transaction(...)`, el contexto transaccional debe heredar el mismo `AuditProvider` y los mismos valores por request que tenia el contexto padre al abrir la transaccion.

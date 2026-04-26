@@ -2,6 +2,35 @@
 
 ## 2026-04-25
 
+### Sesión: evaluación de `tenant = TenantScope`
+
+- Se ejecutó la tarea `Etapa 16+: Evaluar tenant = TenantScope como feature de seguridad con filtros obligatorios, inserción automática de tenant_id y validación de que no existan rutas de query que omitan el tenant por accidente`.
+- Se revisó el plan maestro en `docs/plan_orm_sqlserver_tiberius_code_first.md`, el backlog, `docs/context.md`, `docs/entity-policies.md` y las rutas reales de `DbSet`, `DbSetQuery`, Active Record, `SharedConnection` y tracking.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se documentó en `docs/entity-policies.md` que `tenant = TenantScope` es viable, pero debe implementarse como feature de seguridad fail-closed, no como simple columna generada.
+- La evaluación fija que las rutas públicas tenant-scoped deben fallar antes de compilar SQL si no hay tenant activo, y deben agregar `tenant_id = current_tenant` en lecturas, updates y deletes.
+- Se dejó explícito que los helpers internos no deben ignorar tenant para existencia o `ConcurrencyConflict`; a diferencia de `soft_delete`, tenant no es visibilidad configurable sino frontera de seguridad.
+- Se definió el comportamiento esperado de inserts: autollenar `tenant_id` desde el contexto, rechazar valores distintos al tenant activo y fallar si falta tenant.
+- Se actualizó `docs/context.md` con la decisión y el siguiente foco recomendado.
+
+### Resultado
+
+- `tenant = TenantScope` queda aprobado conceptualmente como backlog `Etapa 16+`, condicionado a diseñar primero el contrato de tenant activo y su propagación por `DbContext`/`SharedConnection` o provider dedicado.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- No se ejecutaron pruebas runtime porque la tarea fue de evaluación documental y no modificó código ni fixtures.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Diseñar tenant = TenantScope para que toda query, find, update, delete, Active Record y save_changes() sobre entidades tenant-scoped agregue automáticamente el filtro tenant_id = current_tenant cuando exista un tenant activo en el contexto`.
+
 ### Sesión: guardrail final de seguridad para `soft_delete`
 
 - Se ejecutó la tarea `Etapa 16+: Cubrir soft_delete con prueba de seguridad final agregada que reúna metadata, SQL compilado y migraciones ya cubiertas, más rutas runtime públicas, para evitar regresiones de borrado físico accidental`.
