@@ -28,6 +28,7 @@ Hoy el repositorio ya tiene soporte funcional para:
 - `DbContext` y `DbSet<T>` tipados
 - CRUD base: `find`, `insert`, `update`, `delete`
 - query builder público con `filter`, `order_by`, `limit`, `take`, `paginate`, `count`, `inner_join`, `left_join`
+- raw SQL tipado con `raw<T>()`, `raw_exec()`, parametros `@P1..@Pn` y materializacion mediante `FromRow`
 - Active Record base: `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.save(&db)`, `entity.delete(&db)`
 - concurrencia optimista con `rowversion`
 - change tracking experimental con `Tracked<T>` y `save_changes()`
@@ -86,6 +87,7 @@ Si quieres la explicación del modelo `code-first` actual, sus derives y límite
 Si quieres reutilizar columnas transversales con `Entity Policies`, revisa [docs/entity-policies.md](docs/entity-policies.md).
 Si quieres ver el inventario de API publicada por la crate raíz, revisa [docs/api.md](docs/api.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
+Si necesitas SQL Server escrito a mano con DTOs tipados y comandos parametrizados, revisa [docs/raw-sql.md](docs/raw-sql.md).
 Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
 Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
 
@@ -188,6 +190,18 @@ Guía práctica para:
 - entender límites actuales como aliases, proyección parcial y conteos con joins
 
 Documento: [docs/query-builder.md](docs/query-builder.md)
+
+### Raw SQL tipado
+
+Guia practica para:
+
+- ejecutar consultas SQL Server escritas a mano con `db.raw::<T>(...)`
+- materializar DTOs mediante `FromRow`
+- ejecutar comandos con `db.raw_exec(...).execute()`
+- usar parametros `@P1`, `@P2`, ..., `@Pn`
+- entender que raw SQL no aplica automaticamente `tenant` ni `soft_delete`
+
+Documento: [docs/raw-sql.md](docs/raw-sql.md)
 
 ### Guía de relaciones y joins
 

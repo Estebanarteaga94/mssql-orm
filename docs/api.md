@@ -183,7 +183,7 @@ Surface avanzada reexportada desde `mssql_orm::query`:
 
 ### Etapa 17: raw SQL tipado
 
-Raw SQL tipado queda diseñado como escape hatch explicito para consultas o comandos que todavia no encajan en el query builder. La surface aprobada se documenta en `docs/raw-sql.md` y la direccion de API es:
+Raw SQL tipado es el escape hatch explicito para consultas o comandos que todavia no encajan en el query builder. La guia publica esta en `docs/raw-sql.md` y la API disponible es:
 
 ```rust
 let rows = db
@@ -198,7 +198,7 @@ db.raw_exec("UPDATE dbo.users SET active = @P1 WHERE id = @P2")
     .await?;
 ```
 
-Esta surface ya existe en el `DbContext` trait y reexporta `RawQuery`, `RawCommand`, `RawParam` y `RawParams` desde `mssql_orm::prelude`. La implementacion reutiliza `SharedConnection`, `FromRow`, `SqlTypeMapping`, `SqlValue`, `CompiledQuery` y `ExecuteResult`. Raw SQL no aplica implicitamente filtros ORM de `tenant` ni `soft_delete`; el usuario debe escribir esos predicados de forma explicita en el SQL.
+Esta surface existe en el `DbContext` trait y reexporta `RawQuery`, `RawCommand`, `RawParam` y `RawParams` desde `mssql_orm::prelude`. La implementacion reutiliza `SharedConnection`, `FromRow`, `SqlTypeMapping`, `SqlValue`, `CompiledQuery` y `ExecuteResult`. Raw SQL no aplica implicitamente filtros ORM de `tenant` ni `soft_delete`; el usuario debe escribir esos predicados de forma explicita en el SQL.
 
 Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para varios valores, repetir `@P1` es valido y reutiliza el mismo valor, los placeholders deben ser continuos desde `@P1` hasta `@Pn`, y la cantidad de parametros debe coincidir con el mayor placeholder usado. La implementacion debe validar por indices de placeholders, no por cantidad de ocurrencias.
 
@@ -374,7 +374,6 @@ Esta surface no promete todavia:
 - navigation properties
 - lazy loading o eager loading automatico
 - aliases de tabla
-- raw SQL tipado publico
 - proyecciones parciales publicas desde `DbSetQuery<T>`
 - primary keys compuestas en CRUD publico
 - `save_changes()` estable

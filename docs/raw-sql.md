@@ -1,22 +1,41 @@
 # Raw SQL Tipado
 
-Raw SQL tipado es el escape hatch publico para consultas y comandos SQL Server que todavia no encajan en el query builder. Vive en la crate publica `mssql-orm`, se reexporta desde `mssql_orm::prelude::*`, reutiliza la ejecucion existente sobre `SharedConnection` y no introduce SQL directo dentro de `core` ni `query`.
+Raw SQL tipado es el escape hatch publico para consultas y comandos SQL Server que no encajan todavia en el query builder. Vive en la crate publica `mssql-orm`, se usa desde cualquier `DbContext` y esta reexportado por `mssql_orm::prelude::*`.
 
-## Surface Publica Objetivo
+Esta API no cambia los limites de arquitectura:
 
-La API canonica queda definida sobre cualquier `DbContext` derivado:
+- `core` define contratos como `FromRow`, `SqlValue`, `SqlTypeMapping` y `OrmError`.
+- `query` solo transporta `CompiledQuery`; no genera SQL para raw SQL.
+- `sqlserver` sigue compilando AST del query builder, no strings raw.
+- `tiberius` ejecuta el SQL parametrizado.
+- `mssql-orm` concentra la API publica `raw<T>()` y `raw_exec()`.
+
+## Cuando Usarlo
+
+Usa raw SQL para casos acotados donde necesitas SQL Server explicito y el query builder actual no cubre la forma requerida:
+
+- consultas de lectura hacia DTOs especificos;
+- comandos administrativos o DML puntual;
+- SQL escrito a mano con hints, funciones, CTEs o formas aun no modeladas por el AST;
+- migraciones o scripts operativos ejecutados desde codigo de aplicacion.
+
+Prefiere `DbSetQuery` cuando puedas expresar la consulta con `filter`, `order_by`, joins, paginacion y `count`. Raw SQL es deliberadamente mas manual.
+
+## API Publica
+
+La API canonica esta disponible sobre cualquier `DbContext` derivado:
 
 ```rust
 let rows = db
     .raw::<UserListItem>(
-        "SELECT id, email FROM [dbo].[users] WHERE active = @P1 AND tenant_id = @P2",
+        "SELECT id, email FROM [dbo].[users] WHERE active = @P1 ORDER BY email",
     )
-    .params((true, tenant_id))
+    .param(true)
     .all()
     .await?;
 
 let first = db
-    .raw::<UserListItem>("SELECT id, email FROM [dbo].[users] WHERE id = @P1")
+    .raw::<UserListItem>("SELECT TOP (1) id, email FROM [dbo].[users] WHERE id = @P1")
     .param(user_id)
     .first()
     .await?;
@@ -28,18 +47,16 @@ let result = db
     .await?;
 ```
 
-El shape publico disponible es:
+Shape disponible:
 
 ```rust
-impl AppDbContext {
-    pub fn raw<T>(&self, sql: impl Into<String>) -> RawQuery<T>
+pub trait DbContext {
+    fn raw<T>(&self, sql: impl Into<String>) -> RawQuery<T>
     where
         T: FromRow + Send;
 
-    pub fn raw_exec(&self, sql: impl Into<String>) -> RawCommand;
+    fn raw_exec(&self, sql: impl Into<String>) -> RawCommand;
 }
-
-pub struct RawQuery<T> { /* private fields */ }
 
 impl<T> RawQuery<T>
 where
@@ -47,7 +64,7 @@ where
 {
     pub fn param<P>(self, value: P) -> Self
     where
-        P: SqlTypeMapping;
+        P: RawParam;
 
     pub fn params<P>(self, values: P) -> Self
     where
@@ -57,12 +74,10 @@ where
     pub async fn first(self) -> Result<Option<T>, OrmError>;
 }
 
-pub struct RawCommand { /* private fields */ }
-
 impl RawCommand {
     pub fn param<P>(self, value: P) -> Self
     where
-        P: SqlTypeMapping;
+        P: RawParam;
 
     pub fn params<P>(self, values: P) -> Self
     where
@@ -72,91 +87,207 @@ impl RawCommand {
 }
 ```
 
-`RawQuery<T>` materializa filas mediante `FromRow`; por eso sirve para entidades completas, DTOs o structs de lectura manuales. `RawCommand` ejecuta comandos y retorna `ExecuteResult` desde `mssql-orm-tiberius`.
+`RawQuery<T>` materializa filas mediante `FromRow`. `RawCommand` ejecuta comandos y retorna `ExecuteResult`, con conteo de filas afectadas.
+
+## DTOs de Lectura
+
+Raw SQL puede materializar entidades completas, pero es especialmente util para DTOs de lectura.
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(Debug, Clone, PartialEq)]
+struct UserListItem {
+    id: i64,
+    email: String,
+    active: bool,
+}
+
+impl FromRow for UserListItem {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            id: row.get_required_typed::<i64>("id")?,
+            email: row.get_required_typed::<String>("email")?,
+            active: row.get_required_typed::<bool>("active")?,
+        })
+    }
+}
+
+let users = db
+    .raw::<UserListItem>(
+        "SELECT id, email, active FROM [dbo].[users] WHERE active = @P1 ORDER BY email",
+    )
+    .param(true)
+    .all()
+    .await?;
+```
+
+Los nombres usados en `get_required_typed` deben coincidir con las columnas o aliases devueltos por el `SELECT`. Si proyectas expresiones, asigna alias estables:
+
+```rust
+let summaries = db
+    .raw::<UserSummary>(
+        "SELECT id, email, CAST(CASE WHEN active = 1 THEN 1 ELSE 0 END AS bit) AS is_enabled \
+         FROM [dbo].[users]",
+    )
+    .all()
+    .await?;
+```
+
+## Comandos
+
+Usa `raw_exec()` para comandos que no devuelven filas materializadas:
+
+```rust
+let result = db
+    .raw_exec("UPDATE [dbo].[users] SET active = @P1 WHERE id = @P2")
+    .params((false, user_id))
+    .execute()
+    .await?;
+
+assert_eq!(result.total(), 1);
+```
+
+Tambien sirve para DDL o scripts operativos acotados:
+
+```rust
+db.raw_exec(
+    "IF OBJECT_ID('[dbo].[archived_users]', 'U') IS NULL \
+     CREATE TABLE [dbo].[archived_users] (id BIGINT NOT NULL PRIMARY KEY)",
+)
+.execute()
+.await?;
+```
+
+Si el comando necesita devolver filas, usa `raw::<T>()` con un `SELECT` explicito.
 
 ## Parametros
 
-Raw SQL usa exclusivamente placeholders SQL Server `@P1`, `@P2`, ..., `@Pn`. El usuario escribe esos placeholders en el SQL y agrega valores en el mismo orden logico.
+Raw SQL usa placeholders SQL Server `@P1`, `@P2`, ..., `@Pn`. El string SQL contiene los placeholders y los valores se agregan con `.param(...)` o `.params(...)`.
 
-La forma recomendada para dos o mas parametros es `.params((p1, p2, ...))`, porque mantiene visible la correspondencia con `@P1`, `@P2`, ..., `@Pn` en un solo punto de la llamada. `.param(value)` queda como forma incremental conveniente para un unico parametro o para construir consultas paso a paso.
+```rust
+let rows = db
+    .raw::<UserListItem>(
+        "SELECT id, email, active FROM [dbo].[users] \
+         WHERE active = @P1 AND email LIKE @P2",
+    )
+    .params((true, "%@example.com"))
+    .all()
+    .await?;
+```
 
 Reglas obligatorias:
 
-- Los placeholders deben ser continuos desde `@P1` hasta `@Pn`.
-- La cantidad de parametros debe coincidir con el mayor placeholder usado.
-- `@P1` repetido es valido y reutiliza el mismo primer parametro.
-- `@P0`, indices vacios, saltos como `@P1` + `@P3` y parametros extra deben fallar antes de ejecutar.
-- `SqlValue::Null` debe poder pasarse explicitamente con `.param(SqlValue::Null)`.
-- Los tipos soportados son los que implementan `SqlTypeMapping`, mas `SqlValue` como escape explicito para valores ya normalizados.
+- los placeholders deben ser continuos desde `@P1` hasta `@Pn`;
+- la cantidad de parametros debe coincidir con el mayor placeholder usado;
+- `@P1` repetido es valido y reutiliza el primer valor;
+- `@P0`, saltos como `@P1` + `@P3`, parametros faltantes y parametros extra fallan antes de ejecutar;
+- `SqlValue::Null` y `Option::<T>::None` representan `NULL`;
+- los tipos soportados son los que implementan `RawParam`, incluyendo los tipos base mapeados por `SqlTypeMapping`, `&str`, `SqlValue` y `Option<T>`.
 
-La implementacion no debe reutilizar sin cambios la validacion actual de `PreparedQuery::validate_parameter_count()`, porque esa funcion cuenta ocurrencias. Para raw SQL se necesita escanear indices, calcular el maximo y verificar continuidad. Ejemplo valido:
-
-```sql
-WHERE owner_id = @P1 OR reviewer_id = @P1
-```
-
-con un solo parametro.
-
-`RawParams` es el trait publico de soporte reexportado desde `mssql_orm::prelude::*` para habilitar tuplas ergonomicas. Cubre tuplas hasta 12 valores y `Vec<T>` cuando `T: RawParam`:
+Ejemplo valido con placeholder repetido:
 
 ```rust
-.params((true, tenant_id))
-.params((SqlValue::Null, "draft".to_string(), 25_i32))
+let rows = db
+    .raw::<TaskDto>(
+        "SELECT id, title FROM [todo].[todo_items] \
+         WHERE owner_id = @P1 OR reviewer_id = @P1",
+    )
+    .param(user_id)
+    .all()
+    .await?;
 ```
 
-No se debe aceptar interpolacion automatica de valores dentro del string SQL.
+Para varios valores, la forma recomendada es una tupla:
 
-## Ejecucion
+```rust
+.params((true, tenant_id, "open"))
+```
 
-`DbContext::raw<T>(...)` y `DbContext::raw_exec(...)` capturan `SharedConnection` desde `self.shared_connection()`.
+`RawParams` soporta tuplas hasta 12 valores y `Vec<T>` cuando `T: RawParam`.
 
-Al ejecutar:
+## Seguridad
 
-1. Construyen un `CompiledQuery { sql, params }` directamente desde el SQL crudo y los parametros normalizados.
-2. Validan placeholders raw antes de llamar al adaptador Tiberius.
-3. Bloquean la conexion compartida con `SharedConnection::lock().await`.
-4. Llaman a `fetch_all`, `fetch_one` o `execute` ya existentes.
+No interpolar valores de usuario dentro del string SQL. Esta forma es insegura:
 
-Esto preserva la separacion actual:
+```rust
+let sql = format!("SELECT id, email FROM [dbo].[users] WHERE email = '{email}'");
+let rows = db.raw::<UserListItem>(sql).all().await?;
+```
 
-- `core`: contratos (`FromRow`, `SqlTypeMapping`, `SqlValue`, `OrmError`).
-- `query`: solo transporta `CompiledQuery`; no parsea ni genera SQL.
-- `sqlserver`: sigue siendo el compilador de AST, pero raw SQL no pasa por AST.
-- `tiberius`: ejecuta `CompiledQuery` y bindea parametros.
-- `mssql-orm`: concentra la surface publica y la validacion especifica de raw SQL.
+Usa parametros:
 
-## Seguridad y Policies
+```rust
+let rows = db
+    .raw::<UserListItem>("SELECT id, email, active FROM [dbo].[users] WHERE email = @P1")
+    .param(email)
+    .all()
+    .await?;
+```
 
-Raw SQL no aplica automaticamente filtros ORM de `tenant` ni `soft_delete`. Si una entidad tiene `#[orm(tenant = CurrentTenant)]` o `#[orm(soft_delete = SoftDelete)]`, el usuario debe escribir manualmente los predicados necesarios en el SQL crudo. Esto es intencional: raw SQL es un bypass explicito del query builder y de sus filtros implicitos.
+Raw SQL no hace quoting automatico de identificadores. Si necesitas construir nombres de tabla, schema o columna dinamicamente, usa una lista permitida por tu aplicacion antes de formar el string SQL. No aceptes identificadores directos desde input de usuario.
 
-Ejemplo:
+## Tenant y Soft Delete
+
+Raw SQL no aplica automaticamente filtros ORM de `tenant` ni `soft_delete`.
+
+Si una entidad tiene `#[orm(tenant = CurrentTenant)]`, `DbSetQuery` y las rutas CRUD publicas aplican filtros obligatorios. Raw SQL es un bypass explicito: debes escribir el predicate manualmente.
 
 ```rust
 let rows = db
     .raw::<TodoItemDto>(
-        "SELECT id, title FROM [todo].[todo_items] WHERE tenant_id = @P1 AND deleted_at IS NULL",
+        "SELECT id, title, tenant_id \
+         FROM [todo].[todo_items] \
+         WHERE tenant_id = @P1 AND deleted_at IS NULL \
+         ORDER BY id",
     )
     .param(tenant_id)
     .all()
     .await?;
 ```
 
-Esta decision debe quedar visible en docs y tests porque raw SQL es un bypass deliberado del query builder. La API no debe exponer un modo implicito tipo `apply_tenant()` en esta etapa.
+Esto tambien aplica a `soft_delete`: si el modelo usa `#[orm(soft_delete = SoftDelete)]`, raw SQL no agrega `deleted_at IS NULL`, `is_deleted = 0` ni ningun equivalente. El consumidor debe escribirlo.
 
-## Limites del Primer Corte
+## Ejecucion y Transacciones
+
+`raw<T>()` y `raw_exec()` usan el mismo `SharedConnection` del contexto, asi que participan en el mismo modelo de conexion que `DbSet`.
+
+Dentro de una transaccion publica, llama raw SQL sobre el contexto transaccional recibido:
+
+```rust
+db.transaction(|tx| async move {
+    tx.raw_exec("UPDATE [dbo].[users] SET active = @P1 WHERE id = @P2")
+        .params((false, user_id))
+        .execute()
+        .await?;
+
+    let row = tx
+        .raw::<UserListItem>("SELECT id, email, active FROM [dbo].[users] WHERE id = @P1")
+        .param(user_id)
+        .first()
+        .await?;
+
+    Ok(row)
+})
+.await?;
+```
+
+Las mismas restricciones de transacciones documentadas en [docs/transactions.md](transactions.md) siguen aplicando.
+
+## Limites
 
 - No hay builder de identificadores ni quoting automatico para raw SQL.
 - No hay interpolacion segura tipo format string.
 - No hay validacion semantica de columnas, tablas, aliases o DTOs antes de ejecutar.
 - No hay soporte especial para multiples result sets.
-- No hay streaming publico en el primer corte; `all()` materializa `Vec<T>`.
-- No hay integracion automatica con migraciones, `DbSetQuery`, projections ni policies.
+- No hay streaming publico; `all()` materializa `Vec<T>`.
+- No hay aplicacion automatica de `tenant`, `soft_delete` ni otras policies.
+- No hay integracion automatica con migraciones, `DbSetQuery` o proyecciones del query builder.
 
-## Cobertura Esperada
+## Cobertura
 
-Las siguientes tareas deben agregar:
+La API esta cubierta por:
 
-- pruebas unitarias de scanner de placeholders con repetidos, saltos, `@P0`, parametros extra, SQL sin parametros y tipos soportados;
-- pruebas de construccion de `CompiledQuery` preservando orden de parametros;
-- pruebas publicas de `raw<T>().first()`, `raw<T>().all()` y `raw_exec().execute()` contra SQL Server real cuando `MSSQL_ORM_TEST_CONNECTION_STRING` este configurado;
-- cobertura documental que advierta que raw SQL no aplica `tenant` ni `soft_delete`.
+- pruebas unitarias de parametros en `crates/mssql-orm/src/raw_sql.rs`;
+- validacion de `@P1` repetido, continuidad de placeholders, `NULL`, tuplas, `Vec<T>` y orden de parametros;
+- prueba publica real en `crates/mssql-orm/tests/stage17_raw_sql.rs`, ejecutada contra SQL Server cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esta configurado.

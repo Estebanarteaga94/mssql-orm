@@ -2,6 +2,36 @@
 
 ## 2026-04-26
 
+### Sesión: documentación pública de raw SQL tipado
+
+- Se ejecutó la tarea `Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `docs/raw-sql.md` fue reescrito como guía pública de uso, no solo como diseño operativo.
+- La guía ahora cubre cuándo usar raw SQL, API pública, DTOs con `FromRow`, comandos con `raw_exec`, reglas de parámetros `@P1..@Pn`, uso de `NULL`, placeholders repetidos, seguridad contra interpolación de valores, identificadores dinámicos, transacciones y límites.
+- La advertencia de seguridad sobre `tenant` y `soft_delete` quedó explícita con ejemplo: raw SQL no aplica esos filtros automáticamente y el consumidor debe escribirlos manualmente.
+- `README.md` ahora menciona raw SQL tipado como capacidad disponible y enlaza la guía.
+- `docs/api.md` quedó sincronizado y ya no lista raw SQL público como exclusión.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Etapa 17 queda cerrada documentalmente: la surface raw SQL implementada y validada tiene guía pública con ejemplos de DTOs, comandos y seguridad.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `rg -n "raw SQL tipado publico|Raw SQL tipado queda diseñado|Cobertura Esperada|Surface Publica Objetivo" docs README.md` sin coincidencias obsoletas
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Iniciar Etapa 18 con `Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas`.
+
 ### Sesión: pruebas públicas reales de raw SQL tipado
 
 - Se ejecutó la tarea `Etapa 17: Agregar pruebas públicas de raw<T>().first(), raw<T>().all() y raw_exec().execute() contra SQL Server real cuando MSSQL_ORM_TEST_CONNECTION_STRING esté configurado`.
