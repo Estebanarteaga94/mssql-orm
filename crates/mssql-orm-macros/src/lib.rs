@@ -61,6 +61,14 @@ pub fn derive_soft_delete_fields(input: TokenStream) -> TokenStream {
     }
 }
 
+#[proc_macro_derive(TenantContext, attributes(orm))]
+pub fn derive_tenant_context(input: TokenStream) -> TokenStream {
+    match derive_tenant_context_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
 #[derive(Clone, Copy)]
 enum PolicyFieldsKind {
     Audit,
@@ -198,6 +206,116 @@ fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Resu
     })
 }
 
+fn derive_tenant_context_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let fields = match input.data {
+        Data::Struct(data) => match data.fields {
+            Fields::Named(fields) => fields.named,
+            _ => {
+                return Err(Error::new_spanned(
+                    ident,
+                    "TenantContext solo soporta structs con campos nombrados",
+                ));
+            }
+        },
+        _ => {
+            return Err(Error::new_spanned(
+                ident,
+                "TenantContext solo soporta structs",
+            ));
+        }
+    };
+
+    if fields.len() != 1 {
+        return Err(Error::new_spanned(
+            ident,
+            "TenantContext requiere exactamente un campo tenant",
+        ));
+    }
+
+    let field = fields
+        .first()
+        .expect("TenantContext must have exactly one field after validation");
+    let field_ident = field
+        .ident
+        .as_ref()
+        .ok_or_else(|| Error::new_spanned(field, "TenantContext requiere campos nombrados"))?;
+    let config = parse_tenant_context_field_config(field)?;
+    let type_info = analyze_type(&field.ty)?;
+
+    if type_info.nullable {
+        return Err(Error::new_spanned(
+            &field.ty,
+            "TenantContext no soporta Option<T>; la ausencia de tenant debe representarse sin configurar tenant activo en el contexto",
+        ));
+    }
+
+    let field_ty = &field.ty;
+    let rust_field = LitStr::new(&field_ident.to_string(), field_ident.span());
+    let column_name = config
+        .column
+        .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+    validate_non_empty_lit_str(&column_name, "column no puede estar vacío")?;
+    let renamed_from = option_lit_str(config.renamed_from);
+    let sql_type = config.sql_type.map_or_else(
+        || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::SQL_SERVER_TYPE },
+        |sql_type| sql_type_from_string(&sql_type),
+    );
+    let max_length = config.length.map_or_else(
+        || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_MAX_LENGTH },
+        |length| quote! { Some(#length) },
+    );
+    let precision = config.precision.map_or_else(
+        || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_PRECISION },
+        |precision| quote! { Some(#precision) },
+    );
+    let scale = config.scale.map_or_else(
+        || quote! { <#field_ty as ::mssql_orm::core::SqlTypeMapping>::DEFAULT_SCALE },
+        |scale| quote! { Some(#scale) },
+    );
+
+    Ok(quote! {
+        impl ::mssql_orm::core::EntityPolicy for #ident {
+            const POLICY_NAME: &'static str = "tenant";
+            const COLUMN_NAMES: &'static [&'static str] = &[#column_name];
+
+            fn columns() -> &'static [::mssql_orm::core::ColumnMetadata] {
+                const COLUMNS: &[::mssql_orm::core::ColumnMetadata] = &[
+                    ::mssql_orm::core::ColumnMetadata {
+                        rust_field: #rust_field,
+                        column_name: #column_name,
+                        renamed_from: #renamed_from,
+                        sql_type: #sql_type,
+                        nullable: false,
+                        primary_key: false,
+                        identity: None,
+                        default_sql: None,
+                        computed_sql: None,
+                        rowversion: false,
+                        insertable: true,
+                        updatable: false,
+                        max_length: #max_length,
+                        precision: #precision,
+                        scale: #scale,
+                    }
+                ];
+
+                COLUMNS
+            }
+        }
+
+        impl ::mssql_orm::TenantContext for #ident {
+            const COLUMN_NAME: &'static str = #column_name;
+
+            fn tenant_value(&self) -> ::mssql_orm::core::SqlValue {
+                <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                    ::core::clone::Clone::clone(&self.#field_ident)
+                )
+            }
+        }
+    })
+}
+
 fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let ident = input.ident;
     let EntityConfig {
@@ -207,6 +325,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         indexes: entity_indexes,
         audit: entity_audit,
         soft_delete: entity_soft_delete,
+        tenant: entity_tenant,
     } = parse_entity_config(&input.attrs)?;
     let fields = match input.data {
         Data::Struct(data) => match data.fields {
@@ -606,6 +725,29 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let tenant_collision_checks = entity_tenant
+        .as_ref()
+        .map(|tenant| {
+            entity_column_names
+                .iter()
+                .map(|column_name| {
+                    quote! {
+                        const _: () = assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                <#tenant as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES,
+                                #column_name,
+                            ),
+                            concat!(
+                                "tenant policy column `",
+                                #column_name,
+                                "` collides with an entity column; rename the entity field with #[orm(column = \"...\")] or the TenantContext field with #[orm(column = \"...\")]",
+                            ),
+                        );
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let audit_soft_delete_collision_checks = match (&entity_audit, &entity_soft_delete) {
         (Some(audit), Some(soft_delete)) => {
             quote! {
@@ -629,8 +771,62 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
         _ => quote! {},
     };
+    let tenant_policy_collision_checks = {
+        let mut checks = Vec::new();
 
-    let has_generated_policies = entity_audit.is_some() || entity_soft_delete.is_some();
+        if let (Some(audit), Some(tenant)) = (&entity_audit, &entity_tenant) {
+            checks.push(quote! {
+                const _: () = {
+                    let tenant_columns =
+                        <#tenant as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let audit_columns = <#audit as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let mut index = 0;
+                    while index < tenant_columns.len() {
+                        assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                audit_columns,
+                                tenant_columns[index],
+                            ),
+                            "tenant policy columns collide with audit policy columns; rename one of the generated columns explicitly",
+                        );
+                        index += 1;
+                    }
+                };
+            });
+        }
+
+        if let (Some(soft_delete), Some(tenant)) = (&entity_soft_delete, &entity_tenant) {
+            checks.push(quote! {
+                const _: () = {
+                    let tenant_columns =
+                        <#tenant as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let soft_delete_columns =
+                        <#soft_delete as ::mssql_orm::core::EntityPolicy>::COLUMN_NAMES;
+                    let mut index = 0;
+                    while index < tenant_columns.len() {
+                        assert!(
+                            !::mssql_orm::core::column_name_exists(
+                                soft_delete_columns,
+                                tenant_columns[index],
+                            ),
+                            "tenant policy columns collide with soft_delete policy columns; rename one of the generated columns explicitly",
+                        );
+                        index += 1;
+                    }
+                };
+            });
+        }
+
+        checks
+    };
+    let tenant_context_bound_check = entity_tenant.as_ref().map(|tenant| {
+        quote! {
+            const _: &'static str = <#tenant as ::mssql_orm::TenantContext>::COLUMN_NAME;
+        }
+    });
+
+    let has_generated_policies =
+        entity_audit.is_some() || entity_soft_delete.is_some() || entity_tenant.is_some();
     let audit_columns_extend = entity_audit.as_ref().map(|audit| {
         quote! {
             columns.extend_from_slice(
@@ -642,6 +838,13 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         quote! {
             columns.extend_from_slice(
                 <#soft_delete as ::mssql_orm::core::EntityPolicy>::columns()
+            );
+        }
+    });
+    let tenant_columns_extend = entity_tenant.as_ref().map(|tenant| {
+        quote! {
+            columns.extend_from_slice(
+                <#tenant as ::mssql_orm::core::EntityPolicy>::columns()
             );
         }
     });
@@ -665,6 +868,26 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             }
         },
     );
+    let tenant_contract_impl = entity_tenant.as_ref().map_or_else(
+        || {
+            quote! {
+                impl ::mssql_orm::TenantScopedEntity for #ident {
+                    fn tenant_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        None
+                    }
+                }
+            }
+        },
+        |tenant| {
+            quote! {
+                impl ::mssql_orm::TenantScopedEntity for #ident {
+                    fn tenant_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        Some(<#tenant as ::mssql_orm::core::EntityPolicy>::metadata())
+                    }
+                }
+            }
+        },
+    );
 
     let (metadata_static, metadata_expr) = if has_generated_policies {
         (
@@ -678,6 +901,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     columns.extend_from_slice(&[#(#columns),*]);
                     #audit_columns_extend
                     #soft_delete_columns_extend
+                    #tenant_columns_extend
                     let columns: &'static [::mssql_orm::core::ColumnMetadata] =
                         ::std::boxed::Box::leak(columns.into_boxed_slice());
 
@@ -724,7 +948,10 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     Ok(quote! {
         #(#audit_collision_checks)*
         #(#soft_delete_collision_checks)*
+        #(#tenant_collision_checks)*
         #audit_soft_delete_collision_checks
+        #(#tenant_policy_collision_checks)*
+        #tenant_context_bound_check
 
         #metadata_static
 
@@ -786,6 +1013,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         #soft_delete_contract_impl
+        #tenant_contract_impl
     })
 }
 
@@ -1334,6 +1562,13 @@ fn parse_entity_config(attrs: &[syn::Attribute]) -> Result<EntityConfig> {
                     ));
                 }
                 config.soft_delete = Some(meta.value()?.parse()?);
+            } else if meta.path.is_ident("tenant") {
+                if config.tenant.is_some() {
+                    return Err(meta.error(
+                        "Entity solo soporta una policy tenant; multiples tenants deben rechazarse explicitamente",
+                    ));
+                }
+                config.tenant = Some(meta.value()?.parse()?);
             } else if meta.path.is_ident("index") {
                 config.indexes.push(parse_entity_index_config(meta)?);
             } else {
@@ -1514,6 +1749,38 @@ fn parse_policy_field_config(field: &Field, kind: PolicyFieldsKind) -> Result<Au
                 return Err(meta.error(format!(
                     "atributo orm no soportado en campos de {derive_name}"
                 )));
+            }
+
+            Ok(())
+        })?;
+    }
+
+    Ok(config)
+}
+
+fn parse_tenant_context_field_config(field: &Field) -> Result<TenantContextFieldConfig> {
+    let mut config = TenantContextFieldConfig::default();
+
+    for attr in &field.attrs {
+        if !attr.path().is_ident("orm") {
+            continue;
+        }
+
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("column") {
+                config.column = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("length") {
+                config.length = Some(parse_u32_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("renamed_from") {
+                config.renamed_from = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("sql_type") {
+                config.sql_type = Some(parse_lit_str(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("precision") {
+                config.precision = Some(parse_u8_expr(meta.value()?.parse()?)?);
+            } else if meta.path.is_ident("scale") {
+                config.scale = Some(parse_u8_expr(meta.value()?.parse()?)?);
+            } else {
+                return Err(meta.error("atributo orm no soportado en campos de TenantContext"));
             }
 
             Ok(())
@@ -2009,6 +2276,7 @@ struct EntityConfig {
     indexes: Vec<EntityIndexConfig>,
     audit: Option<Path>,
     soft_delete: Option<Path>,
+    tenant: Option<Path>,
 }
 
 #[derive(Default)]
@@ -2040,6 +2308,16 @@ struct AuditFieldConfig {
     scale: Option<u8>,
     insertable: Option<bool>,
     updatable: Option<bool>,
+}
+
+#[derive(Default)]
+struct TenantContextFieldConfig {
+    column: Option<LitStr>,
+    renamed_from: Option<LitStr>,
+    length: Option<u32>,
+    sql_type: Option<LitStr>,
+    precision: Option<u8>,
+    scale: Option<u8>,
 }
 
 #[derive(Default)]

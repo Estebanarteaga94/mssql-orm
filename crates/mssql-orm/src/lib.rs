@@ -55,6 +55,16 @@ pub trait SoftDeleteEntity: core::Entity {
     fn soft_delete_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+pub trait TenantContext: core::EntityPolicy {
+    const COLUMN_NAME: &'static str;
+
+    fn tenant_value(&self) -> core::SqlValue;
+}
+
+pub trait TenantScopedEntity: core::Entity {
+    fn tenant_policy() -> Option<core::EntityPolicyMetadata>;
+}
+
 pub fn model_snapshot_from_source<S: MigrationModelSource>() -> migrate::ModelSnapshot {
     migrate::ModelSnapshot::from_entities(S::entity_metadata())
 }
@@ -74,8 +84,8 @@ pub mod prelude {
         MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
         MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, PageRequest,
         PredicateCompositionExt, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
-        SoftDeleteProvider, SoftDeleteRequestValues, Tracked, model_snapshot_from_source,
-        model_snapshot_json_from_source,
+        SoftDeleteProvider, SoftDeleteRequestValues, TenantContext, TenantScopedEntity, Tracked,
+        model_snapshot_from_source, model_snapshot_json_from_source,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -86,7 +96,7 @@ pub mod prelude {
         SqlServerType, SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::{
-        AuditFields, Changeset, DbContext, Entity, Insertable, SoftDeleteFields,
+        AuditFields, Changeset, DbContext, Entity, Insertable, SoftDeleteFields, TenantContext,
     };
     pub use mssql_orm_query::{Join, JoinType};
 }
@@ -100,7 +110,7 @@ mod tests {
         MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions,
         MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt,
         PrimaryKeyMetadata, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
-        SqlValue, Tracked,
+        SqlValue, TenantContext, TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -165,6 +175,13 @@ mod tests {
         updated_by: Option<String>,
     }
 
+    #[allow(dead_code)]
+    #[derive(TenantContext)]
+    struct PublicTenant {
+        #[orm(column = "company_id")]
+        tenant_id: i64,
+    }
+
     #[test]
     fn exposes_public_prelude() {
         let error = OrmError::new("public-api");
@@ -216,6 +233,28 @@ mod tests {
     }
 
     #[test]
+    fn exposes_tenant_contract_in_prelude() {
+        struct PublicTenantEntity;
+
+        impl Entity for PublicTenantEntity {
+            fn metadata() -> &'static EntityMetadata {
+                &PUBLIC_ENTITY_METADATA
+            }
+        }
+
+        impl TenantScopedEntity for PublicTenantEntity {
+            fn tenant_policy() -> Option<EntityPolicyMetadata> {
+                Some(EntityPolicyMetadata::new("tenant", &[]))
+            }
+        }
+
+        assert_eq!(
+            PublicTenantEntity::tenant_policy(),
+            Some(EntityPolicyMetadata::new("tenant", &[]))
+        );
+    }
+
+    #[test]
     fn derives_audit_fields_policy_metadata_from_public_prelude() {
         let metadata = PublicAudit::metadata();
 
@@ -236,6 +275,26 @@ mod tests {
             <PublicAudit as EntityPolicy>::COLUMN_NAMES,
             &["created_at", "created_by_user_id", "updated_by"]
         );
+    }
+
+    #[test]
+    fn derives_tenant_context_policy_metadata_from_public_prelude() {
+        let metadata = PublicTenant::metadata();
+        let tenant = PublicTenant { tenant_id: 42 };
+
+        assert_eq!(metadata.name, "tenant");
+        assert_eq!(metadata.columns.len(), 1);
+        assert_eq!(metadata.columns[0].rust_field, "tenant_id");
+        assert_eq!(metadata.columns[0].column_name, "company_id");
+        assert_eq!(metadata.columns[0].sql_type, SqlServerType::BigInt);
+        assert!(metadata.columns[0].insertable);
+        assert!(!metadata.columns[0].updatable);
+        assert_eq!(
+            <PublicTenant as EntityPolicy>::COLUMN_NAMES,
+            &["company_id"]
+        );
+        assert_eq!(PublicTenant::COLUMN_NAME, "company_id");
+        assert_eq!(tenant.tenant_value(), SqlValue::I64(42));
     }
 
     #[test]

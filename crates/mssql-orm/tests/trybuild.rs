@@ -17,9 +17,11 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/query_builder_todo_app_valid.rs");
     tests.pass("tests/ui/audit_fields_valid.rs");
     tests.pass("tests/ui/soft_delete_fields_valid.rs");
+    tests.pass("tests/ui/tenant_context_valid.rs");
     tests.pass("tests/ui/entity_audit_attr_valid.rs");
     tests.pass("tests/ui/entity_audit_public_valid.rs");
     tests.pass("tests/ui/entity_soft_delete_attr_valid.rs");
+    tests.pass("tests/ui/entity_tenant_attr_valid.rs");
     tests.compile_fail("tests/ui/entity_missing_primary_key.rs");
     tests.compile_fail("tests/ui/entity_identity_invalid_type.rs");
     tests.compile_fail("tests/ui/entity_foreign_key_empty_segment.rs");

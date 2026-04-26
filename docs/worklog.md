@@ -2,6 +2,37 @@
 
 ## 2026-04-25
 
+### Sesión: base code-first de tenant opt-in
+
+- Se ejecutó una primera pieza implementable necesaria antes de los inserts tenant-scoped: `#[derive(TenantContext)]`, `#[orm(tenant = CurrentTenant)]`, metadata ordinaria y contrato auxiliar `TenantScopedEntity`.
+- En `crates/mssql-orm/src/lib.rs` se agregaron los traits públicos `TenantContext` y `TenantScopedEntity`, reexportados desde `mssql_orm::prelude::*`.
+- En `crates/mssql-orm-macros/src/lib.rs` se agregó `#[derive(TenantContext)]` para structs con exactamente un campo tenant no opcional. El derive implementa `EntityPolicy` con `POLICY_NAME = "tenant"`, genera una única `ColumnMetadata`, expone `COLUMN_NAME` y convierte el valor runtime a `SqlValue`.
+- `#[derive(Entity)]` ahora acepta `#[orm(tenant = CurrentTenant)]`, exige que el tipo implemente `TenantContext`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones contra columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`.
+- Entidades sin `#[orm(tenant = ...)]` implementan `TenantScopedEntity::tenant_policy()` como `None`, preservando tablas transversales.
+- Se agregaron fixtures `trybuild` válidos: `tenant_context_valid.rs` y `entity_tenant_attr_valid.rs`.
+- Se actualizó `docs/context.md` y `docs/tasks.md`.
+
+### Resultado
+
+- La base de metadata y macros para tenant opt-in queda implementada y validada.
+- Todavía no se implementó transporte runtime del tenant en `SharedConnectionRuntime`, filtros automáticos ni inserts tenant-scoped.
+
+### Validación
+
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo test -p mssql-orm tenant --lib -- --nocapture`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+- Se intentó primero un `cargo test` con dos nombres de test posicionales; Cargo no soporta esa forma. Se repitió correctamente con el filtro común `tenant`.
+
+### Próximo paso recomendado
+
+- Implementar `with_tenant(...)` / `clear_tenant()` en `SharedConnection` y en el `DbContext` derivado para transportar un `ActiveTenant` normalizado.
+
 ### Sesión: ajuste de tenant opt-in por entidad
 
 - Se ejecutó la tarea agregada `Etapa 16+: Ajustar el diseño para que cada entidad opte explícitamente por tenant con #[orm(tenant = CurrentTenant)], permitiendo tablas transversales sin filtro tenant`.

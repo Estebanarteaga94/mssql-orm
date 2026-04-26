@@ -7,6 +7,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 16+: Implementar la base code-first de tenant opt-in: `#[derive(TenantContext)]`, `#[orm(tenant = CurrentTenant)]`, metadata ordinaria y contrato auxiliar `TenantScopedEntity`
 - [x] Etapa 16+: Ajustar el diseño para que cada entidad opte explícitamente por tenant con `#[orm(tenant = CurrentTenant)]`, permitiendo tablas transversales sin filtro tenant
 - [x] Etapa 16+: Definir cómo se configura el tenant activo en `DbContext`/`SharedConnection` o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con `tenant = TenantScope`
 - [x] Etapa 16+: Diseñar `tenant = TenantScope` para que toda query, `find`, `update`, `delete`, Active Record y `save_changes()` sobre entidades tenant-scoped agregue automáticamente el filtro `tenant_id = current_tenant` cuando exista un tenant activo en el contexto

@@ -1112,6 +1112,8 @@ Quedan fuera de este contrato:
 
 El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
 
+Estado actual: `#[derive(TenantContext)]` ya existe en `mssql-orm-macros` y la crate publica reexporta `TenantContext`/`TenantScopedEntity` desde `mssql_orm::prelude::*`. El derive soporta structs con exactamente un campo tenant no opcional, respeta `#[orm(column = "...")]` y atributos estructurales de columna acotados, implementa `EntityPolicy` con `POLICY_NAME = "tenant"` y expone `tenant_value() -> SqlValue`. `#[derive(Entity)]` ya acepta `#[orm(tenant = CurrentTenant)]`, anexa la columna tenant como `ColumnMetadata` ordinaria, valida colisiones con columnas propias, `audit` y `soft_delete`, e implementa `TenantScopedEntity`. Las entidades sin `tenant` devuelven `None` y siguen siendo transversales. Falta todavia el transporte runtime del tenant activo en `SharedConnectionRuntime`, filtros automaticos e inserts tenant-scoped.
+
 El comportamiento esperado para inserts debe ser estricto:
 
 - Si la entidad tenant-scoped no recibe un `tenant_id` explicito, el ORM debe agregarlo desde el tenant activo.
