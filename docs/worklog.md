@@ -2,6 +2,36 @@
 
 ## 2026-04-26
 
+### Sesión: guía conceptual `core-concepts`
+
+- Se ejecutó la tarea `Documentation prompt: Create docs/core-concepts.md in English explaining the ORM mental model, entities, DbContext, metadata, query AST, SQL Server compilation, Tiberius execution and the Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity flow`.
+- Se usó `docs/repository-audit.md` como base verificable para evitar presentar funcionalidades diferidas como implementadas.
+- Se agregó `docs/core-concepts.md` en inglés.
+- La guía documenta el flujo real `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity`.
+- También cubre responsabilidades por crate, entidades, metadata, `DbContext`, `DbSet`, AST, compilación SQL Server, ejecución Tiberius, materialización `FromRow`, escrituras, proyecciones, raw SQL, migraciones, entity policies y límites actuales.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Ya existe una guía conceptual base en inglés para orientar a usuarios y futuras tareas de documentación sin duplicar todo el inventario técnico.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `rg -n "Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity|repository-audit.md|AuditProvider|navigation properties|migration.rs|SQL Server is the only supported database target|Query AST|Tiberius Execution" docs/core-concepts.md`
+- `rg -n "core-concepts" README.md docs || true`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- El archivo `prompt` sigue modificado en el working tree y se preservó sin cambios.
+- `README.md` todavía no enlaza `docs/core-concepts.md` porque esa actualización es una tarea pendiente separada del backlog.
+
+### Próximo paso recomendado
+
+- Ejecutar `Documentation prompt: Review existing public docs and mark unclear or unverifiable claims as Pending verification instead of presenting them as implemented behavior`.
+
 ### Sesión: auditoría documental del repositorio real
 
 - Se ejecutó la tarea `Documentation prompt: Audit the repository before writing docs by identifying existing crates, real public APIs, implemented features, incomplete features and planned-only features`.

@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Documentation prompt: Create `docs/core-concepts.md` in English explaining the ORM mental model, entities, `DbContext`, metadata, query AST, SQL Server compilation, Tiberius execution and the `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity` flow
 - [ ] Documentation prompt: Review existing public docs and mark unclear or unverifiable claims as `Pending verification` instead of presenting them as implemented behavior
 - [ ] Documentation prompt: Update `README.md` as a brief navigation document linking to `docs/core-concepts.md` without duplicating detailed docs
 - [ ] Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related `docs/` guides
@@ -10,6 +9,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Documentation prompt: Create `docs/core-concepts.md` in English explaining the ORM mental model, entities, `DbContext`, metadata, query AST, SQL Server compilation, Tiberius execution and the `Entity -> Metadata -> Query AST -> SQL Server SQL -> Tiberius -> Row -> Entity` flow
 - [x] Documentation prompt: Audit the repository before writing docs by identifying existing crates, real public APIs, implemented features, incomplete features and planned-only features
 - [x] Documentation prompt: Add root project governance docs for MIT license, security policy, contribution workflow and a no-manual-download usage guide for humans and AI agents
 - [x] Etapa 18: Documentar la diferencia entre `map` en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones
