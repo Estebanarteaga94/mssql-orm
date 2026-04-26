@@ -2,6 +2,33 @@
 
 ## 2026-04-26
 
+### Sesión: README como navegación breve
+
+- Se ejecutó la tarea `Documentation prompt: Update README.md as a brief navigation document linking to docs/core-concepts.md without duplicating detailed docs`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- `README.md` fue reescrito como navegación breve: propósito, flujo principal, estado del workspace, ejemplo mínimo, mapa de documentación, ejemplos, límites actuales, validación local y documentos operativos.
+- `README.md` ahora enlaza `docs/core-concepts.md` como punto de entrada conceptual y `docs/repository-audit.md` como inventario verificado.
+- Se removió duplicación extensa de secciones que ya viven en guías específicas como `code-first`, `query-builder`, `entity-policies`, `migrations`, `transactions`, `raw-sql` y `projections`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- El README vuelve a ser una portada de navegación del repositorio en vez de repetir el contenido detallado de las guías públicas.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- Búsquedas `rg` dirigidas para confirmar que `README.md` enlaza `docs/core-concepts.md`, `docs/repository-audit.md`, guías principales y conserva `Pending verification` para `todo-app`.
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Documentation prompt: Update internal documentation links so newly created or changed docs use kebab-case filenames and remain discoverable from README and related docs guides`.
+
 ### Sesión: revisión de claims públicos y `Pending verification`
 
 - Se ejecutó la tarea `Documentation prompt: Review existing public docs and mark unclear or unverifiable claims as Pending verification instead of presenting them as implemented behavior`.
