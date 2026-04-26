@@ -173,7 +173,7 @@ El concepto general cubre varias preocupaciones transversales, pero no todas per
 
 - `audit = Audit`: columnas como `created_at`, `created_by`, `updated_at`, `updated_by`.
 - `soft_delete = SoftDelete`: columnas y semantica de borrado logico.
-- `tenant = TenantScope`: columna y filtros obligatorios de seguridad por tenant.
+- `tenant = CurrentTenant`: columna y filtros obligatorios de seguridad por tenant usando un tipo de tenant definido por el usuario.
 
 La primera policy que debe implementarse es auditoria como generacion de columnas. Las politicas que cambian comportamiento de lectura o escritura requieren diseno separado porque afectan `DbSet`, Active Record, transacciones y change tracking.
 
@@ -189,7 +189,7 @@ La unica policy que entra al MVP de implementacion es `audit = Audit`. Los casos
 | --- | --- | --- |
 | `audit = Audit` | MVP | Generar columnas normales de auditoria dentro de `EntityMetadata.columns`. |
 | `soft_delete = SoftDelete` | Etapa 16+ | Requiere redisenar rutas de borrado, queries por defecto y Active Record. |
-| `tenant = TenantScope` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
+| `tenant = CurrentTenant` | Etapa 16+ | Requiere contrato de seguridad, tenant activo y filtros obligatorios en toda ruta publica. |
 | `AuditProvider` o autollenado | Etapa 16+ | Requiere integracion runtime con inserts, updates, transacciones y change tracking. |
 
 ## Concurrencia y `rowversion`
@@ -930,11 +930,11 @@ La transformacion debe trabajar contra columnas auditables declaradas por la ent
 
 No se debe inferir auditoria por convencion de nombres como `created_at` o `updated_by` sobre cualquier entidad. Una entidad solo participa en autollenado cuando declara `#[orm(audit = Audit)]` y el contexto tiene un `AuditProvider` configurado.
 
-## Evaluacion de `tenant = TenantScope`
+## Evaluacion de `tenant`
 
-`tenant = TenantScope` es valida como extension de `Entity Policies`, pero debe tratarse como feature de seguridad, no como comodidad de schema. Su responsabilidad no seria solo aportar una columna `tenant_id`; tambien debe impedir que una ruta publica lea, modifique, borre o inserte datos fuera del tenant activo.
+`tenant` es valida como extension de `Entity Policies`, pero debe tratarse como feature de seguridad, no como comodidad de schema. Su responsabilidad no seria solo aportar una columna como `tenant_id`; tambien debe impedir que una ruta publica lea, modifique, borre o inserte datos fuera del tenant activo.
 
-La decision vigente es implementarla solo bajo semantica **fail-closed**. Si una entidad declara `#[orm(tenant = TenantScope)]` y no hay tenant activo en el contexto, las rutas publicas deben fallar antes de compilar o ejecutar SQL. Ejecutar una query sin filtro de tenant por ausencia de contexto seria un bug de seguridad.
+La decision vigente es implementarla solo bajo semantica **fail-closed**. Si una entidad declara `#[orm(tenant = CurrentTenant)]` y no hay tenant activo compatible en el contexto, las rutas publicas deben fallar antes de compilar o ejecutar SQL. Ejecutar una query sin filtro de tenant por ausencia de contexto seria un bug de seguridad.
 
 Rutas que deben quedar cubiertas:
 
@@ -949,11 +949,14 @@ Rutas que deben quedar cubiertas:
 
 La columna de tenant debe venir de una policy declarativa similar a las otras policies de columnas generadas, pero el runtime necesita un contrato separado para conocer el tenant activo. La opcion mas alineada con el estado actual es extender la infraestructura de `SharedConnectionRuntime` o un runtime config equivalente en `mssql-orm`, porque hoy ese objeto ya viaja por `DbContext`, `DbSet`, Active Record, tracking y transacciones.
 
-## Diseno del Tenant Activo
+## Diseno del Tenant Activo y Opt-in por Entidad
 
 El contexto no debe inferir ni descubrir el tenant activo. El consumidor debe configurarlo explicitamente sobre el `DbContext` o sobre la `SharedConnection` que ese contexto transporta.
 
-La forma publica preferida es un struct de usuario con campo nombrado:
+La forma publica preferida es un struct de usuario con campo nombrado que cumple dos roles:
+
+- declara la columna tenant que una entidad puede incorporar con `#[orm(tenant = CurrentTenant)]`
+- aporta el valor runtime que un contexto debe usar con `.with_tenant(CurrentTenant { ... })`
 
 ```rust
 #[derive(TenantContext)]
@@ -962,12 +965,32 @@ struct CurrentTenant {
     tenant_id: i32,
 }
 
+#[derive(Entity)]
+#[orm(table = "orders", schema = "sales", tenant = CurrentTenant)]
+struct Order {
+    #[orm(primary_key)]
+    id: i64,
+
+    total: rust_decimal::Decimal,
+}
+
+#[derive(Entity)]
+#[orm(table = "currencies", schema = "sales")]
+struct Currency {
+    #[orm(primary_key)]
+    code: String,
+
+    name: String,
+}
+
 let db = AppDbContext::connect(connection_string)
     .await?
     .with_tenant(CurrentTenant { tenant_id: 42 });
 ```
 
-Este shape es preferible a `struct Tenant(i32)` porque permite que el usuario nombre y configure la columna desde el mismo tipo que representa el tenant activo. Tambien permite evolucionar el contrato sin romper ergonomia, por ejemplo agregando mas datos de request en campos no persistibles si una version futura lo necesita.
+En el ejemplo, `Order` queda tenant-scoped y debe filtrar por `[company_id] = @P`; `Currency` es transversal a todos los tenants porque no declara `tenant`, aunque el contexto tenga un tenant activo. El tenant configurado no debe afectar entidades que no optan explicitamente por la policy.
+
+Este shape es preferible a `struct Tenant(i32)` porque permite que el usuario nombre y configure la columna desde el mismo tipo que representa el tenant activo. Tambien evita un tipo generico `TenantScope` que obligue a todas las entidades a usar `tenant_id` o que esconda de donde sale la columna real.
 
 La forma tuple/newtype puede aceptarse despues como azucar, pero no debe ser el primer contrato canonico:
 
@@ -981,7 +1004,7 @@ Si se soporta, debe exigir una convencion explicita de columna o un atributo a n
 Contrato runtime esperado:
 
 ```rust
-pub trait TenantContext: Send + Sync + 'static {
+pub trait TenantContext: EntityPolicy + Send + Sync + 'static {
     const COLUMN_NAME: &'static str;
 
     fn tenant_value(&self) -> SqlValue;
@@ -992,7 +1015,10 @@ El nombre puede cambiar, pero la responsabilidad debe mantenerse:
 
 - `COLUMN_NAME` define la columna que el tenant activo pretende filtrar.
 - `tenant_value()` devuelve el valor runtime ya convertido a `SqlValue`.
-- El derive `TenantContext` debe aceptar un struct con exactamente un campo tenant persistible.
+- El derive `TenantContext` debe implementar tambien `EntityPolicy`, con `POLICY_NAME = "tenant"` y una sola `ColumnMetadata` generada desde el campo tenant.
+- `#[derive(Entity)]` debe aceptar `#[orm(tenant = CurrentTenant)]` a nivel de entidad, exigir que `CurrentTenant` implemente `TenantContext`/`EntityPolicy`, anexar su columna como `ColumnMetadata` ordinaria y generar el contrato auxiliar `TenantScopedEntity`.
+- Entidades sin `#[orm(tenant = ...)]` no reciben columnas tenant ni filtros tenant, aunque exista un tenant activo en el contexto.
+- El derive `TenantContext` debe aceptar un struct con exactamente un campo tenant persistible en el primer corte.
 - El campo puede usar `#[orm(column = "...")]` para desacoplar nombre Rust y columna SQL.
 - El tipo del campo debe implementar `SqlTypeMapping`.
 - `Option<T>` no debe aceptarse como tenant activo en el primer corte; ausencia de tenant se expresa con `None` en el contexto, no con `Some(TenantContext { tenant_id: None })`.
@@ -1032,14 +1058,14 @@ impl SharedConnection {
 
 La razon para guardar el tenant en `SharedConnectionRuntime` es que ese objeto ya se clona por `DbContext`, `DbSet`, Active Record, tracking y transacciones. Un contexto transaccional creado por `db.transaction(...)` debe heredar el mismo tenant activo del contexto padre, igual que hereda la misma conexion compartida y la configuracion runtime existente.
 
-Reglas de compatibilidad entre `TenantContext` y `TenantScope`:
+Reglas de compatibilidad entre `TenantContext` activo y entidad tenant-scoped:
 
-- Una entidad que declara `#[orm(tenant = TenantScope)]` debe exponer exactamente una columna tenant mediante `TenantScopedEntity`.
+- Una entidad que declara `#[orm(tenant = CurrentTenant)]` debe exponer exactamente una columna tenant mediante `TenantScopedEntity`.
 - Al ejecutar una ruta tenant-scoped, el ORM compara `TenantContext::COLUMN_NAME` con la columna declarada por la policy de la entidad.
 - Si los nombres no coinciden, la operacion falla con `OrmError` antes de compilar SQL.
 - Si coinciden, el ORM valida que el `SqlValue` sea compatible con el tipo SQL de la columna tenant.
 - Si no hay tenant activo, la operacion falla cerrado con `OrmError`.
-- Entidades sin `tenant = TenantScope` ignoran el tenant activo; el tenant configurado no debe agregar filtros a entidades no tenant-scoped.
+- Entidades sin `#[orm(tenant = ...)]` ignoran el tenant activo; el tenant configurado no debe agregar filtros a entidades no tenant-scoped.
 
 Ejemplo con columna por defecto:
 
@@ -1062,6 +1088,19 @@ struct CurrentCompany {
 
 El segundo caso debe funcionar si la entidad tenant-scoped declara una policy cuya columna sea `company_id`. La policy de entidad y el tenant activo deben acordar el nombre de columna; el ORM no debe traducir `company_id` a `tenant_id` por convencion.
 
+Sintaxis canonica de entidad:
+
+```rust
+#[derive(Entity)]
+#[orm(table = "invoices", schema = "billing", tenant = CurrentCompany)]
+struct Invoice {
+    #[orm(primary_key)]
+    id: i64,
+}
+```
+
+La sintaxis `#[orm(tenant = TenantScope)]` queda como nombre conceptual antiguo, no como API preferida. Si se quiere ofrecer un helper predefinido para la convencion `tenant_id`, debe ser una conveniencia posterior y no debe desplazar la forma principal basada en el tipo de usuario.
+
 Quedan fuera de este contrato:
 
 - tenant global en variable estatica/thread-local/task-local;
@@ -1069,6 +1108,7 @@ Quedan fuera de este contrato:
 - multiples tenants activos en una misma operacion;
 - filtros automaticos sobre entidades unidas distintas de la entidad raiz;
 - bypass publico tipo `without_tenant()`.
+- aplicar tenant automaticamente a todas las entidades del contexto sin `#[orm(tenant = ...)]`.
 
 El primer punto es deliberado: el ORM debe seguir siendo usable en cualquier runtime async sin depender de estado global implicito. Integraciones web pueden construir `CurrentTenant` desde headers, claims o sesion, pero deben pasarlo explicitamente al contexto con `with_tenant(...)`.
 
@@ -1083,14 +1123,14 @@ El comportamiento esperado para lecturas y escrituras debe agregar siempre el pr
 
 No debe existir un bypass publico accidental equivalente a “ignorar tenant”. Cualquier bypass interno para comprobaciones de existencia o `ConcurrencyConflict` debe seguir aplicando tenant si la operacion es tenant-scoped; a diferencia de `soft_delete`, el tenant no representa visibilidad de fila sino frontera de seguridad. Una comprobacion interna que ignore tenant podria convertir una ausencia legitima en `ConcurrencyConflict` o filtrar informacion entre tenants.
 
-## Diseno de Filtros Obligatorios de `tenant = TenantScope`
+## Diseno de Filtros Obligatorios de `tenant`
 
 La integracion de filtros de tenant debe hacerse como politica runtime de seguridad en la crate publica `mssql-orm`, no en `mssql-orm-query`, `mssql-orm-sqlserver` ni `mssql-orm-tiberius`.
 
 Contrato de entidad esperado:
 
 - `#[derive(Entity)]` debe implementar un contrato auxiliar similar a `SoftDeleteEntity`, por ejemplo `TenantScopedEntity`.
-- Ese contrato debe devolver `None` para entidades sin tenant y `Some(EntityPolicyMetadata)` para entidades que declaren `#[orm(tenant = TenantScope)]`.
+- Ese contrato debe devolver `None` para entidades sin tenant y `Some(EntityPolicyMetadata)` para entidades que declaren `#[orm(tenant = CurrentTenant)]`.
 - La policy debe exponer exactamente la columna que representa el tenant activo. El primer corte debe exigir una sola columna de tenant para no introducir semantica ambigua en filtros automaticos.
 - El tipo runtime del tenant activo debe viajar como `SqlValue` validado contra la metadata de esa columna antes de construir predicates o valores persistibles.
 
@@ -1124,7 +1164,7 @@ Lecturas:
 
 Riesgo de AST publico:
 
-- `DbSetQuery::into_select_query()` hoy devuelve el AST base sin materializar filtros runtime. Para `tenant = TenantScope`, esa API no puede seguir siendo una salida publica que prometa una query ejecutable segura.
+- `DbSetQuery::into_select_query()` hoy devuelve el AST base sin materializar filtros runtime. Para entidades con `#[orm(tenant = CurrentTenant)]`, esa API no puede seguir siendo una salida publica que prometa una query ejecutable segura.
 - Antes de implementar tenant debe cambiarse una de estas dos cosas: hacer `into_select_query()` solo interna/testing, o reemplazarla por una API falible que materialice filtros runtime obligatorios antes de entregar el AST.
 - Mientras `mssql-orm-sqlserver` siga reexportado como modulo avanzado, entregar un `SelectQuery` sin tenant desde una entidad tenant-scoped seria un bypass publico accidental.
 
@@ -1168,7 +1208,7 @@ Riesgos principales:
 - Inserts deben evitar tanto omitir `tenant_id` como aceptar un tenant arbitrario aportado por el usuario.
 - Entidades con `soft_delete` y `tenant` deben combinar ambos predicates sin cambiar responsabilidades: tenant es seguridad obligatoria; soft delete es visibilidad configurable.
 
-Conclusion: `tenant = TenantScope` debe avanzar, pero no debe implementarse como simple derive de columnas. Primero hay que fijar el contrato de tenant activo y las reglas de fallar cerrado en `DbContext`/`SharedConnection` o provider dedicado. Luego se puede integrar en queries, writes, Active Record y tracking con pruebas de seguridad por ruta.
+Conclusion: `tenant` debe avanzar como opt-in explicito por entidad mediante `#[orm(tenant = CurrentTenant)]`. No debe implementarse como filtro global de contexto ni como simple convencion `tenant_id` aplicada a todas las tablas. Primero hay que implementar el contrato de tenant activo y las reglas de fallar cerrado en `DbContext`/`SharedConnection`. Luego se puede integrar en queries, writes, Active Record y tracking con pruebas de seguridad por ruta.
 
 ### Transacciones
 

@@ -2,6 +2,34 @@
 
 ## 2026-04-25
 
+### Sesión: ajuste de tenant opt-in por entidad
+
+- Se ejecutó la tarea agregada `Etapa 16+: Ajustar el diseño para que cada entidad opte explícitamente por tenant con #[orm(tenant = CurrentTenant)], permitiendo tablas transversales sin filtro tenant`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se ajustó `docs/entity-policies.md` para reemplazar `#[orm(tenant = TenantScope)]` como API preferida por `#[orm(tenant = CurrentTenant)]`, donde `CurrentTenant` es un tipo definido por el usuario que deriva un futuro `TenantContext`.
+- Se fijó que el mismo tipo `TenantContext` cumple dos roles: declara la columna tenant que se anexa a las entidades opt-in y aporta el valor runtime que `db.with_tenant(...)` transporta en el contexto.
+- Se documentó que `db.with_tenant(CurrentTenant { ... })` configura el tenant a nivel de contexto, pero solo afecta entidades que declaran `#[orm(tenant = CurrentTenant)]`.
+- Las entidades sin `#[orm(tenant = ...)]` quedan explícitamente transversales a todos los tenants, incluso cuando el contexto tenga tenant activo.
+- Se actualizó `docs/context.md` con la decisión vigente y se mantuvo el siguiente foco en inserts tenant-scoped.
+
+### Resultado
+
+- El diseño final evita un filtro global por defecto y mantiene la seguridad tenant como opt-in local de cada entidad.
+- El nombre `TenantScope` queda como concepto antiguo, no como API preferida.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 16+: Garantizar que inserts de entidades con #[orm(tenant = CurrentTenant)] reciban automáticamente la columna tenant desde el contexto o rechacen la operación si el usuario intenta insertar con un tenant distinto`.
+
 ### Sesión: diseño del tenant activo configurable
 
 - Se ejecutó la tarea `Etapa 16+: Definir cómo se configura el tenant activo en DbContext/SharedConnection o un provider dedicado, incluyendo comportamiento cuando falta tenant: fallar cerrado por defecto en entidades con tenant = TenantScope`.
