@@ -87,11 +87,13 @@ Si quieres el recorrido paso a paso, con tabla de prueba, `Cargo.toml`, CRUD bas
 Si quieres la explicación del modelo `code-first` actual, sus derives y límites explícitos, revisa [docs/code-first.md](docs/code-first.md).
 Si quieres reutilizar columnas transversales con `Entity Policies`, revisa [docs/entity-policies.md](docs/entity-policies.md).
 Si quieres ver el inventario de API publicada por la crate raíz, revisa [docs/api.md](docs/api.md).
+Si quieres usar el ORM desde otro proyecto sin clonar manualmente este repositorio, revisa [docs/use-without-downloading.md](docs/use-without-downloading.md).
 Si quieres profundizar en filtros, ordenamiento, joins, paginación y conteos, revisa [docs/query-builder.md](docs/query-builder.md).
 Si necesitas SQL Server escrito a mano con DTOs tipados y comandos parametrizados, revisa [docs/raw-sql.md](docs/raw-sql.md).
 Si quieres seleccionar columnas o expresiones concretas y materializarlas en DTOs, revisa [docs/projections.md](docs/projections.md).
 Si quieres modelar foreign keys y usarlas en joins explícitos, revisa [docs/relationships.md](docs/relationships.md).
 Si quieres usar operaciones atómicas con commit/rollback, revisa [docs/transactions.md](docs/transactions.md).
+Si quieres contribuir o revisar la postura de seguridad, revisa [CONTRIBUTING.md](CONTRIBUTING.md) y [SECURITY.md](SECURITY.md).
 
 ## Arquitectura
 
@@ -159,6 +161,13 @@ Inventario de la surface expuesta por la crate raíz:
 - módulos avanzados reexportados y exclusiones explícitas
 
 Documento: [docs/api.md](docs/api.md)
+
+### Uso sin descargar el repositorio
+
+Guía para consumir `mssql-orm` desde otro proyecto mediante dependencia Git,
+sin clonar manualmente este repositorio dentro del workspace de la aplicación.
+
+Documento: [docs/use-without-downloading.md](docs/use-without-downloading.md)
 
 ### Entity Policies
 
@@ -305,6 +314,9 @@ El ejemplo `todo_app` también quedó validado contra SQL Server real con fixtur
 ## Documentación del Repositorio
 
 - plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](docs/plan_orm_sqlserver_tiberius_code_first.md)
+- licencia: [LICENSE](LICENSE)
+- contribución: [CONTRIBUTING.md](CONTRIBUTING.md)
+- seguridad: [SECURITY.md](SECURITY.md)
 - changelog: [CHANGELOG.md](CHANGELOG.md)
 - arquitectura: [docs/architecture/overview.md](docs/architecture/overview.md)
 - backlog: [docs/tasks.md](docs/tasks.md)

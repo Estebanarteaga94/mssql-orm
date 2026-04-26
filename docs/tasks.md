@@ -11,6 +11,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Documentation prompt: Add root project governance docs for MIT license, security policy, contribution workflow and a no-manual-download usage guide for humans and AI agents
 - [x] Etapa 18: Documentar la diferencia entre `map` en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones
 - [x] Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, `trybuild` de API pública y materialización a DTOs `FromRow`
 - [x] Etapa 18: Implementar API pública inicial de proyecciones: `select(...)` y ejecución `all_as::<T>()` / `first_as::<T>()` sobre `DbSetQuery`

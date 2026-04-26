@@ -2,6 +2,35 @@
 
 ## 2026-04-26
 
+### Sesión: documentación de licencia, seguridad, contribución y uso sin descarga manual
+
+- Se ejecutó la tarea `Documentation prompt: Add root project governance docs for MIT license, security policy, contribution workflow and a no-manual-download usage guide for humans and AI agents`.
+- Se agregó `LICENSE` con licencia MIT.
+- Se agregó `SECURITY.md` con política de reporte, límites de soporte, áreas sensibles y reglas para agentes IA.
+- Se agregó `CONTRIBUTING.md` con reglas de arquitectura, flujo de trabajo, documentación, validación y contribución asistida por IA.
+- Se agregó `docs/use-without-downloading.md` para explicar cómo consumir `mssql-orm` desde otro proyecto mediante dependencia Git sin clonar manualmente el repositorio.
+- Se actualizó `README.md` para enlazar contribución, seguridad, licencia y la guía de uso sin descarga manual.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- El repositorio ahora tiene documentación base de gobernanza y una guía para usuarios que quieren probar el ORM desde un proyecto externo sin descargar manualmente el repo.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `rg -n "LICENSE|SECURITY.md|CONTRIBUTING.md|use-without-downloading" README.md docs`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+- El archivo `prompt` ya aparece modificado en el working tree y se preservó sin cambios.
+
+### Próximo paso recomendado
+
+- Ejecutar la auditoría documental pendiente del prompt: identificar crates, APIs públicas reales y funcionalidades implementadas/incompletas/planificadas antes de crear `docs/core-concepts.md`.
+
 ### Sesión: ajuste de backlog desde prompt documental
 
 - Se revisó el archivo `prompt` solicitado por el usuario.
