@@ -2,6 +2,31 @@
 
 ## 2026-04-26
 
+### Sesión: `docs/ai/` local fuera de Git
+
+- Se ejecutó la tarea `Operativo: Ignorar docs/ai/ y remover la documentación local de asistencia IA del índice de Git`.
+- Se agregó `docs/ai/` a `.gitignore`.
+- Se removieron del índice de Git `docs/ai/README.md`, `docs/ai/handover-checklist.md` y `docs/ai/session-template.md` con `git rm --cached -r docs/ai`, preservando los archivos en el disco local.
+- Se ajustó `docs/context.md` para no tratar `docs/ai/` como fuente versionada obligatoria; las fuentes versionadas siguen siendo `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md` y el plan maestro.
+- Se actualizó `docs/tasks.md`.
+
+### Resultado
+
+- La documentación local de asistencia IA queda ignorada y dejará de subirse al repositorio remoto después de publicar el commit.
+
+### Validación
+
+- `git ls-files docs/ai` sin archivos versionados.
+- `git status --short` muestra las eliminaciones del índice y conserva `docs/ai/` como carpeta local ignorada.
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Si se necesita eliminar esos archivos del historial antiguo del remoto, habría que hacer una reescritura de historial coordinada; esta sesión solo los elimina del estado versionado futuro.
+
 ### Sesión: sincronización de `CHANGELOG.md`
 
 - Se agregó y ejecutó la tarea `Operativo: Sincronizar CHANGELOG.md con el estado actual de soft_delete, tenant y proyecciones tipadas para no listarlos como features diferidas o ausentes`.

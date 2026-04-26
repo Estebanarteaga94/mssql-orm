@@ -10,7 +10,7 @@ Ya existe un workspace Rust inicial con crates separadas para `mssql-orm`, `core
 El control de versiones quedó consolidado en un único repositorio Git en la raíz; no deben existir repositorios anidados dentro de `crates/`.
 También existe CI base en GitHub Actions para validar formato, compilación, pruebas y lint del workspace.
 Ya existe documentación pública mínima en `README.md`, documentación arquitectónica en `docs/architecture/overview.md` y ADRs iniciales en `docs/adr/`.
-Ya existe `docs/ai/` con guía de colaboración, plantilla de sesión y checklist de handoff para futuras sesiones autónomas.
+La documentación local de asistencia para IA puede existir en `docs/ai/`, pero esa carpeta queda ignorada por Git y no forma parte del repositorio versionado.
 `mssql-orm-core` ya contiene el contrato `Entity` y la metadata base de entidades, columnas, índices y foreign keys.
 La metadata base fue re-alineada contra el plan maestro para preservar el orden de PK compuesto y evitar helpers con semántica no definida por el plan.
 
@@ -380,13 +380,12 @@ La base code-first de tenant opt-in ya existe en codigo: la crate publica expone
 - La operación del proyecto ahora exige realizar commit al cerrar una tarea completada y validada.
 - El workflow `.github/workflows/ci.yml` es la automatización mínima vigente y replica las validaciones locales base del workspace.
 - La arquitectura ya quedó documentada y respaldada por ADRs para SQL Server primero, separación estricta por crates y API pública concentrada en `mssql-orm`.
-- La colaboración autónoma ya quedó formalizada en `docs/ai/`, por lo que las siguientes sesiones deben apoyarse en esa guía además de `docs/instructions.md`.
+- La documentación local de colaboración autónoma queda fuera del repositorio versionado en `docs/ai/`; las instrucciones versionadas obligatorias siguen concentradas en `docs/instructions.md`, `docs/tasks.md`, `docs/worklog.md`, `docs/context.md` y el plan maestro.
 
 ## Fuente de Verdad
 
 - Plan maestro: `docs/plan_orm_sqlserver_tiberius_code_first.md`
 - Operación del agente: `docs/instructions.md`
-- Colaboración con IA: `docs/ai/`
 - Trabajo pendiente: `docs/tasks.md`
 - Historial de sesiones: `docs/worklog.md`
 - Arquitectura y decisiones: `README.md`, `docs/architecture/overview.md`, `docs/adr/`
