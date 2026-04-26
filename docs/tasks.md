@@ -1,12 +1,12 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, `trybuild` de API pública y materialización a DTOs `FromRow`
 - [ ] Etapa 18: Documentar la diferencia entre `map` en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones
 
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, `trybuild` de API pública y materialización a DTOs `FromRow`
 - [x] Etapa 18: Implementar API pública inicial de proyecciones: `select(...)` y ejecución `all_as::<T>()` / `first_as::<T>()` sobre `DbSetQuery`
 - [x] Etapa 18: Extender el AST `SelectQuery` para proyecciones públicas de columnas/expresiones con alias estable suficiente para `FromRow`
 - [x] Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas

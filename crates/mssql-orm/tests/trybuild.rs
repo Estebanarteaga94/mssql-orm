@@ -15,6 +15,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/code_first_public_valid.rs");
     tests.pass("tests/ui/query_builder_public_valid.rs");
     tests.pass("tests/ui/query_builder_todo_app_valid.rs");
+    tests.pass("tests/ui/query_projection_public_valid.rs");
     tests.pass("tests/ui/audit_fields_valid.rs");
     tests.pass("tests/ui/soft_delete_fields_valid.rs");
     tests.pass("tests/ui/tenant_context_valid.rs");

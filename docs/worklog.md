@@ -2,6 +2,40 @@
 
 ## 2026-04-26
 
+### Sesión: cobertura pública de proyecciones tipadas
+
+- Se ejecutó la tarea `Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, trybuild de API pública y materialización a DTOs FromRow`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se agregó `crates/mssql-orm/tests/stage18_public_projections.rs` con cobertura pública de SQL compilado para proyecciones con aliases, expresiones, filtros, paginación y orden estable de parámetros.
+- El mismo test cubre materialización real a DTOs `FromRow` usando `DbSetQuery::select(...)`, `all_as::<T>()` y `first_as::<T>()` contra una tabla descartable en SQL Server cuando hay connection string disponible.
+- Se agregó `crates/mssql-orm/tests/ui/query_projection_public_valid.rs` y se registró en `crates/mssql-orm/tests/trybuild.rs` para validar la API pública desde `mssql_orm::prelude`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- Las proyecciones tipadas ya tienen cobertura pública para compilación SQL, orden de parámetros, ergonomía compile-time y materialización real a DTOs.
+
+### Validación
+
+- `cargo test -p mssql-orm --test stage18_public_projections -- --nocapture`
+- `MSSQL_ORM_TEST_CONNECTION_STRING=<configurada> cargo test -p mssql-orm --test stage18_public_projections public_projection_api_materializes_dtos_against_real_sql_server -- --nocapture`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui -- --nocapture`
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features`
+
+### Bloqueos
+
+- No hay bloqueos técnicos para la tarea.
+- Una corrida adicional de `cargo test --workspace` con `MSSQL_ORM_TEST_CONNECTION_STRING` inyectado globalmente falló en tests antiguos de Active Record por interferencia de tabla compartida `dbo.mssql_orm_active_record`; la cobertura real enfocada de proyecciones sí pasó contra SQL Server.
+- `cargo clippy --workspace --all-targets --all-features` terminó con código 0, pero mantiene warnings preexistentes/no relacionados: `collapsible_if` en `mssql-orm-migrate/src/diff.rs` y `large_enum_variant` en `mssql-orm/src/context.rs`.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 18: Documentar la diferencia entre map en memoria y proyecciones SQL reales, incluyendo límites iniciales para joins, aliases y agregaciones`.
+
 ### Sesión: API pública inicial de proyecciones tipadas
 
 - Se ejecutó la tarea `Etapa 18: Implementar API pública inicial de proyecciones: select(...) y ejecución all_as::<T>() / first_as::<T>() sobre DbSetQuery`.
