@@ -560,7 +560,11 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             indexes.push(quote! {
                 ::mssql_orm::core::IndexMetadata {
                     name: #index_name,
-                    columns: &[::mssql_orm::core::IndexColumnMetadata::asc(#column_name)],
+                    columns: {
+                        const COLUMNS: &[::mssql_orm::core::IndexColumnMetadata] =
+                            &[::mssql_orm::core::IndexColumnMetadata::asc(#column_name)];
+                        COLUMNS
+                    },
                     unique: #unique,
                 }
             });
@@ -594,10 +598,16 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             foreign_keys.push(quote! {
                 ::mssql_orm::core::ForeignKeyMetadata::new(
                     #foreign_key_name,
-                    &[#column_name],
+                    {
+                        const COLUMNS: &[&'static str] = &[#column_name];
+                        COLUMNS
+                    },
                     #referenced_schema,
                     #referenced_table,
-                    &[#referenced_column],
+                    {
+                        const REFERENCED_COLUMNS: &[&'static str] = &[#referenced_column];
+                        REFERENCED_COLUMNS
+                    },
                     #on_delete,
                     ::mssql_orm::core::ReferentialAction::NoAction,
                 )
@@ -639,7 +649,11 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         indexes.push(quote! {
             ::mssql_orm::core::IndexMetadata {
                 name: #index_name,
-                columns: &[#(::mssql_orm::core::IndexColumnMetadata::asc(#resolved_columns)),*],
+                columns: {
+                    const COLUMNS: &[::mssql_orm::core::IndexColumnMetadata] =
+                        &[#(::mssql_orm::core::IndexColumnMetadata::asc(#resolved_columns)),*];
+                    COLUMNS
+                },
                 unique: #unique,
             }
         });
@@ -824,6 +838,27 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             const _: &'static str = <#tenant as ::mssql_orm::TenantContext>::COLUMN_NAME;
         }
     });
+    let primary_key_metadata = quote! {
+        ::mssql_orm::core::PrimaryKeyMetadata::new(
+            None,
+            {
+                const COLUMNS: &[&'static str] = &[#(#primary_key_columns),*];
+                COLUMNS
+            },
+        )
+    };
+    let indexes_metadata = quote! {
+        {
+            const INDEXES: &[::mssql_orm::core::IndexMetadata] = &[#(#indexes),*];
+            INDEXES
+        }
+    };
+    let foreign_keys_metadata = quote! {
+        {
+            const FOREIGN_KEYS: &[::mssql_orm::core::ForeignKeyMetadata] = &[#(#foreign_keys),*];
+            FOREIGN_KEYS
+        }
+    };
 
     let has_generated_policies =
         entity_audit.is_some() || entity_soft_delete.is_some() || entity_tenant.is_some();
@@ -911,12 +946,9 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                         table: #table,
                         renamed_from: #renamed_from,
                         columns,
-                        primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
-                            None,
-                            &[#(#primary_key_columns),*],
-                        ),
-                        indexes: &[#(#indexes),*],
-                        foreign_keys: &[#(#foreign_keys),*],
+                        primary_key: #primary_key_metadata,
+                        indexes: #indexes_metadata,
+                        foreign_keys: #foreign_keys_metadata,
                     }
                 })
             },
@@ -931,12 +963,9 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                         table: #table,
                         renamed_from: #renamed_from,
                         columns: &[#(#columns),*],
-                        primary_key: ::mssql_orm::core::PrimaryKeyMetadata::new(
-                            None,
-                            &[#(#primary_key_columns),*],
-                        ),
-                        indexes: &[#(#indexes),*],
-                        foreign_keys: &[#(#foreign_keys),*],
+                        primary_key: #primary_key_metadata,
+                        indexes: #indexes_metadata,
+                        foreign_keys: #foreign_keys_metadata,
                     };
             },
             quote! {

@@ -1,10 +1,18 @@
 # Tasks
 
 ## Pendientes
+- [ ] Etapa 19: Diseñar el contrato runtime mínimo para `AuditProvider` en `mssql-orm`, incluyendo `AuditOperation`, `AuditRequestValues`, `AuditContext` y reglas de precedencia sin tocar `core`, `query`, `sqlserver` ni `tiberius`
+- [ ] Etapa 19: Exponer metadata runtime de columnas auditables por entidad desde `#[orm(audit = Audit)]` mediante un contrato auxiliar generado por macros, sin cambiar snapshots, diff ni DDL
+- [ ] Etapa 19: Implementar transporte de `AuditProvider` y valores por request en `SharedConnection` y en `#[derive(DbContext)]`, con herencia explícita dentro de transacciones
+- [ ] Etapa 19: Aplicar `AuditProvider` a rutas de insert (`DbSet::insert`, Active Record insert y `save_changes()` para `Added`) completando solo columnas auditables faltantes y rechazando duplicados
+- [ ] Etapa 19: Aplicar `AuditProvider` a rutas de update (`DbSet::update`, Active Record `save` sobre entidad existente y `save_changes()` para `Modified`) respetando `updatable`, `rowversion`, `tenant` y `soft_delete`
+- [ ] Etapa 19: Cubrir `AuditProvider` con pruebas unitarias, pruebas públicas `trybuild`, pruebas runtime focalizadas y documentación pública de límites
 
 ## En Progreso
 
 ## Completadas
+- [x] Operativo: Corregir `#[derive(Entity)]` para entidades con `audit`/`soft_delete` y foreign keys estructuradas sin referencias temporales en metadata
+- [x] Operativo: Reabrir el backlog técnico descomponiendo `AuditProvider` runtime en subtareas verificables antes de iniciar implementación
 - [x] Operativo: Ignorar `docs/ai/` y remover la documentación local de asistencia IA del índice de Git
 - [x] Operativo: Sincronizar `CHANGELOG.md` con el estado actual de `soft_delete`, `tenant` y proyecciones tipadas para no listarlos como features diferidas o ausentes
 - [x] Operativo: Tipar los valores nulos generados desde `Option<T>` para que el binding Tiberius no trate todos los `NULL` como `nvarchar`

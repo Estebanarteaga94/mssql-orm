@@ -2,6 +2,35 @@
 
 ## 2026-04-26
 
+### Sesión: fix de `Entity` con policies y foreign keys estructuradas
+
+- Se ejecutó la tarea `Operativo: Corregir #[derive(Entity)] para entidades con audit/soft_delete y foreign keys estructuradas sin referencias temporales en metadata`.
+- Se diagnosticó que la ruta de metadata con policies usa `OnceLock` y estaba devolviendo `EntityMetadata` con slices temporales para primary key, índices y foreign keys.
+- El error se observaba como `E0716: temporary value dropped while borrowed` al combinar `#[orm(audit = ...)]`, `#[orm(soft_delete = ...)]` y `#[orm(foreign_key(entity = ..., column = ...))]`.
+- Se ajustó `mssql-orm-macros` para emitir slices `'static` mediante bloques `const` en primary key, índices, columnas de índices, foreign keys y columnas referenciadas.
+- Se agregó el fixture `crates/mssql-orm/tests/ui/entity_policies_with_structured_foreign_key_valid.rs`, reproduciendo una entidad `TaskModel` con PK `Uuid`, FK estructurada a `UserModel`, `audit` y `soft_delete`.
+- Se actualizó `docs/tasks.md` y `docs/context.md`.
+
+### Resultado
+
+- `#[derive(Entity)]` ya compila para entidades que combinan policies generadas con foreign keys estructuradas.
+- No se modificaron responsabilidades entre crates: el cambio queda acotado al macro y a cobertura pública `trybuild`.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo test -p mssql-orm --test trybuild entity_derive_ui`
+- `cargo check --workspace`
+- `git diff --check`
+
+### Bloqueos
+
+- No hubo bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Continuar con la primera tarea pendiente de Etapa 19: diseñar el contrato runtime mínimo de `AuditProvider` antes de tocar rutas de persistencia.
+
 ### Sesión: `docs/ai/` local fuera de Git
 
 - Se ejecutó la tarea `Operativo: Ignorar docs/ai/ y remover la documentación local de asistencia IA del índice de Git`.
