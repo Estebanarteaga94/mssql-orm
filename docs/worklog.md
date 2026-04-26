@@ -2,6 +2,37 @@
 
 ## 2026-04-26
 
+### Sesión: diseño de proyecciones tipadas
+
+- Se ejecutó la tarea `Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas`.
+- Se confirmó que el plan maestro solicitado como `plan_orm_sqlserver_tiberius_code_first.md` no está en la raíz; la ruta real vigente es `docs/plan_orm_sqlserver_tiberius_code_first.md`.
+- Se movió la tarea a `En Progreso` antes de editar y a `Completadas` después de validar.
+- Se revisó el estado actual de `SelectQuery`, `Expr`, compilación SQL Server y `DbSetQuery`.
+- Se agregó `docs/projections.md` como diseño operativo de Etapa 18.
+- El diseño fija que `all()` y `first()` deben seguir materializando entidades completas, mientras que DTOs proyectados usarán rutas separadas `all_as::<T>()` y `first_as::<T>()`.
+- Se definió que el AST necesita un `SelectProjection { expr, alias }` o equivalente, con alias por defecto para columnas y alias explícito obligatorio para expresiones.
+- Se documentó que `mssql-orm-query` debe transportar el AST sin generar SQL, `mssql-orm-sqlserver` debe compilar `expr AS [alias]`, y `mssql-orm` debe concentrar la API pública.
+- Se dejó explícito que las proyecciones deben reutilizar la consulta efectiva de `DbSetQuery` para conservar filtros obligatorios de `tenant` y visibilidad de `soft_delete`.
+- `docs/api.md`, `docs/query-builder.md` y `docs/context.md` quedaron sincronizados con el diseño.
+
+### Resultado
+
+- La Etapa 18 tiene un diseño operativo trazable para avanzar a la extensión del AST sin romper la materialización actual de entidades.
+
+### Validación
+
+- `cargo fmt --all --check`
+- `cargo check --workspace`
+- `rg -n "projections.md|SelectProjection|all_as|first_as|Etapa 18" docs README.md`
+
+### Bloqueos
+
+- No hay bloqueos técnicos.
+
+### Próximo paso recomendado
+
+- Ejecutar `Etapa 18: Extender el AST SelectQuery para proyecciones públicas de columnas/expresiones con alias estable suficiente para FromRow`.
+
 ### Sesión: documentación pública de raw SQL tipado
 
 - Se ejecutó la tarea `Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad`.

@@ -181,7 +181,7 @@ let total_active = db.users.query().filter(User::active.eq(true)).count().await?
 
 La API publica actual materializa entidades completas. Para transformar una entidad cargada en un DTO puedes usar `map` en memoria despues de `all().await`, pero eso no reduce las columnas leidas desde SQL Server.
 
-Las proyecciones tipadas quedan planificadas como una etapa separada. El objetivo es que una consulta pueda seleccionar solo columnas o expresiones concretas y materializarlas en un struct que implemente `FromRow`, por ejemplo:
+Las proyecciones tipadas quedan planificadas como Etapa 18 y su diseño operativo vive en [docs/projections.md](projections.md). El objetivo es que una consulta pueda seleccionar solo columnas o expresiones concretas y materializarlas en un struct que implemente `FromRow`, por ejemplo:
 
 ```rust
 #[derive(Debug)]
@@ -198,7 +198,7 @@ let users = db
     .await?;
 ```
 
-Ese ejemplo describe la direccion de la API, no una surface disponible todavia. La implementacion debe resolver aliases estables para columnas, compatibilidad con joins y materializacion a DTOs sin romper `all()` / `first()` sobre entidades completas.
+Ese ejemplo describe la direccion de la API, no una surface disponible todavia. La implementacion debe resolver aliases estables para columnas y expresiones, compatibilidad inicial con joins sin aliases de tabla, y materializacion a DTOs mediante `all_as::<T>()` / `first_as::<T>()` sin romper `all()` / `first()` sobre entidades completas.
 
 ## Inspeccion del AST
 
@@ -215,6 +215,7 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 - `count()` no preserva joins en esta etapa.
 - La proyeccion publica de `DbSetQuery<T>` materializa entidades completas; proyecciones parciales quedan fuera del alcance actual.
 - Raw SQL tipado esta planificado como escape hatch previo a proyecciones complejas, pero no forma parte todavia del query builder publico.
+- El diseño de proyecciones tipadas ya esta documentado, pero la API publica `select(...)`, `all_as::<T>()` y `first_as::<T>()` sigue pendiente de implementacion.
 
 ## Referencias relacionadas
 
@@ -222,5 +223,6 @@ Para pruebas de bajo nivel sobre el AST, construye un `mssql_orm::query::SelectQ
 - Quickstart: [docs/quickstart.md](quickstart.md)
 - Guia code-first: [docs/code-first.md](code-first.md)
 - Relaciones y joins: [docs/relationships.md](relationships.md)
+- Proyecciones tipadas: [docs/projections.md](projections.md)
 - Ejemplo real con queries: [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs)
 - Plan maestro: [docs/plan_orm_sqlserver_tiberius_code_first.md](plan_orm_sqlserver_tiberius_code_first.md)

@@ -34,6 +34,10 @@ La regla de parametros para raw SQL queda fijada por indice de placeholder, no p
 
 `docs/raw-sql.md` ya esta consolidado como guia publica de Etapa 17: cubre cuando usar raw SQL, DTOs con `FromRow`, comandos con `raw_exec`, reglas de parametros, ejemplos de seguridad, transacciones, limites y la advertencia explicita de que `tenant` y `soft_delete` no se aplican automaticamente. `README.md` y `docs/api.md` enlazan esa guia como parte de la surface publica disponible.
 
+### Estado vigente de proyecciones tipadas
+
+La Etapa 18 arranca con diseño operativo en `docs/projections.md`. El diseño fija que las proyecciones tipadas deben preservar `DbSetQuery<E>::all()` y `first()` para entidades completas, y agregar rutas separadas `all_as::<T>()` / `first_as::<T>()` para DTOs que implementen `FromRow`. El AST actual ya contiene `SelectQuery::projection: Vec<Expr>` y el compilador SQL Server ya puede emitir columnas concretas, pero falta alias estable; el siguiente paso recomendado es introducir un tipo `SelectProjection { expr, alias }` en `mssql-orm-query`, hacer que columnas proyectadas usen alias por defecto igual a `column_name`, exigir alias explicito para expresiones y compilar `expr AS [alias]` en `mssql-orm-sqlserver`. Las proyecciones deben reutilizar la consulta efectiva de `DbSetQuery` para conservar filtros obligatorios de `tenant` y visibilidad de `soft_delete`.
+
 ## Etapa 16 Propuesta: Entity Policies
 
 Después de revisar el modelo actual y el dominio del ejemplo `todo_app`, quedó identificada una evolución natural del enfoque `code-first`: permitir que el usuario defina structs reutilizables para columnas transversales y que cada entidad declare qué políticas aplica. El caso inicial deseado es auditoría:
@@ -431,7 +435,7 @@ La base code-first de tenant opt-in ya existe en codigo: la crate publica expone
 
 ## Próximo Enfoque Recomendado
 
-1. Ejecutar `Etapa 17: raw SQL tipado`, empezando por el diseno de `DbContext::raw<T>(sql)`, `RawQuery<T>::param(...)`, `RawQuery<T>::params((...))`, `DbContext::raw_exec(sql)` y `RawCommand::execute()`.
-2. Mantener la regla acordada para raw SQL: `@P1` repetido es valido, los placeholders deben ser continuos desde `@P1` hasta `@Pn`, y la cantidad de parametros debe coincidir con el mayor placeholder usado. Raw SQL no aplica automaticamente filtros ORM de `tenant` ni `soft_delete`.
-3. Despues de raw SQL, avanzar con `Etapa 18: proyecciones tipadas`, preservando `all()` / `first()` para entidades completas y agregando `select(...)`, `all_as::<T>()` y `first_as::<T>()` para DTOs `FromRow`.
-4. Preservar el límite arquitectónico actual: `query` sigue sin generar SQL directo, `sqlserver` sigue siendo la única capa de compilación y `tiberius` la única capa de ejecución.
+1. Ejecutar la siguiente tarea de Etapa 18: extender el AST `SelectQuery` para proyecciones publicas de columnas/expresiones con alias estable suficiente para `FromRow`.
+2. Implementar esa extension sin mover generacion SQL a `query`: `mssql-orm-query` debe transportar `SelectProjection`, `mssql-orm-sqlserver` debe compilar `expr AS [alias]` y `mssql-orm` debe seguir concentrando la API publica.
+3. Preservar `DbSetQuery<E>::all()` / `first()` para entidades completas; las rutas proyectadas deben seguir separadas como `all_as::<T>()` y `first_as::<T>()`.
+4. Mantener raw SQL tipado como escape hatch para consultas que todavia excedan el AST de proyecciones.

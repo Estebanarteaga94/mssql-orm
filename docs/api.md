@@ -204,7 +204,7 @@ Reglas aprobadas de parametros: `.params((p1, p2))` es la forma recomendada para
 
 ### Roadmap cercano: proyecciones tipadas
 
-Las proyecciones tipadas tambien quedan planificadas. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
+Las proyecciones tipadas tambien quedan planificadas y tienen diseño operativo en `docs/projections.md`. La diferencia frente a usar `map` despues de `all().await` es que una proyeccion real cambia el `SELECT` emitido y reduce las columnas leidas desde SQL Server.
 
 Direccion de API:
 
@@ -217,7 +217,7 @@ let users = db
     .await?;
 ```
 
-El diseno debe preservar la ruta actual `all()` / `first()` para entidades completas, y agregar materializacion a DTOs mediante `FromRow`.
+El diseno preserva la ruta actual `all()` / `first()` para entidades completas y agrega materializacion a DTOs mediante `all_as::<T>()` / `first_as::<T>()`. El AST debe transportar aliases estables para que `FromRow` lea DTOs por nombre.
 
 ## Active Record
 
@@ -391,3 +391,4 @@ Esta surface no promete todavia:
 - Migraciones: [docs/migrations.md](migrations.md)
 - Entity Policies: [docs/entity-policies.md](entity-policies.md)
 - Raw SQL tipado: [docs/raw-sql.md](raw-sql.md)
+- Proyecciones tipadas: [docs/projections.md](projections.md)

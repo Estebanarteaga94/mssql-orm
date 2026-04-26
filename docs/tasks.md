@@ -1,7 +1,6 @@
 # Tasks
 
 ## Pendientes
-- [ ] Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas
 - [ ] Etapa 18: Extender el AST `SelectQuery` para proyecciones públicas de columnas/expresiones con alias estable suficiente para `FromRow`
 - [ ] Etapa 18: Implementar API pública inicial de proyecciones: `select(...)` y ejecución `all_as::<T>()` / `first_as::<T>()` sobre `DbSetQuery`
 - [ ] Etapa 18: Cubrir proyecciones con tests de SQL compilado, orden de parámetros, `trybuild` de API pública y materialización a DTOs `FromRow`
@@ -10,6 +9,7 @@
 ## En Progreso
 
 ## Completadas
+- [x] Etapa 18: Diseñar proyecciones tipadas sobre el query builder sin romper la materialización actual de entidades completas
 - [x] Etapa 17: Agregar documentación pública de raw SQL tipado con ejemplos de DTOs, comandos y advertencias explícitas de seguridad
 - [x] Etapa 17: Agregar pruebas públicas de `raw<T>().first()`, `raw<T>().all()` y `raw_exec().execute()` contra SQL Server real cuando `MSSQL_ORM_TEST_CONNECTION_STRING` esté configurado
 - [x] Etapa 17: Agregar pruebas unitarias de parámetros para raw SQL preservando orden, valores nulos, tipos soportados, `@P1` repetido y placeholders continuos desde `@P1` hasta `@Pn`
