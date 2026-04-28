@@ -19,6 +19,7 @@ The following derives are available from the public crate:
 - `#[derive(Entity)]`
 - `#[derive(Insertable)]`
 - `#[derive(Changeset)]`
+- `#[derive(FromRow)]`
 - `#[derive(DbContext)]`
 - `#[derive(AuditFields)]`
 - `#[derive(SoftDeleteFields)]`

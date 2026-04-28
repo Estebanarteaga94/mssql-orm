@@ -112,7 +112,8 @@ pub mod prelude {
         SqlServerType, SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::{
-        AuditFields, Changeset, DbContext, Entity, Insertable, SoftDeleteFields, TenantContext,
+        AuditFields, Changeset, DbContext, Entity, FromRow, Insertable, SoftDeleteFields,
+        TenantContext,
     };
     pub use mssql_orm_query::{Join, JoinType, SelectProjection};
 }

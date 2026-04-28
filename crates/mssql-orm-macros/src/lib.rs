@@ -39,6 +39,14 @@ pub fn derive_changeset(input: TokenStream) -> TokenStream {
     }
 }
 
+#[proc_macro_derive(FromRow, attributes(orm))]
+pub fn derive_from_row(input: TokenStream) -> TokenStream {
+    match derive_from_row_impl(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
 #[proc_macro_derive(AuditFields, attributes(orm))]
 pub fn derive_audit_fields(input: TokenStream) -> TokenStream {
     match derive_policy_fields_impl(
@@ -311,6 +319,54 @@ fn derive_tenant_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
                     ::core::clone::Clone::clone(&self.#field_ident)
                 )
+            }
+        }
+    })
+}
+
+fn derive_from_row_impl(input: DeriveInput) -> Result<TokenStream2> {
+    let ident = input.ident;
+    let fields = extract_named_fields(&ident, input.data, "FromRow")?;
+    let generics = input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let field_initializers = fields
+        .iter()
+        .map(|field| {
+            let field_ident = field
+                .ident
+                .as_ref()
+                .ok_or_else(|| Error::new_spanned(field, "FromRow requiere campos nombrados"))?;
+            let config = parse_persistence_field_config(field, "FromRow")?;
+            let column_name = config
+                .column
+                .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
+            validate_non_empty_lit_str(&column_name, "column no puede estar vacío")?;
+
+            let field_ty = &field.ty;
+            let type_info = analyze_type(field_ty)?;
+            let value = if type_info.nullable {
+                quote! {
+                    row.try_get_typed::<#field_ty>(#column_name)?.flatten()
+                }
+            } else {
+                quote! {
+                    row.get_required_typed::<#field_ty>(#column_name)?
+                }
+            };
+
+            Ok(quote! {
+                #field_ident: #value
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(quote! {
+        impl #impl_generics ::mssql_orm::core::FromRow for #ident #ty_generics #where_clause {
+            fn from_row<R: ::mssql_orm::core::Row>(row: &R) -> Result<Self, ::mssql_orm::core::OrmError> {
+                Ok(Self {
+                    #(#field_initializers),*
+                })
             }
         }
     })
