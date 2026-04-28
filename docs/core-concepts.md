@@ -318,6 +318,7 @@ Important limits:
 - audit columns do not become Rust fields on the entity,
 - audit columns do not generate column symbols such as `Todo::created_at`,
 - audit insert/update autoloading through an `AuditProvider` is not implemented,
+- the `AuditProvider` runtime contract exists, but it is not transported through contexts or applied to writes yet,
 - soft-delete automatic filters apply to the root entity of a `DbSetQuery`, not every joined entity,
 - raw SQL does not apply policy filters automatically.
 

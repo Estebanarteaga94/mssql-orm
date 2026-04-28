@@ -192,6 +192,10 @@ Public policy-related contracts and derives include:
 - `TenantContext`
 - `SoftDeleteEntity`
 - `TenantScopedEntity`
+- `AuditProvider`
+- `AuditContext`
+- `AuditOperation`
+- `AuditRequestValues`
 - `SoftDeleteProvider`
 - `SoftDeleteContext`
 - `SoftDeleteOperation`
@@ -201,12 +205,15 @@ Public policy-related contracts and derives include:
 Implemented behavior:
 
 - `audit = Audit` contributes metadata/schema columns only.
+- The runtime `AuditProvider` contract exists in the public crate, including operation, request values, context, and precedence rules for resolving `ColumnValue`s.
 - `soft_delete = SoftDelete` changes delete behavior and read visibility for the root entity.
 - `tenant = CurrentTenant` adds fail-closed tenant filtering and tenant insert validation/fill for opt-in entities.
 
 Deferred behavior:
 
-- runtime audit auto-fill through `AuditProvider`;
+- generated runtime metadata that marks which columns are audit-owned;
+- transporting `AuditProvider` through `SharedConnection` and derived contexts;
+- insert/update auto-fill through `AuditProvider`;
 - automatic policy filters over manually joined entities;
 - global tenant conventions without a user-defined tenant type.
 

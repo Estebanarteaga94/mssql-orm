@@ -103,7 +103,7 @@ These items exist only with explicit limits or partial scope:
 - Query aliases for multiple references to the same table are not supported; SQL Server join compilation requires unique joined tables until alias support exists.
 - High-level aggregate projection APIs are not implemented. Low-level expression functions exist, but typed aggregate ergonomics are not a public feature.
 - Audit policy columns are metadata/schema only. They are not visible entity fields, do not generate column symbols and are not automatically filled during insert/update.
-- `AuditProvider` runtime behavior is designed conceptually but not implemented.
+- `AuditProvider` has a public runtime contract, but it is not transported through contexts and is not applied to insert/update paths yet.
 - Migration rollback generation is available only when operation payloads are reversible. Some destructive operations still require manual `down.sql`.
 - `migration.rs` is explicitly deferred from the migration artifact MVP.
 - Multi-database support is intentionally out of scope.

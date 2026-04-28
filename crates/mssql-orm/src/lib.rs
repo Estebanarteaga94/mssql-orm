@@ -3,6 +3,7 @@
 extern crate self as mssql_orm;
 
 mod active_record;
+mod audit_runtime;
 mod context;
 mod dbset_query;
 mod page_request;
@@ -23,6 +24,9 @@ pub use mssql_orm_tiberius as tiberius;
 pub use tokio;
 
 pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
+pub use audit_runtime::{
+    AuditContext, AuditOperation, AuditProvider, AuditRequestValues, resolve_audit_values,
+};
 #[cfg(feature = "pool-bb8")]
 pub use context::connect_shared_from_pool;
 pub use context::{
@@ -92,6 +96,9 @@ pub mod prelude {
         SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, TenantContext,
         TenantScopedEntity, Tracked, model_snapshot_from_source, model_snapshot_json_from_source,
     };
+    pub use crate::{
+        AuditContext, AuditOperation, AuditProvider, AuditRequestValues, resolve_audit_values,
+    };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
     pub use mssql_orm_core::{
@@ -109,15 +116,15 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        ActiveRecord, ActiveTenant, AuditFields, Changeset, ColumnValue, DbContext,
-        DbContextEntitySet, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
-        EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
-        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
-        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
-        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam,
-        RawParams, RawQuery, SelectProjection, SelectProjections, SharedConnection,
-        SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
-        TenantScopedEntity, Tracked,
+        ActiveRecord, ActiveTenant, AuditContext, AuditFields, AuditOperation, AuditProvider,
+        AuditRequestValues, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
+        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityPolicy,
+        EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable, MssqlConnectionConfig,
+        MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+        MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
+        QueryHint, RawCommand, RawParam, RawParams, RawQuery, SelectProjection, SelectProjections,
+        SharedConnection, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
+        SqlValue, TenantContext, TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -275,6 +282,39 @@ mod tests {
             PublicTenantEntity::tenant_policy(),
             Some(EntityPolicyMetadata::new("tenant", &[]))
         );
+    }
+
+    #[test]
+    fn exposes_audit_runtime_contract_in_prelude() {
+        struct PublicAuditProvider;
+
+        impl AuditProvider for PublicAuditProvider {
+            fn values(&self, context: AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError> {
+                assert_eq!(context.operation, AuditOperation::Update);
+                assert!(context.request_values.is_some());
+
+                Ok(vec![ColumnValue::new(
+                    "updated_at",
+                    SqlValue::String("provider-updated-at".to_string()),
+                )])
+            }
+        }
+
+        let request_values = AuditRequestValues::new(vec![ColumnValue::new(
+            "updated_by",
+            SqlValue::String("request-updated-by".to_string()),
+        )]);
+        let context = AuditContext {
+            entity: PublicEntity::metadata(),
+            operation: AuditOperation::Update,
+            request_values: Some(&request_values),
+        };
+
+        let provider = PublicAuditProvider;
+        let values = provider.values(context).unwrap();
+
+        assert_eq!(request_values.values()[0].column_name, "updated_by");
+        assert_eq!(values[0].column_name, "updated_at");
     }
 
     #[test]
