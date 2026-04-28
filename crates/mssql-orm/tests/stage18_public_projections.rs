@@ -23,32 +23,17 @@ struct ProjectionDb {
     pub users: DbSet<ProjectionUser>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
 struct ProjectionSummary {
     id: i64,
     name: String,
+    display_name: Option<String>,
 }
 
-impl FromRow for ProjectionSummary {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
 struct LowerNameProjection {
-    lower_name: String,
-}
-
-impl FromRow for LowerNameProjection {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            lower_name: row.get_required_typed::<String>("lower_name")?,
-        })
-    }
+    #[orm(column = "lower_name")]
+    value: String,
 }
 
 #[test]
@@ -129,7 +114,14 @@ async fn public_projection_api_materializes_dtos_against_real_sql_server() -> Re
         let active_users = db
             .users
             .query()
-            .select((ProjectionUser::id, ProjectionUser::name))
+            .select((
+                ProjectionUser::id,
+                ProjectionUser::name,
+                SelectProjection::expr_as(
+                    Expr::function("LOWER", vec![Expr::from(ProjectionUser::name)]),
+                    "display_name",
+                ),
+            ))
             .filter(ProjectionUser::active.eq(true))
             .order_by(ProjectionUser::id.asc())
             .all_as::<ProjectionSummary>()
@@ -141,10 +133,12 @@ async fn public_projection_api_materializes_dtos_against_real_sql_server() -> Re
                 ProjectionSummary {
                     id: 1,
                     name: "Ana".to_string(),
+                    display_name: Some("ana".to_string()),
                 },
                 ProjectionSummary {
                     id: 2,
                     name: "BRUNO".to_string(),
+                    display_name: Some("bruno".to_string()),
                 },
             ]
         );
@@ -163,7 +157,7 @@ async fn public_projection_api_materializes_dtos_against_real_sql_server() -> Re
         assert_eq!(
             lower_name,
             Some(LowerNameProjection {
-                lower_name: "bruno".to_string(),
+                value: "bruno".to_string(),
             })
         );
 

@@ -20,21 +20,13 @@ struct RawSqlDb {
     pub anchors: DbSet<RawSqlAnchor>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, FromRow)]
 struct RawSqlUser {
     id: i64,
     name: String,
-    active: bool,
-}
-
-impl FromRow for RawSqlUser {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            name: row.get_required_typed::<String>("name")?,
-            active: row.get_required_typed::<bool>("active")?,
-        })
-    }
+    #[orm(column = "active")]
+    is_active: bool,
+    nickname: Option<String>,
 }
 
 #[tokio::test]
@@ -73,7 +65,7 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
 
         let active_users = db
             .raw::<RawSqlUser>(format!(
-                "SELECT id, name, active FROM {TEST_TABLE_NAME} \
+                "SELECT id, name, active, CAST(NULL AS NVARCHAR(120)) AS nickname FROM {TEST_TABLE_NAME} \
                  WHERE active = @P1 ORDER BY id ASC"
             ))
             .param(true)
@@ -83,7 +75,8 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
 
         assert_eq!(active_users.len(), 1);
         assert_eq!(active_users[0].name, "Ana");
-        assert!(active_users[0].active);
+        assert!(active_users[0].is_active);
+        assert_eq!(active_users[0].nickname, None);
 
         let updated = db
             .raw_exec(format!(
@@ -96,7 +89,7 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
 
         let first = db
             .raw::<RawSqlUser>(format!(
-                "SELECT TOP (1) id, name, active FROM {TEST_TABLE_NAME} \
+                "SELECT TOP (1) id, name, active, CAST(NULL AS NVARCHAR(120)) AS nickname FROM {TEST_TABLE_NAME} \
                  WHERE name = @P1 ORDER BY id ASC"
             ))
             .param("Bruno")
@@ -108,13 +101,14 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
             Some(RawSqlUser {
                 id: 2,
                 name: "Bruno".to_string(),
-                active: true,
+                is_active: true,
+                nickname: None,
             })
         );
 
         let all_users = db
             .raw::<RawSqlUser>(format!(
-                "SELECT id, name, active FROM {TEST_TABLE_NAME} ORDER BY id ASC"
+                "SELECT id, name, active, CAST(name AS NVARCHAR(120)) AS nickname FROM {TEST_TABLE_NAME} ORDER BY id ASC"
             ))
             .all()
             .await?;
@@ -125,12 +119,14 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
                 RawSqlUser {
                     id: 1,
                     name: "Ana".to_string(),
-                    active: true,
+                    is_active: true,
+                    nickname: Some("Ana".to_string()),
                 },
                 RawSqlUser {
                     id: 2,
                     name: "Bruno".to_string(),
-                    active: true,
+                    is_active: true,
+                    nickname: Some("Bruno".to_string()),
                 },
             ]
         );
