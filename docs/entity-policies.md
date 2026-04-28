@@ -198,6 +198,77 @@ Visibility convention:
 
 Current limit: automatic soft-delete filtering applies only to the root entity of `DbSetQuery<E>`, not to every manually joined entity.
 
+## Ergonomic Soft Delete Values Design
+
+The low-level `SoftDeleteProvider` / `SoftDeleteRequestValues` contract remains the foundation for runtime delete values. It is flexible, but it forces users to build `ColumnValue`s manually. The ergonomic layer should be typed and should reuse the same `#[derive(SoftDeleteFields)]` struct that already defines the policy columns.
+
+Target shape:
+
+```rust
+use chrono::{DateTime, Utc};
+use mssql_orm::prelude::*;
+
+#[derive(SoftDeleteFields)]
+struct SoftDelete {
+    #[orm(deleted_at)]
+    deleted_at: DateTime<Utc>,
+
+    #[orm(deleted_by)]
+    #[orm(nullable)]
+    deleted_by: Option<String>,
+}
+
+let db = db.with_soft_delete_values(SoftDelete {
+    deleted_at: Utc::now(),
+    deleted_by: Some(current_user_id),
+});
+```
+
+This avoids a separate predefined `SoftDeleteValues` struct. The user's policy struct is the runtime value shape. If an application only wants one column, it declares only one column:
+
+```rust
+#[derive(SoftDeleteFields)]
+struct SoftDelete {
+    #[orm(is_deleted)]
+    #[orm(column = "deleted")]
+    deleted: bool,
+}
+
+let db = db.with_soft_delete_values(SoftDelete { deleted: true });
+```
+
+The semantic markers are explicit metadata, not name inference:
+
+- `#[orm(deleted_at)]` marks the timestamp column used when a row is logically deleted.
+- `#[orm(deleted_by)]` marks the actor column.
+- `#[orm(is_deleted)]` marks a boolean flag column.
+- `#[orm(column = "...")]` keeps working when the physical column name differs from the Rust field.
+
+The derive should generate a runtime conversion trait, for example:
+
+```rust
+pub trait SoftDeleteValues {
+    fn soft_delete_values(&self) -> Vec<ColumnValue>;
+}
+```
+
+`DbContext` / `SharedConnection` can then expose a typed helper:
+
+```rust
+fn with_soft_delete_values<V: SoftDeleteValues>(&self, values: V) -> Self;
+```
+
+Internally this helper should convert the typed struct into the existing low-level `SoftDeleteRequestValues` or provider path. It must not replace `SoftDeleteProvider`, and it must not move delete semantics into `core`, `query`, `sqlserver`, or `tiberius`.
+
+Design rules for the future implementation:
+
+- The user selects columns by declaring fields in the `SoftDeleteFields` struct.
+- The user selects semantic roles through explicit attributes, not by column-name guessing.
+- No role is mandatory: `deleted_at`, `deleted_by`, and `is_deleted` are all optional.
+- Runtime values are supplied only for the fields present in the value struct.
+- The low-level `SoftDeleteProvider` and `SoftDeleteRequestValues` remain available as escape hatches.
+- Existing precedence and duplicate validation rules must remain deterministic.
+
 ## Tenant
 
 Tenant is a security feature, not just a schema convenience. It is opt-in per entity and fail-closed.
@@ -324,3 +395,4 @@ Coverage includes:
 - Generated entity column symbols for policy-only columns.
 - Automatic policy filters over all manually joined entities.
 - Predefined global tenant conventions without a user-defined tenant context.
+- Implementation of the typed `with_soft_delete_values(SoftDelete { ... })` convenience API.
