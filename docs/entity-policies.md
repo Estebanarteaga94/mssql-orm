@@ -417,10 +417,6 @@ Update integration preserves:
 - deterministic handling inside transactions;
 - compatibility with `Changeset`, Active Record, `save_changes()`, tenant filters, rowversion predicates, and soft-delete delete semantics.
 
-The remaining backlog tracks the rest of Etapa 19:
-
-- validate with focused unit tests, public `trybuild` coverage, runtime tests, and documentation.
-
 Transaction contexts are created from the same `SharedConnection`, so configured audit provider and request values are inherited by the transaction context. Insert and update writes already consume that inherited runtime state.
 
 Runtime audit must not auto-fill by matching names such as `created_at` or `updated_by`. Write integration must use `AuditEntity::audit_policy()` to know which flattened `EntityMetadata.columns` entries are audit-owned.
@@ -451,7 +447,8 @@ Coverage includes:
 - compile-fail fixtures for invalid audit, soft-delete, and tenant shapes;
 - metadata tests for column order, defaults, nullability, insertable/updatable flags, and collisions;
 - migration tests proving policy columns enter snapshots, diffs, and DDL as normal columns;
-- runtime tests for soft-delete behavior and audit write normalization;
+- runtime tests for soft-delete behavior and audit write normalization, including insert/update compiled SQL coverage for `AuditProvider` and `AuditRequestValues`;
+- public `trybuild` coverage for the low-level `AuditProvider`, `AuditRequestValues`, `AuditContext`, derived `DbContext` helpers, and `SharedConnection` helper surface;
 - runtime and compiled-SQL tests for tenant filters and insert validation.
 
 ## Deferred Work

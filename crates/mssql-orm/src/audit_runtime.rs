@@ -434,6 +434,25 @@ mod tests {
     }
 
     #[test]
+    fn apply_audit_values_rejects_null_for_non_nullable_audit_column() {
+        let request_values =
+            AuditRequestValues::new(vec![ColumnValue::new("created_by", SqlValue::Null)]);
+
+        let error = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Insert,
+            Vec::new(),
+            None,
+            Some(&request_values),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("audit column `created_by` is not nullable")
+        );
+    }
+
+    #[test]
     fn apply_audit_values_completes_only_missing_updatable_audit_columns() {
         struct Provider;
 

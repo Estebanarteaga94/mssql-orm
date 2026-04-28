@@ -794,6 +794,27 @@ impl<E: Entity> DbSet<E> {
         Ok(InsertQuery::for_entity::<E, _>(&RawInsertable(values)))
     }
 
+    #[cfg(test)]
+    fn insert_query_values_with_runtime_for_test(
+        &self,
+        values: Vec<mssql_orm_core::ColumnValue>,
+        audit_provider: Option<&dyn AuditProvider>,
+        audit_request_values: Option<&AuditRequestValues>,
+    ) -> Result<InsertQuery, OrmError>
+    where
+        E: AuditEntity + TenantScopedEntity,
+    {
+        let active_tenant = self.active_tenant();
+        let values = apply_audit_values::<E>(
+            AuditOperation::Insert,
+            values,
+            audit_provider,
+            audit_request_values,
+        )?;
+        let values = self.tenant_insert_values(values, active_tenant.as_ref())?;
+        Ok(InsertQuery::for_entity::<E, _>(&RawInsertable(values)))
+    }
+
     fn tenant_insert_values(
         &self,
         mut values: Vec<mssql_orm_core::ColumnValue>,
@@ -1221,8 +1242,8 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        AuditEntity, AuditOperation, AuditProvider, SoftDeleteContext, SoftDeleteEntity,
-        SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
+        AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, SoftDeleteContext,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
@@ -2604,6 +2625,57 @@ mod tests {
                 SqlValue::String("audited row".to_string()),
                 SqlValue::String("audit-provider".to_string()),
                 SqlValue::I64(7),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_insert_applies_audit_request_values_before_provider_values() {
+        struct InsertAuditProvider;
+
+        impl AuditProvider for InsertAuditProvider {
+            fn values(
+                &self,
+                context: crate::AuditContext<'_>,
+            ) -> Result<Vec<ColumnValue>, OrmError> {
+                assert_eq!(context.entity.table, "audited_write_entities");
+                assert_eq!(context.operation, AuditOperation::Insert);
+                assert!(context.request_values.is_some());
+
+                Ok(vec![ColumnValue::new(
+                    "updated_by",
+                    SqlValue::String("provider".to_string()),
+                )])
+            }
+        }
+
+        let dbset = DbSet::<AuditedWriteEntity>::disconnected();
+        let request_values = AuditRequestValues::new(vec![ColumnValue::new(
+            "updated_by",
+            SqlValue::String("request".to_string()),
+        )]);
+
+        let query = dbset
+            .insert_query_values_with_runtime_for_test(
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("audited insert".to_string()),
+                )],
+                Some(&InsertAuditProvider),
+                Some(&request_values),
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_insert(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "INSERT INTO [dbo].[audited_write_entities] ([name], [updated_by]) OUTPUT INSERTED.* VALUES (@P1, @P2)"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("audited insert".to_string()),
+                SqlValue::String("request".to_string()),
             ]
         );
     }
