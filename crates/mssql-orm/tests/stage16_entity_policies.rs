@@ -100,6 +100,7 @@ impl Row for TestRow {
 #[test]
 fn audit_policy_columns_are_expanded_into_entity_metadata() {
     let metadata = AuditedEntity::metadata();
+    let audit = AuditedEntity::audit_policy().expect("audit policy");
 
     assert_eq!(metadata.rust_name, "AuditedEntity");
     assert_eq!(metadata.schema, "audit");
@@ -117,6 +118,12 @@ fn audit_policy_columns_are_expanded_into_entity_metadata() {
     assert_eq!(metadata.columns[4].column_name, "created_by_user_id");
     assert_eq!(metadata.columns[5].column_name, "updated_at");
     assert_eq!(metadata.columns[6].column_name, "updated_by");
+    assert_eq!(audit.name, "audit");
+    assert_eq!(audit.columns.len(), 4);
+    assert_eq!(audit.columns[0].column_name, "created_at");
+    assert_eq!(audit.columns[1].column_name, "created_by_user_id");
+    assert_eq!(audit.columns[2].column_name, "updated_at");
+    assert_eq!(audit.columns[3].column_name, "updated_by");
 
     let id = metadata
         .column("id")
@@ -187,6 +194,11 @@ fn audit_policy_columns_are_expanded_into_entity_metadata() {
         .expect("audit column should be present");
     assert!(updated_by.nullable);
     assert_eq!(updated_by.max_length, Some(120));
+}
+
+#[test]
+fn entity_without_audit_exposes_empty_audit_runtime_contract() {
+    assert_eq!(SoftDeletedEntity::audit_policy(), None);
 }
 
 #[test]

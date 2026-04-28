@@ -43,11 +43,16 @@ fn main() {
     );
 
     let metadata = AuditedEntity::metadata();
+    let audit = AuditedEntity::audit_policy().unwrap();
     assert_eq!(metadata.schema, "audit");
     assert_eq!(metadata.table, "audited_entities");
     assert_eq!(metadata.columns.len(), 4);
     assert!(metadata.column("created_at").is_some());
     assert!(metadata.column("updated_by").is_some());
+    assert_eq!(audit.name, "audit");
+    assert_eq!(audit.columns.len(), 2);
+    assert_eq!(audit.columns[0].column_name, "created_at");
+    assert_eq!(audit.columns[1].column_name, "updated_by");
 
     let row = PublicRow {
         values: BTreeMap::from([

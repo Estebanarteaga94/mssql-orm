@@ -883,6 +883,26 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             );
         }
     });
+    let audit_contract_impl = entity_audit.as_ref().map_or_else(
+        || {
+            quote! {
+                impl ::mssql_orm::AuditEntity for #ident {
+                    fn audit_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        None
+                    }
+                }
+            }
+        },
+        |audit| {
+            quote! {
+                impl ::mssql_orm::AuditEntity for #ident {
+                    fn audit_policy() -> Option<::mssql_orm::core::EntityPolicyMetadata> {
+                        Some(<#audit as ::mssql_orm::core::EntityPolicy>::metadata())
+                    }
+                }
+            }
+        },
+    );
     let soft_delete_contract_impl = entity_soft_delete.as_ref().map_or_else(
         || {
             quote! {
@@ -1041,6 +1061,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             }
         }
 
+        #audit_contract_impl
         #soft_delete_contract_impl
         #tenant_contract_impl
     })

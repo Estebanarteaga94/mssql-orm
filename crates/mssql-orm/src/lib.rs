@@ -59,6 +59,10 @@ pub trait MigrationModelSource {
     fn entity_metadata() -> &'static [&'static EntityMetadata];
 }
 
+pub trait AuditEntity: core::Entity {
+    fn audit_policy() -> Option<core::EntityPolicyMetadata>;
+}
+
 pub trait SoftDeleteEntity: core::Entity {
     fn soft_delete_policy() -> Option<core::EntityPolicyMetadata>;
 }
@@ -86,7 +90,7 @@ pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
-        ActiveRecord, ActiveTenant, DbContext, DbContextEntitySet, DbSet, DbSetQuery,
+        ActiveRecord, ActiveTenant, AuditEntity, DbContext, DbContextEntitySet, DbSet, DbSetQuery,
         EntityColumnOrderExt, EntityColumnPredicateExt, EntityState, MigrationModelSource,
         MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
         MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
@@ -116,15 +120,16 @@ pub mod prelude {
 #[cfg(test)]
 mod tests {
     use super::prelude::{
-        ActiveRecord, ActiveTenant, AuditContext, AuditFields, AuditOperation, AuditProvider,
-        AuditRequestValues, Changeset, ColumnValue, DbContext, DbContextEntitySet, DbSet, Entity,
-        EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt, EntityMetadata, EntityPolicy,
-        EntityPolicyMetadata, EntityState, IdentityMetadata, Insertable, MssqlConnectionConfig,
-        MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
-        MssqlTimeoutOptions, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
-        QueryHint, RawCommand, RawParam, RawParams, RawQuery, SelectProjection, SelectProjections,
-        SharedConnection, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
-        SqlValue, TenantContext, TenantScopedEntity, Tracked,
+        ActiveRecord, ActiveTenant, AuditContext, AuditEntity, AuditFields, AuditOperation,
+        AuditProvider, AuditRequestValues, Changeset, ColumnValue, DbContext, DbContextEntitySet,
+        DbSet, Entity, EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt,
+        EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata,
+        Insertable, MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend,
+        MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest,
+        PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam, RawParams,
+        RawQuery, SelectProjection, SelectProjections, SharedConnection, SoftDeleteEntity,
+        SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -237,6 +242,28 @@ mod tests {
         assert_eq!(
             PublicPolicy::metadata(),
             EntityPolicyMetadata::new("public_policy", &[])
+        );
+    }
+
+    #[test]
+    fn exposes_audit_entity_contract_in_prelude() {
+        struct PublicAuditEntity;
+
+        impl Entity for PublicAuditEntity {
+            fn metadata() -> &'static EntityMetadata {
+                &PUBLIC_ENTITY_METADATA
+            }
+        }
+
+        impl AuditEntity for PublicAuditEntity {
+            fn audit_policy() -> Option<EntityPolicyMetadata> {
+                Some(EntityPolicyMetadata::new("audit", &[]))
+            }
+        }
+
+        assert_eq!(
+            PublicAuditEntity::audit_policy(),
+            Some(EntityPolicyMetadata::new("audit", &[]))
         );
     }
 
