@@ -126,7 +126,7 @@ Pending verification: historical validation of `todo-app` against real SQL Serve
 - SQL Server only.
 - No navigation properties, lazy loading, or automatic eager loading.
 - Public CRUD, Active Record, and tracking are still focused on simple primary keys.
-- `AuditProvider` has a public runtime contract, audit-owned column metadata, and context transport, but it is not wired into insert/update paths yet.
+- `AuditProvider` has a public runtime contract, audit-owned column metadata, context transport, and insert auto-fill. Update auto-fill is not wired yet.
 - `raw<T>()` and `raw_exec()` do not automatically apply ORM `tenant` or `soft_delete` filters.
 - `migration.rs` is deferred; the migration MVP uses `up.sql`, `down.sql`, and `model_snapshot.json`.
 - `db.transaction(...)` is blocked on contexts created from pools until pooled transactions pin one physical connection for the full closure.

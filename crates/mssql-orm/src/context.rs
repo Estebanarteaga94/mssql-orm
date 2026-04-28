@@ -1,8 +1,9 @@
+use crate::audit_runtime::apply_audit_values;
 use crate::dbset_query::{DbSetQuery, tenant_value_matches_column_type};
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
-use crate::{AuditProvider, AuditRequestValues};
+use crate::{AuditEntity, AuditOperation, AuditProvider, AuditRequestValues};
 use crate::{
     RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked,
     TrackingRegistry, TrackingRegistryHandle,
@@ -445,7 +446,7 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_added(&self) -> Result<usize, OrmError>
     where
-        E: Clone + EntityPersist + FromRow + Send + TenantScopedEntity,
+        E: AuditEntity + Clone + EntityPersist + FromRow + Send + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -542,7 +543,7 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
     where
-        E: FromRow + Send + TenantScopedEntity,
+        E: AuditEntity + FromRow + Send + TenantScopedEntity,
         I: Insertable<E>,
     {
         let compiled = SqlServerCompiler::compile_insert(&self.insert_query(&insertable)?)?;
@@ -652,7 +653,7 @@ impl<E: Entity> DbSet<E> {
         values: Vec<mssql_orm_core::ColumnValue>,
     ) -> Result<E, OrmError>
     where
-        E: FromRow + Send + TenantScopedEntity,
+        E: AuditEntity + FromRow + Send + TenantScopedEntity,
     {
         let compiled = SqlServerCompiler::compile_insert(&self.insert_query_values(values)?)?;
         let shared_connection = self.require_connection()?;
@@ -664,7 +665,7 @@ impl<E: Entity> DbSet<E> {
 
     pub(crate) async fn insert_entity(&self, entity: &E) -> Result<E, OrmError>
     where
-        E: EntityPersist + FromRow + Send + TenantScopedEntity,
+        E: AuditEntity + EntityPersist + FromRow + Send + TenantScopedEntity,
     {
         self.insert_entity_values(entity.insert_values()).await
     }
@@ -760,7 +761,7 @@ impl<E: Entity> DbSet<E> {
 
     fn insert_query<I>(&self, insertable: &I) -> Result<InsertQuery, OrmError>
     where
-        E: TenantScopedEntity,
+        E: AuditEntity + TenantScopedEntity,
         I: Insertable<E>,
     {
         self.insert_query_values(insertable.values())
@@ -771,9 +772,23 @@ impl<E: Entity> DbSet<E> {
         values: Vec<mssql_orm_core::ColumnValue>,
     ) -> Result<InsertQuery, OrmError>
     where
-        E: TenantScopedEntity,
+        E: AuditEntity + TenantScopedEntity,
     {
         let active_tenant = self.active_tenant();
+        let audit_provider = self
+            .connection
+            .as_ref()
+            .and_then(SharedConnection::audit_provider);
+        let audit_request_values = self
+            .connection
+            .as_ref()
+            .and_then(SharedConnection::audit_request_values);
+        let values = apply_audit_values::<E>(
+            AuditOperation::Insert,
+            values,
+            audit_provider.as_deref(),
+            audit_request_values.as_deref(),
+        )?;
         let values = self.tenant_insert_values(values, active_tenant.as_ref())?;
         Ok(InsertQuery::for_entity::<E, _>(&RawInsertable(values)))
     }
@@ -1167,7 +1182,7 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
+        AuditEntity, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
         TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
@@ -1712,14 +1727,32 @@ mod tests {
         }
     }
 
+    impl AuditEntity for TestEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl SoftDeleteEntity for CompositeKeyEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
         }
     }
 
+    impl AuditEntity for CompositeKeyEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl SoftDeleteEntity for VersionedEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl AuditEntity for VersionedEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
             None
         }
     }
@@ -1733,6 +1766,12 @@ mod tests {
         }
     }
 
+    impl AuditEntity for TenantWriteEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl SoftDeleteEntity for SoftDeleteEntityUnderTest {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             Some(EntityPolicyMetadata::new(
@@ -1742,12 +1781,24 @@ mod tests {
         }
     }
 
+    impl AuditEntity for SoftDeleteEntityUnderTest {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl SoftDeleteEntity for SoftDeleteVersionedEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             Some(EntityPolicyMetadata::new(
                 "soft_delete",
                 &SOFT_DELETE_POLICY_COLUMNS,
             ))
+        }
+    }
+
+    impl AuditEntity for SoftDeleteVersionedEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
         }
     }
 

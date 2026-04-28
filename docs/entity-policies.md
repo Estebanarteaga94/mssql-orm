@@ -2,7 +2,7 @@
 
 This document describes the public concept, architectural boundaries, implemented behavior, and deferred work for `Entity Policies` in `mssql-orm`.
 
-The initial MVP implemented audit as metadata/schema through `#[derive(AuditFields)]` and `#[orm(audit = Audit)]`. Later cuts added runtime behavior for `soft_delete`, mandatory tenant filters for `tenant`, and the public runtime contract for `AuditProvider`. Audit metadata ownership, context transport, and insert/update auto-fill remain deferred.
+The initial MVP implemented audit as metadata/schema through `#[derive(AuditFields)]` and `#[orm(audit = Audit)]`. Later cuts added runtime behavior for `soft_delete`, mandatory tenant filters for `tenant`, and the public runtime contract for `AuditProvider`. Audit metadata ownership, context transport, and insert auto-fill are implemented; update auto-fill remains deferred.
 
 See also [Core concepts](core-concepts.md).
 
@@ -81,10 +81,10 @@ The contract exposes a stable name, a static column-name slice for compile-time 
 
 | Policy | Status | Scope |
 | --- | --- | --- |
-| `audit = Audit` | Implemented | Metadata/schema columns only. No runtime auto-fill. |
+| `audit = Audit` | Implemented | Metadata/schema columns, with insert auto-fill through `AuditProvider`. Update auto-fill is deferred. |
 | `soft_delete = SoftDelete` | Implemented | Runtime logical delete, default read visibility, and schema columns through the normal column pipeline. |
 | `tenant = CurrentTenant` | Implemented | Opt-in tenant scope, active tenant runtime state, fail-closed filters on the root entity, and insert fill/validation. |
-| `AuditProvider` | Partial | Public runtime contract, audit-owned entity metadata, and context transport exist. Insert/update auto-fill remains deferred. |
+| `AuditProvider` | Partial | Public runtime contract, audit-owned entity metadata, context transport, and insert auto-fill exist. Update auto-fill remains deferred. |
 | `timestamps` | Deferred | Not implemented as a separate policy. |
 
 ## Audit Fields
@@ -240,7 +240,7 @@ Current limit: automatic tenant filtering applies to the root entity only. Filte
 
 ## Runtime Audit Provider Design
 
-Runtime audit auto-fill remains deferred because it affects insert, update, Active Record, change tracking, request context, and transactions. The first Etapa 19 cut only defines the public runtime contract in `mssql-orm`; it does not wire the provider into persistence.
+Runtime audit auto-fill is being added in Etapa 19 by write path. Inserts are wired; updates remain deferred because they must interact with `updatable`, `rowversion`, `tenant`, `soft_delete`, Active Record, change tracking, request context, and transactions.
 
 The implemented runtime contracts include:
 
@@ -259,17 +259,19 @@ The precedence rule is deterministic and non-overwriting:
 2. `AuditRequestValues` fill columns that are still missing;
 3. `AuditProvider` values fill columns that are still missing after request values.
 
-Duplicates inside a single source are rejected. A lower-precedence source cannot overwrite a higher-precedence value; its value for an already-present column is ignored by the resolver.
+Duplicates inside a single source are rejected. A lower-precedence source cannot overwrite a higher-precedence value; its value for an already-present column is ignored by the resolver. Insert integration applies this rule only to columns declared by `AuditEntity::audit_policy()`; non-audit values returned by request/provider sources are ignored.
 
-The intended direction remains:
+The implemented direction for inserts is:
 
 - `audit = Audit` remains the compile-time source of columns;
 - `AuditProvider` supplies runtime values such as `now`, user id, or request values;
 - mutation happens in the public `mssql-orm` crate over normalized `Vec<ColumnValue>`;
 - `core`, `query`, `sqlserver`, and `tiberius` do not learn request context;
 - values are not inferred globally from column names.
+- `DbSet::insert`, Active Record insert, and `save_changes()` for `Added` converge through the same normalized insert path.
+- runtime values for `AuditOperation::Insert` must target insertable audit columns.
 
-Any future implementation must preserve:
+Update implementation must preserve:
 
 - explicit opt-in through `#[orm(audit = Audit)]`;
 - no silent overwrite of user-provided values without a clear rule;
@@ -278,12 +280,12 @@ Any future implementation must preserve:
 
 The remaining backlog tracks the rest of Etapa 19:
 
-- apply the provider to insert paths and update paths separately;
+- apply the provider to update paths;
 - validate with focused unit tests, public `trybuild` coverage, runtime tests, and documentation.
 
-Transaction contexts are created from the same `SharedConnection`, so configured audit provider and request values are inherited by the transaction context. This only transports runtime state; writes still do not consume it until the insert/update tasks are implemented.
+Transaction contexts are created from the same `SharedConnection`, so configured audit provider and request values are inherited by the transaction context. Insert writes already consume that inherited runtime state.
 
-Runtime audit must not auto-fill by matching names such as `created_at` or `updated_by`. Future write integration must use `AuditEntity::audit_policy()` to know which flattened `EntityMetadata.columns` entries are audit-owned.
+Runtime audit must not auto-fill by matching names such as `created_at` or `updated_by`. Write integration must use `AuditEntity::audit_policy()` to know which flattened `EntityMetadata.columns` entries are audit-owned.
 
 ## Interactions
 
@@ -298,7 +300,7 @@ Policies can coexist, but collisions are rejected:
 
 Runtime behavior is layered:
 
-- audit currently contributes schema only;
+- audit contributes schema and insert-time runtime values when configured;
 - soft delete decides whether delete compiles as `DELETE` or `UPDATE`;
 - tenant decides the mandatory security boundary;
 - rowversion still controls optimistic concurrency.
@@ -316,7 +318,7 @@ Coverage includes:
 
 ## Deferred Work
 
-- `AuditProvider` insert/update auto-fill.
+- `AuditProvider` update auto-fill.
 - `timestamps` as a separate policy or alias.
 - Visible Rust fields for generated audit columns.
 - Generated entity column symbols for policy-only columns.

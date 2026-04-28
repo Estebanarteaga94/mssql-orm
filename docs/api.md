@@ -209,12 +209,13 @@ Implemented behavior:
 - `#[derive(Entity)]` implements `AuditEntity`; `audit_policy()` returns the audit-owned columns for audited entities and `None` for entities without `audit`.
 - The runtime `AuditProvider` contract exists in the public crate, including operation, request values, context, and precedence rules for resolving `ColumnValue`s.
 - `SharedConnection` and derived `DbContext`s transport `AuditProvider` and `AuditRequestValues`; transaction contexts inherit the same shared runtime.
+- Insert paths consume that runtime: `DbSet::insert`, Active Record insert, and `save_changes()` for `Added` complete missing audit columns declared by `AuditEntity::audit_policy()`.
 - `soft_delete = SoftDelete` changes delete behavior and read visibility for the root entity.
 - `tenant = CurrentTenant` adds fail-closed tenant filtering and tenant insert validation/fill for opt-in entities.
 
 Deferred behavior:
 
-- insert/update auto-fill through `AuditProvider`;
+- update auto-fill through `AuditProvider`;
 - automatic policy filters over manually joined entities;
 - global tenant conventions without a user-defined tenant type.
 

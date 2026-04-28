@@ -1,4 +1,5 @@
-use mssql_orm_core::{ColumnValue, EntityMetadata, OrmError};
+use crate::AuditEntity;
+use mssql_orm_core::{ColumnMetadata, ColumnValue, EntityMetadata, OrmError};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +34,73 @@ pub trait AuditProvider: Send + Sync {
     fn values(&self, context: AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError>;
 }
 
+pub(crate) fn apply_audit_values<E: AuditEntity>(
+    operation: AuditOperation,
+    values: Vec<ColumnValue>,
+    audit_provider: Option<&dyn AuditProvider>,
+    request_values: Option<&AuditRequestValues>,
+) -> Result<Vec<ColumnValue>, OrmError> {
+    validate_no_duplicate_columns("audit values", &values)?;
+
+    let Some(policy) = E::audit_policy() else {
+        return Ok(values);
+    };
+
+    let context = AuditContext {
+        entity: E::metadata(),
+        operation,
+        request_values,
+    };
+    let provider_values = match audit_provider {
+        Some(provider) => {
+            let values = provider.values(context)?;
+            validate_no_duplicate_columns("audit provider values", &values)?;
+            values
+        }
+        None => Vec::new(),
+    };
+
+    if let Some(request_values) = request_values {
+        validate_no_duplicate_columns("audit request values", request_values.values())?;
+    }
+
+    let mut resolved = values;
+    let mut seen = resolved
+        .iter()
+        .map(|value| value.column_name)
+        .collect::<BTreeSet<_>>();
+
+    for value in &resolved {
+        if let Some(column) = policy
+            .columns
+            .iter()
+            .find(|column| column.column_name == value.column_name)
+        {
+            validate_audit_column_value(operation, column, &value.value)?;
+        }
+    }
+
+    if let Some(request_values) = request_values {
+        append_missing_audit_values(
+            operation,
+            policy.columns,
+            &mut resolved,
+            &mut seen,
+            request_values.values(),
+        )?;
+    }
+
+    append_missing_audit_values(
+        operation,
+        policy.columns,
+        &mut resolved,
+        &mut seen,
+        &provider_values,
+    )?;
+
+    Ok(resolved)
+}
+
 #[doc(hidden)]
 pub fn resolve_audit_values(
     values: Vec<ColumnValue>,
@@ -59,6 +127,62 @@ pub fn resolve_audit_values(
     }
 
     Ok(resolved)
+}
+
+fn append_missing_audit_values(
+    operation: AuditOperation,
+    columns: &'static [ColumnMetadata],
+    resolved: &mut Vec<ColumnValue>,
+    seen: &mut BTreeSet<&'static str>,
+    values: &[ColumnValue],
+) -> Result<(), OrmError> {
+    for value in values {
+        let Some(column) = columns
+            .iter()
+            .find(|column| column.column_name == value.column_name)
+        else {
+            continue;
+        };
+
+        validate_audit_column_value(operation, column, &value.value)?;
+
+        if seen.insert(value.column_name) {
+            resolved.push(value.clone());
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_audit_column_value(
+    operation: AuditOperation,
+    column: &ColumnMetadata,
+    value: &mssql_orm_core::SqlValue,
+) -> Result<(), OrmError> {
+    match operation {
+        AuditOperation::Insert if !column.insertable => {
+            return Err(OrmError::new(format!(
+                "audit insert column `{}` is not insertable",
+                column.column_name
+            )));
+        }
+        AuditOperation::Update if !column.updatable => {
+            return Err(OrmError::new(format!(
+                "audit update column `{}` is not updatable",
+                column.column_name
+            )));
+        }
+        _ => {}
+    }
+
+    if value.is_null() && !column.nullable {
+        return Err(OrmError::new(format!(
+            "audit column `{}` is not nullable",
+            column.column_name
+        )));
+    }
+
+    Ok(())
 }
 
 fn validate_no_duplicate_columns(label: &str, values: &[ColumnValue]) -> Result<(), OrmError> {
@@ -91,12 +215,16 @@ fn append_missing_values(
 #[cfg(test)]
 mod tests {
     use super::{
-        AuditContext, AuditOperation, AuditProvider, AuditRequestValues, resolve_audit_values,
+        AuditContext, AuditOperation, AuditProvider, AuditRequestValues, apply_audit_values,
+        resolve_audit_values,
     };
+    use crate::AuditEntity;
     use mssql_orm_core::{
-        ColumnMetadata, ColumnValue, EntityMetadata, OrmError, PrimaryKeyMetadata, SqlServerType,
-        SqlValue,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, OrmError,
+        PrimaryKeyMetadata, SqlServerType, SqlValue,
     };
+
+    struct TestAuditedEntity;
 
     static TEST_ENTITY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
         rust_field: "id",
@@ -127,6 +255,72 @@ mod tests {
         foreign_keys: &[],
     };
 
+    static TEST_AUDIT_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "created_at",
+            column_name: "created_at",
+            renamed_from: None,
+            sql_type: SqlServerType::DateTime2,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: Some("SYSUTCDATETIME()"),
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "created_by",
+            column_name: "created_by",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "updated_by",
+            column_name: "updated_by",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: true,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    impl Entity for TestAuditedEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &TEST_ENTITY_METADATA
+        }
+    }
+
+    impl AuditEntity for TestAuditedEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new("audit", &TEST_AUDIT_COLUMNS))
+        }
+    }
+
     struct FixedAuditProvider;
 
     impl AuditProvider for FixedAuditProvider {
@@ -154,6 +348,89 @@ mod tests {
             operation: AuditOperation::Insert,
             request_values,
         }
+    }
+
+    #[test]
+    fn apply_audit_values_completes_only_missing_insertable_audit_columns() {
+        let request_values = AuditRequestValues::new(vec![
+            ColumnValue::new("created_by", SqlValue::I64(7)),
+            ColumnValue::new(
+                "ignored",
+                SqlValue::String("not an audit column".to_string()),
+            ),
+        ]);
+
+        struct Provider;
+
+        impl AuditProvider for Provider {
+            fn values(&self, _context: AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError> {
+                Ok(vec![
+                    ColumnValue::new("created_by", SqlValue::I64(9)),
+                    ColumnValue::new("updated_by", SqlValue::String("provider".to_string())),
+                    ColumnValue::new("other", SqlValue::String("not an audit column".to_string())),
+                ])
+            }
+        }
+
+        let values = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Insert,
+            vec![ColumnValue::new(
+                "name",
+                SqlValue::String("existing".to_string()),
+            )],
+            Some(&Provider),
+            Some(&request_values),
+        )
+        .expect("audit insert values should resolve");
+
+        assert_eq!(
+            values,
+            vec![
+                ColumnValue::new("name", SqlValue::String("existing".to_string())),
+                ColumnValue::new("created_by", SqlValue::I64(7)),
+                ColumnValue::new("updated_by", SqlValue::String("provider".to_string())),
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_audit_values_rejects_duplicate_insert_columns() {
+        let error = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Insert,
+            vec![
+                ColumnValue::new("created_by", SqlValue::I64(7)),
+                ColumnValue::new("created_by", SqlValue::I64(8)),
+            ],
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("duplicate column `created_by` in audit values")
+        );
+    }
+
+    #[test]
+    fn apply_audit_values_rejects_non_insertable_audit_column() {
+        let request_values = AuditRequestValues::new(vec![ColumnValue::new(
+            "created_at",
+            SqlValue::String("runtime".to_string()),
+        )]);
+
+        let error = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Insert,
+            Vec::new(),
+            None,
+            Some(&request_values),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("audit insert column `created_at` is not insertable")
+        );
     }
 
     #[test]
