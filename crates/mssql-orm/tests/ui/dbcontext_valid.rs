@@ -27,11 +27,17 @@ fn main() {
     let _connect_with_config = AppDbContext::connect_with_config;
     let _from_shared = AppDbContext::from_shared_connection;
     let _from_connection = AppDbContext::from_connection;
+    let _with_audit_provider = AppDbContext::with_audit_provider;
+    let _with_audit_request_values = AppDbContext::with_audit_request_values;
+    let _clear_audit_request_values = AppDbContext::clear_audit_request_values;
     let _with_soft_delete_provider = AppDbContext::with_soft_delete_provider;
     let _with_soft_delete_request_values = AppDbContext::with_soft_delete_request_values;
     let _clear_soft_delete_request_values = AppDbContext::clear_soft_delete_request_values;
     let _with_tenant = AppDbContext::with_tenant::<CurrentTenant>;
     let _clear_tenant = AppDbContext::clear_tenant;
+    let _shared_with_audit_provider = SharedConnection::with_audit_provider;
+    let _shared_with_audit_request_values = SharedConnection::with_audit_request_values;
+    let _shared_clear_audit_request_values = SharedConnection::clear_audit_request_values;
     let _shared_with_tenant = SharedConnection::with_tenant::<CurrentTenant>;
     let _shared_clear_tenant = SharedConnection::clear_tenant;
     let _db_set: fn(&AppDbContext) -> &DbSet<User> =

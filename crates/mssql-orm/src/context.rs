@@ -2,6 +2,7 @@ use crate::dbset_query::{DbSetQuery, tenant_value_matches_column_type};
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
+use crate::{AuditProvider, AuditRequestValues};
 use crate::{
     RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked,
     TrackingRegistry, TrackingRegistryHandle,
@@ -53,6 +54,8 @@ enum SharedConnectionInner {
 
 #[derive(Clone, Default)]
 struct SharedConnectionRuntime {
+    audit_provider: Option<Arc<dyn AuditProvider>>,
+    audit_request_values: Option<Arc<AuditRequestValues>>,
     soft_delete_provider: Option<Arc<dyn SoftDeleteProvider>>,
     soft_delete_request_values: Option<Arc<SoftDeleteRequestValues>>,
     active_tenant: Option<ActiveTenant>,
@@ -89,10 +92,51 @@ impl SharedConnection {
         }
     }
 
+    pub fn with_audit_provider(&self, provider: Arc<dyn AuditProvider>) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: Some(provider),
+                audit_request_values: self.runtime.audit_request_values.clone(),
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: self.runtime.active_tenant.clone(),
+            }),
+        }
+    }
+
+    pub fn with_audit_request_values(&self, request_values: AuditRequestValues) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: Some(Arc::new(request_values)),
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: self.runtime.active_tenant.clone(),
+            }),
+        }
+    }
+
+    pub fn clear_audit_request_values(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+            runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: None,
+                soft_delete_provider: self.runtime.soft_delete_provider.clone(),
+                soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
+                active_tenant: self.runtime.active_tenant.clone(),
+            }),
+        }
+    }
+
     pub fn with_soft_delete_provider(&self, provider: Arc<dyn SoftDeleteProvider>) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
             runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: self.runtime.audit_request_values.clone(),
                 soft_delete_provider: Some(provider),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: self.runtime.active_tenant.clone(),
@@ -104,6 +148,8 @@ impl SharedConnection {
         Self {
             inner: Arc::clone(&self.inner),
             runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: self.runtime.audit_request_values.clone(),
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: Some(Arc::new(request_values)),
                 active_tenant: self.runtime.active_tenant.clone(),
@@ -115,6 +161,8 @@ impl SharedConnection {
         Self {
             inner: Arc::clone(&self.inner),
             runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: self.runtime.audit_request_values.clone(),
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: None,
                 active_tenant: self.runtime.active_tenant.clone(),
@@ -126,6 +174,8 @@ impl SharedConnection {
         Self {
             inner: Arc::clone(&self.inner),
             runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: self.runtime.audit_request_values.clone(),
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: Some(ActiveTenant::from_context(&tenant)),
@@ -137,6 +187,8 @@ impl SharedConnection {
         Self {
             inner: Arc::clone(&self.inner),
             runtime: Arc::new(SharedConnectionRuntime {
+                audit_provider: self.runtime.audit_provider.clone(),
+                audit_request_values: self.runtime.audit_request_values.clone(),
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: None,
@@ -162,6 +214,16 @@ impl SharedConnection {
             #[cfg(feature = "pool-bb8")]
             SharedConnectionInner::Pool(_) => SharedConnectionKind::Pool,
         }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn audit_provider(&self) -> Option<Arc<dyn AuditProvider>> {
+        self.runtime.audit_provider.clone()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn audit_request_values(&self) -> Option<Arc<AuditRequestValues>> {
+        self.runtime.audit_request_values.clone()
     }
 
     pub(crate) fn soft_delete_provider(&self) -> Option<Arc<dyn SoftDeleteProvider>> {

@@ -1259,6 +1259,39 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::from_shared_connection(connection)
             }
 
+            pub fn with_audit_provider(
+                &self,
+                provider: ::std::sync::Arc<dyn ::mssql_orm::AuditProvider>,
+            ) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_audit_provider(provider);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
+            pub fn with_audit_request_values(
+                &self,
+                request_values: ::mssql_orm::AuditRequestValues,
+            ) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_audit_request_values(request_values);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
+            pub fn clear_audit_request_values(&self) -> Self {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .clear_audit_request_values();
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
             pub fn with_soft_delete_provider(
                 &self,
                 provider: ::std::sync::Arc<dyn ::mssql_orm::SoftDeleteProvider>,

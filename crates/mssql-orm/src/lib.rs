@@ -451,6 +451,16 @@ mod tests {
     }
 
     #[test]
+    fn exposes_dbcontext_audit_runtime_helpers() {
+        let _with_audit_provider = DerivedDbContext::with_audit_provider;
+        let _with_audit_request_values = DerivedDbContext::with_audit_request_values;
+        let _clear_audit_request_values = DerivedDbContext::clear_audit_request_values;
+        let _shared_with_audit_provider = SharedConnection::with_audit_provider;
+        let _shared_with_audit_request_values = SharedConnection::with_audit_request_values;
+        let _shared_clear_audit_request_values = SharedConnection::clear_audit_request_values;
+    }
+
+    #[test]
     fn exposes_dbcontext_tenant_runtime_helpers() {
         let _with_tenant = DerivedDbContext::with_tenant::<PublicTenant>;
         let _clear_tenant = DerivedDbContext::clear_tenant;
