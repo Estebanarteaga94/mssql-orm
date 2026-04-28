@@ -1,0 +1,5 @@
+error: atributo orm no soportado en campos de FromRow
+ --> tests/ui/from_row_unsupported_attr.rs:5:11
+  |
+5 |     #[orm(length = 120)]
+  |           ^^^^^^

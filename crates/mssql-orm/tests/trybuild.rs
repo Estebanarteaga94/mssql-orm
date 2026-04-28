@@ -36,6 +36,9 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/entity_rowversion_invalid_type.rs");
     tests.compile_fail("tests/ui/insertable_missing_entity.rs");
     tests.compile_fail("tests/ui/changeset_field_not_option.rs");
+    tests.compile_fail("tests/ui/from_row_tuple_struct.rs");
+    tests.compile_fail("tests/ui/from_row_unit_struct.rs");
+    tests.compile_fail("tests/ui/from_row_unsupported_attr.rs");
     tests.compile_fail("tests/ui/dbcontext_invalid_field_type.rs");
     tests.compile_fail("tests/ui/dbcontext_duplicate_entity_set.rs");
     tests.compile_fail("tests/ui/audit_fields_tuple_struct.rs");
