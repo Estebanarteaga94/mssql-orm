@@ -176,8 +176,10 @@ Raw SQL is exposed through:
 - `RawCommand`
 - `RawParam`
 - `RawParams`
+- `QueryHint`
 
 Raw SQL uses `@P1..@Pn` parameters and materializes query rows through `FromRow`. It does not automatically apply tenant or soft-delete filters.
+`RawQuery<T>::query_hint(QueryHint::Recompile)` can append SQL Server `OPTION (RECOMPILE)` for parametrized raw queries that need per-execution plan compilation.
 
 ## Entity Policies
 

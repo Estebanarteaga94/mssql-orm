@@ -77,6 +77,7 @@ async fn public_raw_sql_api_roundtrips_against_real_sql_server() -> Result<(), O
                  WHERE active = @P1 ORDER BY id ASC"
             ))
             .param(true)
+            .query_hint(QueryHint::Recompile)
             .all()
             .await?;
 

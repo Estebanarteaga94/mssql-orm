@@ -41,6 +41,25 @@ let result = db
 
 `RawQuery<T>` materializes rows with `FromRow`. `RawCommand` returns `ExecuteResult`.
 
+## Query Hints
+
+`RawQuery<T>` supports SQL Server query hints through `query_hint(...)`.
+
+The first supported hint is `QueryHint::Recompile`, which appends `OPTION (RECOMPILE)` to the raw SQL before execution:
+
+```rust
+let rows = db
+    .raw::<UserDto>("SELECT id, email FROM dbo.users WHERE id = @P1")
+    .param(7_i64)
+    .query_hint(QueryHint::Recompile)
+    .all()
+    .await?;
+```
+
+Use this when a parametrized raw query gets a poor cached or generic SQL Server plan and recompiling per execution is an acceptable tradeoff. The parameter rules remain unchanged: values are still bound through `@P1..@Pn`.
+
+Do not write `OPTION (...)` manually in the SQL when using `query_hint(...)`. The ORM rejects that combination before execution to avoid duplicating or mixing API-managed hints with hand-written hints.
+
 ## DTOs
 
 ```rust
@@ -124,6 +143,7 @@ Raw SQL can run inside `db.transaction(...)` when using the transaction context 
 - No public streaming API; `all()` materializes `Vec<T>`.
 - No automatic application of `tenant`, `soft_delete`, or other policies.
 - No automatic integration with migrations, `DbSetQuery`, or query-builder projections.
+- Query hints are currently available only on `RawQuery<T>`, not on `RawCommand` or the public query builder.
 
 ## Validation
 

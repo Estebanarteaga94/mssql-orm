@@ -43,7 +43,7 @@ pub use predicate_composition::PredicateCompositionExt;
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
 pub use query_projection::SelectProjections;
-pub use raw_sql::{RawCommand, RawParam, RawParams, RawQuery};
+pub use raw_sql::{QueryHint, RawCommand, RawParam, RawParams, RawQuery};
 pub use soft_delete_runtime::{
     SoftDeleteContext, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
 };
@@ -87,7 +87,7 @@ pub mod prelude {
         MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
         MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
         MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
-        PageRequest, PredicateCompositionExt, RawCommand, RawParam, RawParams, RawQuery,
+        PageRequest, PredicateCompositionExt, QueryHint, RawCommand, RawParam, RawParams, RawQuery,
         SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
         SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, TenantContext,
         TenantScopedEntity, Tracked, model_snapshot_from_source, model_snapshot_json_from_source,
@@ -114,9 +114,9 @@ mod tests {
         EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
         IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
         MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
-        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, RawCommand, RawParam, RawParams,
-        RawQuery, SelectProjection, SelectProjections, SharedConnection, SoftDeleteEntity,
-        SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam,
+        RawParams, RawQuery, SelectProjection, SelectProjections, SharedConnection,
+        SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
         TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
@@ -195,6 +195,7 @@ mod tests {
         let raw_query_type = core::any::type_name::<RawQuery<PublicEntity>>();
         let raw_command_type = core::any::type_name::<RawCommand>();
         let projection_type = core::any::type_name::<SelectProjection>();
+        let query_hint = QueryHint::Recompile;
         fn assert_raw_param<T: RawParam>() {}
         fn assert_raw_params<T: RawParams>() {}
         fn assert_select_projections<T: SelectProjections>() {}
@@ -206,6 +207,7 @@ mod tests {
         assert_raw_param::<SqlValue>();
         assert_raw_params::<(bool, i64)>();
         assert_select_projections::<(EntityColumn<PublicEntity>,)>();
+        assert_eq!(query_hint, QueryHint::Recompile);
         assert_eq!(error.message(), "public-api");
         assert_eq!(
             ColumnValue::new("email", SqlValue::String("ana@example.com".to_string())),

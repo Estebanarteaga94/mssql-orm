@@ -5,6 +5,19 @@ use mssql_orm_tiberius::ExecuteResult;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum QueryHint {
+    Recompile,
+}
+
+impl QueryHint {
+    const fn sql(self) -> &'static str {
+        match self {
+            Self::Recompile => "RECOMPILE",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct RawPlaceholderPlan {
     max_index: usize,
@@ -118,6 +131,7 @@ pub struct RawQuery<T> {
     connection: SharedConnection,
     sql: String,
     params: Vec<SqlValue>,
+    query_hints: BTreeSet<QueryHint>,
     _row: PhantomData<fn() -> T>,
 }
 
@@ -130,6 +144,7 @@ where
             connection,
             sql: sql.into(),
             params: Vec::new(),
+            query_hints: BTreeSet::new(),
             _row: PhantomData,
         }
     }
@@ -150,6 +165,11 @@ where
         self
     }
 
+    pub fn query_hint(mut self, hint: QueryHint) -> Self {
+        self.query_hints.insert(hint);
+        self
+    }
+
     pub async fn all(self) -> Result<Vec<T>, OrmError> {
         let compiled = self.compiled_query()?;
         let mut connection = self.connection.lock().await?;
@@ -163,7 +183,7 @@ where
     }
 
     fn compiled_query(&self) -> Result<CompiledQuery, OrmError> {
-        compiled_raw_query(&self.sql, self.params.clone())
+        compiled_raw_query_with_hints(&self.sql, self.params.clone(), &self.query_hints)
     }
 }
 
@@ -211,8 +231,48 @@ impl RawCommand {
 }
 
 fn compiled_raw_query(sql: &str, params: Vec<SqlValue>) -> Result<CompiledQuery, OrmError> {
+    compiled_raw_query_with_hints(sql, params, &BTreeSet::new())
+}
+
+fn compiled_raw_query_with_hints(
+    sql: &str,
+    params: Vec<SqlValue>,
+    query_hints: &BTreeSet<QueryHint>,
+) -> Result<CompiledQuery, OrmError> {
     validate_raw_sql_parameters(sql, params.len())?;
+
+    let sql = render_raw_sql_with_hints(sql, query_hints)?;
+
     Ok(CompiledQuery::new(sql, params))
+}
+
+fn render_raw_sql_with_hints(
+    sql: &str,
+    query_hints: &BTreeSet<QueryHint>,
+) -> Result<String, OrmError> {
+    if query_hints.is_empty() {
+        return Ok(sql.to_string());
+    }
+
+    if contains_top_level_option_clause(sql) {
+        return Err(OrmError::new(
+            "raw SQL already contains OPTION (...); remove it before using query_hint(...)",
+        ));
+    }
+
+    let mut sql = sql.trim_end().trim_end_matches(';').trim_end().to_string();
+    let hints = query_hints
+        .iter()
+        .copied()
+        .map(QueryHint::sql)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    sql.push_str(" OPTION (");
+    sql.push_str(&hints);
+    sql.push(')');
+
+    Ok(sql)
 }
 
 pub(crate) fn validate_raw_sql_parameters(sql: &str, param_count: usize) -> Result<(), OrmError> {
@@ -271,12 +331,109 @@ fn analyze_placeholders(sql: &str) -> Result<RawPlaceholderPlan, OrmError> {
     Ok(RawPlaceholderPlan { max_index })
 }
 
+fn contains_top_level_option_clause(sql: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let mut index = 0;
+    let mut depth = 0_i32;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' => {
+                index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == b'\'' {
+                        index += 1;
+                        if index < bytes.len() && bytes[index] == b'\'' {
+                            index += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    index += 1;
+                }
+            }
+            b'[' => {
+                index += 1;
+                while index < bytes.len() {
+                    if bytes[index] == b']' {
+                        index += 1;
+                        break;
+                    }
+                    index += 1;
+                }
+            }
+            b'-' if index + 1 < bytes.len() && bytes[index + 1] == b'-' => {
+                index += 2;
+                while index < bytes.len() && !matches!(bytes[index], b'\n' | b'\r') {
+                    index += 1;
+                }
+            }
+            b'/' if index + 1 < bytes.len() && bytes[index + 1] == b'*' => {
+                index += 2;
+                while index + 1 < bytes.len() {
+                    if bytes[index] == b'*' && bytes[index + 1] == b'/' {
+                        index += 2;
+                        break;
+                    }
+                    index += 1;
+                }
+            }
+            b'(' => {
+                depth += 1;
+                index += 1;
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                index += 1;
+            }
+            _ if depth == 0 && starts_with_keyword(sql, index, "OPTION") => {
+                let after_keyword = index + "OPTION".len();
+                let mut cursor = after_keyword;
+                while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+                    cursor += 1;
+                }
+                return cursor < bytes.len() && bytes[cursor] == b'(';
+            }
+            _ => index += 1,
+        }
+    }
+
+    false
+}
+
+fn starts_with_keyword(sql: &str, index: usize, keyword: &str) -> bool {
+    let bytes = sql.as_bytes();
+    let keyword_bytes = keyword.as_bytes();
+
+    if index + keyword_bytes.len() > bytes.len() {
+        return false;
+    }
+
+    if !bytes[index..index + keyword_bytes.len()].eq_ignore_ascii_case(keyword_bytes) {
+        return false;
+    }
+
+    let before_is_boundary = index == 0 || !is_identifier_byte(bytes[index - 1]);
+    let after = index + keyword_bytes.len();
+    let after_is_boundary = after == bytes.len() || !is_identifier_byte(bytes[after]);
+
+    before_is_boundary && after_is_boundary
+}
+
+fn is_identifier_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RawParam, RawParams, compiled_raw_query, validate_raw_sql_parameters};
+    use super::{
+        QueryHint, RawParam, RawParams, compiled_raw_query, compiled_raw_query_with_hints,
+        contains_top_level_option_clause, validate_raw_sql_parameters,
+    };
     use chrono::NaiveDate;
     use mssql_orm_core::SqlValue;
     use rust_decimal::Decimal;
+    use std::collections::BTreeSet;
     use uuid::Uuid;
 
     #[test]
@@ -458,6 +615,61 @@ mod tests {
         .unwrap();
 
         assert_eq!(compiled.params, vec![SqlValue::I64(42)]);
+    }
+
+    #[test]
+    fn compiled_raw_query_appends_recompile_hint_after_parameters() {
+        let hints = BTreeSet::from([QueryHint::Recompile]);
+        let compiled = compiled_raw_query_with_hints(
+            "SELECT * FROM users WHERE owner_id = @P1",
+            vec![SqlValue::I64(42)],
+            &hints,
+        )
+        .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "SELECT * FROM users WHERE owner_id = @P1 OPTION (RECOMPILE)"
+        );
+        assert_eq!(compiled.params, vec![SqlValue::I64(42)]);
+    }
+
+    #[test]
+    fn compiled_raw_query_deduplicates_repeated_query_hints() {
+        let hints = BTreeSet::from([QueryHint::Recompile, QueryHint::Recompile]);
+        let compiled = compiled_raw_query_with_hints("SELECT 1", vec![], &hints).unwrap();
+
+        assert_eq!(compiled.sql, "SELECT 1 OPTION (RECOMPILE)");
+    }
+
+    #[test]
+    fn compiled_raw_query_places_hint_before_trailing_semicolon() {
+        let hints = BTreeSet::from([QueryHint::Recompile]);
+        let compiled = compiled_raw_query_with_hints("SELECT 1;   ", vec![], &hints).unwrap();
+
+        assert_eq!(compiled.sql, "SELECT 1 OPTION (RECOMPILE)");
+    }
+
+    #[test]
+    fn compiled_raw_query_rejects_existing_top_level_option_clause_with_hints() {
+        let hints = BTreeSet::from([QueryHint::Recompile]);
+        let error = compiled_raw_query_with_hints("SELECT 1 OPTION (MAXDOP 1)", vec![], &hints)
+            .unwrap_err();
+
+        assert!(error.message().contains("already contains OPTION"));
+    }
+
+    #[test]
+    fn detects_top_level_option_clause_without_matching_strings_or_nested_queries() {
+        assert!(contains_top_level_option_clause(
+            "SELECT 1 OPTION (RECOMPILE)"
+        ));
+        assert!(!contains_top_level_option_clause(
+            "SELECT 'OPTION (RECOMPILE)' AS text_value"
+        ));
+        assert!(!contains_top_level_option_clause(
+            "SELECT * FROM (SELECT 1 OPTION (RECOMPILE)) AS nested"
+        ));
     }
 
     #[test]
