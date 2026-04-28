@@ -507,7 +507,8 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_modified(&self) -> Result<usize, OrmError>
     where
-        E: Clone
+        E: AuditEntity
+            + Clone
             + EntityPersist
             + EntityPrimaryKey
             + FromRow
@@ -556,13 +557,13 @@ impl<E: Entity> DbSet<E> {
 
     pub async fn update<K, C>(&self, key: K, changeset: C) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+        E: AuditEntity + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
         C: Changeset<E>,
     {
         let key = key.to_sql_value();
         let concurrency_token = changeset.concurrency_token()?;
-        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
+        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value_audited(
             key.clone(),
             changeset.changes(),
             concurrency_token.clone(),
@@ -677,9 +678,9 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+        E: AuditEntity + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
-        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value(
+        let compiled = SqlServerCompiler::compile_update(&self.update_query_sql_value_audited(
             key.clone(),
             changes,
             concurrency_token.clone(),
@@ -706,7 +707,7 @@ impl<E: Entity> DbSet<E> {
         concurrency_token: Option<SqlValue>,
     ) -> Result<Option<E>, OrmError>
     where
-        E: EntityPersist + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+        E: AuditEntity + EntityPersist + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         self.update_entity_values_by_sql_value(key, entity.update_changes(), concurrency_token)
             .await
@@ -884,21 +885,59 @@ impl<E: Entity> DbSet<E> {
         Ok(query)
     }
 
-    fn update_query_sql_value(
+    fn update_query_sql_value_audited(
         &self,
         key: SqlValue,
         changes: Vec<mssql_orm_core::ColumnValue>,
         concurrency_token: Option<SqlValue>,
     ) -> Result<UpdateQuery, OrmError>
     where
-        E: TenantScopedEntity,
+        E: AuditEntity + TenantScopedEntity,
     {
         let active_tenant = self.active_tenant();
-        self.update_query_sql_value_with_active_tenant(
+        let audit_provider = self
+            .connection
+            .as_ref()
+            .and_then(SharedConnection::audit_provider);
+        let audit_request_values = self
+            .connection
+            .as_ref()
+            .and_then(SharedConnection::audit_request_values);
+
+        self.update_query_sql_value_with_audit_runtime(
             key,
             changes,
             concurrency_token,
             active_tenant.as_ref(),
+            audit_provider.as_deref(),
+            audit_request_values.as_deref(),
+        )
+    }
+
+    fn update_query_sql_value_with_audit_runtime(
+        &self,
+        key: SqlValue,
+        changes: Vec<mssql_orm_core::ColumnValue>,
+        concurrency_token: Option<SqlValue>,
+        active_tenant: Option<&ActiveTenant>,
+        audit_provider: Option<&dyn AuditProvider>,
+        audit_request_values: Option<&AuditRequestValues>,
+    ) -> Result<UpdateQuery, OrmError>
+    where
+        E: AuditEntity + TenantScopedEntity,
+    {
+        let changes = apply_audit_values::<E>(
+            AuditOperation::Update,
+            changes,
+            audit_provider,
+            audit_request_values,
+        )?;
+
+        self.update_query_sql_value_with_active_tenant(
+            key,
+            changes,
+            concurrency_token,
+            active_tenant,
         )
     }
 
@@ -1182,8 +1221,8 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        AuditEntity, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
-        TenantScopedEntity, Tracked,
+        AuditEntity, AuditOperation, AuditProvider, SoftDeleteContext, SoftDeleteEntity,
+        SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
@@ -1201,6 +1240,7 @@ mod tests {
     struct TestEntity;
     struct VersionedEntity;
     struct TenantWriteEntity;
+    struct AuditedWriteEntity;
     struct SoftDeleteEntityUnderTest;
     struct SoftDeleteVersionedEntity;
     struct CompositeKeyEntity;
@@ -1224,6 +1264,7 @@ mod tests {
         version: Option<Vec<u8>>,
     }
     struct TestSoftDeleteProvider;
+    struct TestAuditProvider;
 
     static TEST_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
         ColumnMetadata {
@@ -1685,6 +1726,76 @@ mod tests {
         scale: None,
     }];
 
+    static AUDITED_WRITE_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "name",
+            column_name: "name",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "updated_by",
+            column_name: "updated_by",
+            renamed_from: None,
+            sql_type: SqlServerType::NVarChar,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: Some(120),
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static AUDITED_WRITE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "AuditedWriteEntity",
+        schema: "dbo",
+        table: "audited_write_entities",
+        renamed_from: None,
+        columns: &AUDITED_WRITE_ENTITY_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+    };
+
+    static AUDITED_WRITE_POLICY_COLUMNS: [ColumnMetadata; 1] = [AUDITED_WRITE_ENTITY_COLUMNS[2]];
+
     impl Entity for TestEntity {
         fn metadata() -> &'static EntityMetadata {
             &TEST_ENTITY_METADATA
@@ -1706,6 +1817,12 @@ mod tests {
     impl Entity for TenantWriteEntity {
         fn metadata() -> &'static EntityMetadata {
             &TENANT_WRITE_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for AuditedWriteEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &AUDITED_WRITE_ENTITY_METADATA
         }
     }
 
@@ -1772,6 +1889,15 @@ mod tests {
         }
     }
 
+    impl AuditEntity for AuditedWriteEntity {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new(
+                "audit",
+                &AUDITED_WRITE_POLICY_COLUMNS,
+            ))
+        }
+    }
+
     impl SoftDeleteEntity for SoftDeleteEntityUnderTest {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             Some(EntityPolicyMetadata::new(
@@ -1826,6 +1952,12 @@ mod tests {
                 "tenant",
                 &TENANT_WRITE_ENTITY_COLUMNS[2..3],
             ))
+        }
+    }
+
+    impl TenantScopedEntity for AuditedWriteEntity {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
         }
     }
 
@@ -1951,6 +2083,16 @@ mod tests {
                 SqlValue::String("2026-04-25T00:00:00".to_string()),
             ));
             Ok(())
+        }
+    }
+
+    impl AuditProvider for TestAuditProvider {
+        fn values(&self, context: crate::AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError> {
+            assert_eq!(context.operation, AuditOperation::Update);
+            Ok(vec![ColumnValue::new(
+                "updated_by",
+                SqlValue::String("audit-provider".to_string()),
+            )])
         }
     }
 
@@ -2428,6 +2570,40 @@ mod tests {
                 SqlValue::I64(7),
                 SqlValue::I64(42),
                 SqlValue::Bytes(vec![1, 2, 3, 4]),
+            ]
+        );
+    }
+
+    #[test]
+    fn dbset_update_applies_audit_provider_values_before_compiling_update() {
+        let dbset = DbSet::<AuditedWriteEntity>::disconnected();
+        let provider = TestAuditProvider;
+
+        let query = dbset
+            .update_query_sql_value_with_audit_runtime(
+                SqlValue::I64(7),
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("audited row".to_string()),
+                )],
+                None,
+                None,
+                Some(&provider),
+                None,
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_update(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[audited_write_entities] SET [name] = @P1, [updated_by] = @P2 OUTPUT INSERTED.* WHERE ([dbo].[audited_write_entities].[id] = @P3)"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("audited row".to_string()),
+                SqlValue::String("audit-provider".to_string()),
+                SqlValue::I64(7),
             ]
         );
     }

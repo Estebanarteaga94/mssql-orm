@@ -434,6 +434,59 @@ mod tests {
     }
 
     #[test]
+    fn apply_audit_values_completes_only_missing_updatable_audit_columns() {
+        struct Provider;
+
+        impl AuditProvider for Provider {
+            fn values(&self, _context: AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError> {
+                Ok(vec![
+                    ColumnValue::new("created_by", SqlValue::I64(9)),
+                    ColumnValue::new("updated_by", SqlValue::String("provider".to_string())),
+                ])
+            }
+        }
+
+        let values = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Update,
+            vec![
+                ColumnValue::new("name", SqlValue::String("updated".to_string())),
+                ColumnValue::new("updated_by", SqlValue::String("explicit".to_string())),
+            ],
+            Some(&Provider),
+            None,
+        )
+        .expect("audit update values should resolve");
+
+        assert_eq!(
+            values,
+            vec![
+                ColumnValue::new("name", SqlValue::String("updated".to_string())),
+                ColumnValue::new("updated_by", SqlValue::String("explicit".to_string())),
+                ColumnValue::new("created_by", SqlValue::I64(9)),
+            ]
+        );
+    }
+
+    #[test]
+    fn apply_audit_values_rejects_non_updatable_audit_column() {
+        let error = apply_audit_values::<TestAuditedEntity>(
+            AuditOperation::Update,
+            vec![ColumnValue::new(
+                "created_at",
+                SqlValue::String("runtime".to_string()),
+            )],
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            OrmError::new("audit update column `created_at` is not updatable")
+        );
+    }
+
+    #[test]
     fn resolve_audit_values_preserves_user_values_before_request_and_provider_values() {
         let request_values = AuditRequestValues::new(vec![
             ColumnValue::new(

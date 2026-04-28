@@ -104,10 +104,9 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 - `save_changes()` and `Tracked<T>` are experimental.
 - Savepoints are not available.
 - `db.transaction(...)` must not be treated as supported on contexts created from `from_pool(...)` until a physical connection can be pinned for the full closure.
-- `AuditProvider` has a public runtime contract, audit-owned column metadata, `DbContext`/`SharedConnection` transport, and insert auto-fill through `DbSet::insert`, Active Record insert, and `save_changes()` for `Added`.
-- Runtime audit-field auto-fill for updates is not implemented.
+- `AuditProvider` has a public runtime contract, audit-owned column metadata, `DbContext`/`SharedConnection` transport, and insert/update auto-fill through the main `DbSet`, Active Record, and `save_changes()` paths.
 - `audit = Audit` does not add visible Rust fields or entity column symbols.
-- `timestamps`, runtime audit update auto-fill, and automatic `soft_delete`/`tenant` filters over manually joined entities remain deferred.
+- `timestamps`, typed audit value helpers, and automatic `soft_delete`/`tenant` filters over manually joined entities remain deferred.
 - `raw<T>()` and `raw_exec()` do not automatically apply ORM `tenant` or `soft_delete` filters.
 - `down.sql` is not executed automatically.
 - `database downgrade` does not exist.
