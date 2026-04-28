@@ -42,17 +42,15 @@ pub fn diff_schema_and_table_operations(
                 .filter(|renamed_from| *renamed_from != table_name)
                 .filter(|renamed_from| !current_tables.contains_key(*renamed_from))
                 .filter(|_| !previous_tables.contains_key(table_name))
+                && previous_tables.contains_key(renamed_from)
+                && consumed_previous_tables.insert(renamed_from.to_string())
             {
-                if previous_tables.contains_key(renamed_from)
-                    && consumed_previous_tables.insert(renamed_from.to_string())
-                {
-                    operations.push(MigrationOperation::RenameTable(RenameTable::new(
-                        schema_name.clone(),
-                        renamed_from.to_string(),
-                        table_name.clone(),
-                    )));
-                    continue;
-                }
+                operations.push(MigrationOperation::RenameTable(RenameTable::new(
+                    schema_name.clone(),
+                    renamed_from.to_string(),
+                    table_name.clone(),
+                )));
+                continue;
             }
 
             if previous_tables.contains_key(table_name) {
@@ -130,24 +128,23 @@ pub fn diff_column_operations(
                     .as_deref()
                     .filter(|renamed_from| *renamed_from != column_name)
                     .filter(|renamed_from| !current_columns.contains_key(*renamed_from))
+                    && let Some(previous_column) = previous_columns.get(renamed_from)
                 {
-                    if let Some(previous_column) = previous_columns.get(renamed_from) {
-                        consumed_previous_columns.insert(renamed_from.to_string());
-                        operations.push(MigrationOperation::RenameColumn(RenameColumn::new(
-                            schema_name.clone(),
-                            table_name.to_string(),
-                            renamed_from.to_string(),
-                            column_name.clone(),
-                        )));
-                        push_followup_column_change(
-                            &mut operations,
-                            schema_name,
-                            &table_name,
-                            renamed_previous_column(previous_column, current_column),
-                            current_column,
-                        );
-                        continue;
-                    }
+                    consumed_previous_columns.insert(renamed_from.to_string());
+                    operations.push(MigrationOperation::RenameColumn(RenameColumn::new(
+                        schema_name.clone(),
+                        table_name.to_string(),
+                        renamed_from.to_string(),
+                        column_name.clone(),
+                    )));
+                    push_followup_column_change(
+                        &mut operations,
+                        schema_name,
+                        &table_name,
+                        renamed_previous_column(previous_column, current_column),
+                        current_column,
+                    );
+                    continue;
                 }
 
                 match previous_columns.get(column_name) {
@@ -411,12 +408,10 @@ fn matched_table_pairs<'a>(
             .as_deref()
             .filter(|renamed_from| *renamed_from != table_name)
             .filter(|renamed_from| !current_tables.contains_key(*renamed_from))
+            && let Some(previous_table) = previous_tables.get(renamed_from)
+            && consumed_previous_tables.insert(renamed_from.to_string())
         {
-            if let Some(previous_table) = previous_tables.get(renamed_from) {
-                if consumed_previous_tables.insert(renamed_from.to_string()) {
-                    pairs.push((table_name.clone(), *previous_table, *current_table));
-                }
-            }
+            pairs.push((table_name.clone(), *previous_table, *current_table));
         }
     }
 
