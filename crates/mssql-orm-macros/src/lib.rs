@@ -134,6 +134,7 @@ fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Resu
 
     let mut columns = Vec::new();
     let mut column_names = Vec::new();
+    let mut audit_values = Vec::new();
     let mut seen_column_names = std::collections::BTreeSet::new();
 
     for field in fields.iter() {
@@ -177,6 +178,17 @@ fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Resu
         let insertable = config.insertable.unwrap_or(kind.default_insertable());
         let updatable = config.updatable.unwrap_or(kind.default_updatable());
 
+        if matches!(kind, PolicyFieldsKind::Audit) {
+            audit_values.push(quote! {
+                ::mssql_orm::core::ColumnValue::new(
+                    #column_name,
+                    <#field_ty as ::mssql_orm::core::SqlTypeMapping>::to_sql_value(
+                        self.#field_ident
+                    )
+                )
+            });
+        }
+
         columns.push(quote! {
             ::mssql_orm::core::ColumnMetadata {
                 rust_field: #rust_field,
@@ -198,6 +210,20 @@ fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Resu
         });
     }
 
+    let audit_values_impl = if matches!(kind, PolicyFieldsKind::Audit) {
+        quote! {
+            impl ::mssql_orm::AuditValues for #ident {
+                fn audit_values(self) -> Vec<::mssql_orm::core::ColumnValue> {
+                    vec![
+                        #(#audit_values),*
+                    ]
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         impl ::mssql_orm::core::EntityPolicy for #ident {
             const POLICY_NAME: &'static str = #policy_name;
@@ -211,6 +237,8 @@ fn derive_policy_fields_impl(input: DeriveInput, kind: PolicyFieldsKind) -> Resu
                 COLUMNS
             }
         }
+
+        #audit_values_impl
     })
 }
 
@@ -1339,6 +1367,18 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 Self::__from_shared_parts(connection, tracking_registry)
             }
 
+            pub fn with_audit_values<V>(&self, values: V) -> Self
+            where
+                V: ::mssql_orm::AuditValues,
+            {
+                let tracking_registry =
+                    <Self as ::mssql_orm::DbContext>::tracking_registry(self);
+                let connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self)
+                        .with_audit_values(values);
+                Self::__from_shared_parts(connection, tracking_registry)
+            }
+
             pub fn clear_audit_request_values(&self) -> Self {
                 let tracking_registry =
                     <Self as ::mssql_orm::DbContext>::tracking_registry(self);
@@ -1906,6 +1946,12 @@ fn parse_policy_field_config(field: &Field, kind: PolicyFieldsKind) -> Result<Au
                 config.insertable = Some(parse_bool_expr(meta.value()?.parse()?)?);
             } else if meta.path.is_ident("updatable") {
                 config.updatable = Some(parse_bool_expr(meta.value()?.parse()?)?);
+            } else if matches!(kind, PolicyFieldsKind::Audit)
+                && (meta.path.is_ident("created_at")
+                    || meta.path.is_ident("created_by")
+                    || meta.path.is_ident("updated_at")
+                    || meta.path.is_ident("updated_by"))
+            {
             } else {
                 return Err(meta.error(format!(
                     "atributo orm no soportado en campos de {derive_name}"

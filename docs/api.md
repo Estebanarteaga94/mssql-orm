@@ -233,6 +233,7 @@ Public policy-related contracts and derives include:
 - `AuditContext`
 - `AuditOperation`
 - `AuditRequestValues`
+- `AuditValues`
 - `SoftDeleteProvider`
 - `SoftDeleteContext`
 - `SoftDeleteOperation`
@@ -244,14 +245,14 @@ Implemented behavior:
 - `audit = Audit` contributes metadata/schema columns only.
 - `#[derive(Entity)]` implements `AuditEntity`; `audit_policy()` returns the audit-owned columns for audited entities and `None` for entities without `audit`.
 - The runtime `AuditProvider` contract exists in the public crate, including operation, request values, context, and precedence rules for resolving `ColumnValue`s.
-- `SharedConnection` and derived `DbContext`s transport `AuditProvider` and `AuditRequestValues`; transaction contexts inherit the same shared runtime.
+- `#[derive(AuditFields)]` implements `AuditValues`, so the same audit policy struct can be passed as typed request values with `with_audit_values(Audit { ... })`.
+- `SharedConnection` and derived `DbContext`s transport `AuditProvider`, `AuditRequestValues`, and typed `AuditValues`; transaction contexts inherit the same shared runtime.
 - Insert/update paths consume that runtime: `DbSet::insert`, `DbSet::update`, Active Record `save`, and `save_changes()` for `Added`/`Modified` complete missing audit columns declared by `AuditEntity::audit_policy()`.
 - `soft_delete = SoftDelete` changes delete behavior and read visibility for the root entity.
 - `tenant = CurrentTenant` adds fail-closed tenant filtering and tenant insert validation/fill for opt-in entities.
 
 Deferred behavior:
 
-- typed `with_audit_values(Audit { ... })` helpers;
 - automatic policy filters over manually joined entities;
 - global tenant conventions without a user-defined tenant type.
 

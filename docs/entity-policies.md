@@ -81,10 +81,10 @@ The contract exposes a stable name, a static column-name slice for compile-time 
 
 | Policy | Status | Scope |
 | --- | --- | --- |
-| `audit = Audit` | Implemented | Metadata/schema columns, with insert/update auto-fill through `AuditProvider`. |
+| `audit = Audit` | Implemented | Metadata/schema columns, typed `AuditValues`, and insert/update auto-fill through typed request values or `AuditProvider`. |
 | `soft_delete = SoftDelete` | Implemented | Runtime logical delete, default read visibility, and schema columns through the normal column pipeline. |
 | `tenant = CurrentTenant` | Implemented | Opt-in tenant scope, active tenant runtime state, fail-closed filters on the root entity, and insert fill/validation. |
-| `AuditProvider` | Partial | Public runtime contract, audit-owned entity metadata, context transport, and insert/update auto-fill on the main persistence paths exist. Typed value helpers remain deferred. |
+| `AuditProvider` | Implemented | Public runtime contract, audit-owned entity metadata, context transport, typed value helper, and insert/update auto-fill on the main persistence paths exist. |
 | `timestamps` | Deferred | Not implemented as a separate policy. |
 
 ## Audit Fields
@@ -94,6 +94,10 @@ The contract exposes a stable name, a static column-name slice for compile-time 
 Supported field attributes include:
 
 - `column`
+- `created_at`
+- `created_by`
+- `updated_at`
+- `updated_by`
 - `length`
 - `nullable`
 - `default_sql`
@@ -313,11 +317,11 @@ Current limit: automatic tenant filtering applies to the root entity only. Filte
 
 Runtime audit auto-fill is being added in Etapa 19 by write path. Inserts and semantic updates are wired through the main persistence paths. Soft-delete deletes compile as `UPDATE` internally, but they remain delete semantics and do not consume the audit update path in this cut.
 
-## Ergonomic Audit Values Design
+## Ergonomic Audit Values
 
 The low-level audit contract remains `AuditProvider` / `AuditRequestValues` over `ColumnValue`s. That is the escape hatch for advanced cases, but the ergonomic layer should be typed and should reuse the same `#[derive(AuditFields)]` struct that declares audit columns.
 
-Target shape:
+Implemented shape:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -346,21 +350,21 @@ let db = db.with_audit_values(Audit {
 });
 ```
 
-This avoids a separate predefined `AuditValues` struct. The user's audit policy struct is also the runtime value shape. The derive should generate a runtime conversion trait, for example:
+This avoids a separate predefined value struct. The user's audit policy struct is also the runtime value shape. `#[derive(AuditFields)]` generates `AuditValues` for the struct:
 
 ```rust
 pub trait AuditValues {
-    fn audit_values(&self) -> Vec<ColumnValue>;
+    fn audit_values(self) -> Vec<ColumnValue>;
 }
 ```
 
-`DbContext` / `SharedConnection` can then expose a typed helper:
+`DbContext` / `SharedConnection` expose a typed helper:
 
 ```rust
 fn with_audit_values<V: AuditValues>(&self, values: V) -> Self;
 ```
 
-Internally this helper should convert the typed struct into the existing `AuditRequestValues` path. It must not replace `AuditProvider`, and it must not move request context into `core`, `query`, `sqlserver`, or `tiberius`.
+Internally this helper converts the typed struct into the existing `AuditRequestValues` path. It does not replace `AuditProvider`, and it does not move request context into `core`, `query`, `sqlserver`, or `tiberius`.
 
 The semantic markers are explicit metadata, not name inference:
 
@@ -370,13 +374,13 @@ The semantic markers are explicit metadata, not name inference:
 - `#[orm(updated_by)]` marks the update actor value.
 - `#[orm(column = "...")]` keeps working when the physical column name differs from the Rust field.
 
-Design rules for the future implementation:
+Rules:
 
 - The user selects columns by declaring fields in the `AuditFields` struct.
 - The user supplies concrete values by passing an instance of that same struct to `with_audit_values(...)`.
 - No audit role is mandatory; a policy may contain only the fields required by the application.
 - Insert and update still filter by `AuditOperation` plus `insertable`/`updatable` metadata.
-- Explicit mutation values keep highest precedence; typed audit values should map to request values and therefore precede provider values.
+- Explicit mutation values keep highest precedence; typed audit values map to request values and therefore precede provider values.
 - The low-level `AuditProvider` and `AuditRequestValues` remain available.
 
 The implemented runtime contracts include:
@@ -448,12 +452,11 @@ Coverage includes:
 - metadata tests for column order, defaults, nullability, insertable/updatable flags, and collisions;
 - migration tests proving policy columns enter snapshots, diffs, and DDL as normal columns;
 - runtime tests for soft-delete behavior and audit write normalization, including insert/update compiled SQL coverage for `AuditProvider` and `AuditRequestValues`;
-- public `trybuild` coverage for the low-level `AuditProvider`, `AuditRequestValues`, `AuditContext`, derived `DbContext` helpers, and `SharedConnection` helper surface;
+- public `trybuild` coverage for `AuditValues`, `with_audit_values(...)`, the low-level `AuditProvider`, `AuditRequestValues`, `AuditContext`, derived `DbContext` helpers, and `SharedConnection` helper surface;
 - runtime and compiled-SQL tests for tenant filters and insert validation.
 
 ## Deferred Work
 
-- Typed `with_audit_values(Audit { ... })` convenience API.
 - `timestamps` as a separate policy or alias.
 - Visible Rust fields for generated audit columns.
 - Generated entity column symbols for policy-only columns.

@@ -34,6 +34,10 @@ pub trait AuditProvider: Send + Sync {
     fn values(&self, context: AuditContext<'_>) -> Result<Vec<ColumnValue>, OrmError>;
 }
 
+pub trait AuditValues {
+    fn audit_values(self) -> Vec<ColumnValue>;
+}
+
 pub(crate) fn apply_audit_values<E: AuditEntity>(
     operation: AuditOperation,
     values: Vec<ColumnValue>,

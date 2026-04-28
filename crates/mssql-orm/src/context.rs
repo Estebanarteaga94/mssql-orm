@@ -3,7 +3,7 @@ use crate::dbset_query::{DbSetQuery, tenant_value_matches_column_type};
 use crate::soft_delete_runtime::{
     SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, apply_soft_delete_values,
 };
-use crate::{AuditEntity, AuditOperation, AuditProvider, AuditRequestValues};
+use crate::{AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, AuditValues};
 use crate::{
     RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked,
     TrackingRegistry, TrackingRegistryHandle,
@@ -117,6 +117,10 @@ impl SharedConnection {
                 active_tenant: self.runtime.active_tenant.clone(),
             }),
         }
+    }
+
+    pub fn with_audit_values<V: AuditValues>(&self, values: V) -> Self {
+        self.with_audit_request_values(AuditRequestValues::new(values.audit_values()))
     }
 
     pub fn clear_audit_request_values(&self) -> Self {

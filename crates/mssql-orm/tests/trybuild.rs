@@ -24,6 +24,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/entity_audit_attr_valid.rs");
     tests.pass("tests/ui/entity_audit_public_valid.rs");
     tests.pass("tests/ui/audit_provider_public_valid.rs");
+    tests.pass("tests/ui/audit_values_public_valid.rs");
     tests.pass("tests/ui/entity_soft_delete_attr_valid.rs");
     tests.pass("tests/ui/entity_policies_with_structured_foreign_key_valid.rs");
     tests.pass("tests/ui/entity_tenant_attr_valid.rs");

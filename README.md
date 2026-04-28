@@ -111,7 +111,7 @@ let active_users = db
 - [Relationships](docs/relationships.md): foreign keys and explicit joins.
 - [Transactions](docs/transactions.md): runtime transaction behavior and pool limits.
 - [Migrations](docs/migrations.md): snapshots, diff, `migration add`, and `database update`.
-- [Entity Policies](docs/entity-policies.md): audit metadata, soft delete, tenant scoping, and deferred runtime audit provider design.
+- [Entity Policies](docs/entity-policies.md): audit metadata and runtime values, soft delete, tenant scoping, and policy limits.
 - [Use without manual download](docs/use-without-downloading.md): Git dependency usage from another project.
 
 ## Examples

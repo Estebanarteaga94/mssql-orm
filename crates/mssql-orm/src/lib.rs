@@ -25,7 +25,8 @@ pub use tokio;
 
 pub use active_record::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
 pub use audit_runtime::{
-    AuditContext, AuditOperation, AuditProvider, AuditRequestValues, resolve_audit_values,
+    AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,
+    resolve_audit_values,
 };
 #[cfg(feature = "pool-bb8")]
 pub use context::connect_shared_from_pool;
@@ -101,7 +102,8 @@ pub mod prelude {
         TenantScopedEntity, Tracked, model_snapshot_from_source, model_snapshot_json_from_source,
     };
     pub use crate::{
-        AuditContext, AuditOperation, AuditProvider, AuditRequestValues, resolve_audit_values,
+        AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,
+        resolve_audit_values,
     };
     #[cfg(feature = "pool-bb8")]
     pub use crate::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
@@ -122,14 +124,14 @@ pub mod prelude {
 mod tests {
     use super::prelude::{
         ActiveRecord, ActiveTenant, AuditContext, AuditEntity, AuditFields, AuditOperation,
-        AuditProvider, AuditRequestValues, Changeset, ColumnValue, DbContext, DbContextEntitySet,
-        DbSet, Entity, EntityColumn, EntityColumnOrderExt, EntityColumnPredicateExt,
-        EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState, IdentityMetadata,
-        Insertable, MssqlConnectionConfig, MssqlOperationalOptions, MssqlPoolBackend,
-        MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError, PageRequest,
-        PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam, RawParams,
-        RawQuery, SelectProjection, SelectProjections, SharedConnection, SoftDeleteEntity,
-        SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        AuditProvider, AuditRequestValues, AuditValues, Changeset, ColumnValue, DbContext,
+        DbContextEntitySet, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
+        EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
+        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
+        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
+        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam,
+        RawParams, RawQuery, SelectProjection, SelectProjections, SharedConnection,
+        SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
         TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
@@ -182,14 +184,17 @@ mod tests {
     #[allow(dead_code)]
     #[derive(AuditFields)]
     struct PublicAudit {
+        #[orm(created_at)]
         #[orm(default_sql = "SYSUTCDATETIME()")]
         #[orm(sql_type = "datetime2")]
         #[orm(updatable = false)]
         created_at: String,
 
+        #[orm(created_by)]
         #[orm(column = "created_by_user_id")]
         created_by: Option<i64>,
 
+        #[orm(updated_by)]
         #[orm(nullable)]
         #[orm(length = 120)]
         updated_by: Option<String>,
@@ -365,6 +370,25 @@ mod tests {
         assert_eq!(
             <PublicAudit as EntityPolicy>::COLUMN_NAMES,
             &["created_at", "created_by_user_id", "updated_by"]
+        );
+
+        let audit_values = PublicAudit {
+            created_at: "2026-04-28T00:00:00Z".to_string(),
+            created_by: Some(7),
+            updated_by: None,
+        }
+        .audit_values();
+
+        assert_eq!(
+            audit_values,
+            vec![
+                ColumnValue::new(
+                    "created_at",
+                    SqlValue::String("2026-04-28T00:00:00Z".to_string())
+                ),
+                ColumnValue::new("created_by_user_id", SqlValue::I64(7)),
+                ColumnValue::new("updated_by", SqlValue::TypedNull(SqlServerType::NVarChar)),
+            ]
         );
     }
 
