@@ -313,6 +313,72 @@ Current limit: automatic tenant filtering applies to the root entity only. Filte
 
 Runtime audit auto-fill is being added in Etapa 19 by write path. Inserts are wired; updates remain deferred because they must interact with `updatable`, `rowversion`, `tenant`, `soft_delete`, Active Record, change tracking, request context, and transactions.
 
+## Ergonomic Audit Values Design
+
+The low-level audit contract remains `AuditProvider` / `AuditRequestValues` over `ColumnValue`s. That is the escape hatch for advanced cases, but the ergonomic layer should be typed and should reuse the same `#[derive(AuditFields)]` struct that declares audit columns.
+
+Target shape:
+
+```rust
+use chrono::{DateTime, Utc};
+use mssql_orm::prelude::*;
+
+#[derive(AuditFields)]
+struct Audit {
+    #[orm(created_at)]
+    created_at: DateTime<Utc>,
+
+    #[orm(created_by)]
+    created_by: String,
+
+    #[orm(updated_at)]
+    updated_at: DateTime<Utc>,
+
+    #[orm(updated_by)]
+    updated_by: String,
+}
+
+let db = db.with_audit_values(Audit {
+    created_at: Utc::now(),
+    created_by: current_user_id.clone(),
+    updated_at: Utc::now(),
+    updated_by: current_user_id,
+});
+```
+
+This avoids a separate predefined `AuditValues` struct. The user's audit policy struct is also the runtime value shape. The derive should generate a runtime conversion trait, for example:
+
+```rust
+pub trait AuditValues {
+    fn audit_values(&self) -> Vec<ColumnValue>;
+}
+```
+
+`DbContext` / `SharedConnection` can then expose a typed helper:
+
+```rust
+fn with_audit_values<V: AuditValues>(&self, values: V) -> Self;
+```
+
+Internally this helper should convert the typed struct into the existing `AuditRequestValues` path. It must not replace `AuditProvider`, and it must not move request context into `core`, `query`, `sqlserver`, or `tiberius`.
+
+The semantic markers are explicit metadata, not name inference:
+
+- `#[orm(created_at)]` marks the creation timestamp value.
+- `#[orm(created_by)]` marks the creation actor value.
+- `#[orm(updated_at)]` marks the update timestamp value.
+- `#[orm(updated_by)]` marks the update actor value.
+- `#[orm(column = "...")]` keeps working when the physical column name differs from the Rust field.
+
+Design rules for the future implementation:
+
+- The user selects columns by declaring fields in the `AuditFields` struct.
+- The user supplies concrete values by passing an instance of that same struct to `with_audit_values(...)`.
+- No audit role is mandatory; a policy may contain only the fields required by the application.
+- Insert and update still filter by `AuditOperation` plus `insertable`/`updatable` metadata.
+- Explicit mutation values keep highest precedence; typed audit values should map to request values and therefore precede provider values.
+- The low-level `AuditProvider` and `AuditRequestValues` remain available.
+
 The implemented runtime contracts include:
 
 - `AuditOperation::{Insert, Update}`;
