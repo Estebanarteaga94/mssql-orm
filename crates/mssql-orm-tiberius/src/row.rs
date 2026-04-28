@@ -57,7 +57,7 @@ fn read_sql_value(row: &Row, index: usize, column_type: ColumnType) -> Result<Sq
         ColumnType::Int8 => read_typed(row, index, |value: i64| SqlValue::I64(value)),
         ColumnType::Intn => read_intn(row, index),
         ColumnType::Float4 => read_typed(row, index, |value: f32| SqlValue::F64(f64::from(value))),
-        ColumnType::Float8 | ColumnType::Floatn => {
+        ColumnType::Float8 | ColumnType::Floatn | ColumnType::Money | ColumnType::Money4 => {
             read_typed(row, index, |value: f64| SqlValue::F64(value))
         }
         ColumnType::Guid => read_typed(row, index, |value: Uuid| SqlValue::Uuid(value)),
@@ -79,8 +79,6 @@ fn read_sql_value(row: &Row, index: usize, column_type: ColumnType) -> Result<Sq
         | ColumnType::NText => read_string(row, index),
         ColumnType::BigVarBin | ColumnType::BigBinary | ColumnType::Image => read_bytes(row, index),
         ColumnType::Null
-        | ColumnType::Money
-        | ColumnType::Money4
         | ColumnType::Timen
         | ColumnType::DatetimeOffsetn
         | ColumnType::Xml
@@ -100,9 +98,7 @@ fn static_sql_value(column_type: ColumnType) -> Option<SqlValue> {
 
 fn unsupported_column_type_error(column_type: ColumnType) -> Option<OrmError> {
     match column_type {
-        ColumnType::Money
-        | ColumnType::Money4
-        | ColumnType::Timen
+        ColumnType::Timen
         | ColumnType::DatetimeOffsetn
         | ColumnType::Xml
         | ColumnType::Udt
@@ -189,8 +185,6 @@ mod tests {
     #[test]
     fn reports_unsupported_sql_server_column_types() {
         for column_type in [
-            ColumnType::Money,
-            ColumnType::Money4,
             ColumnType::Timen,
             ColumnType::DatetimeOffsetn,
             ColumnType::Xml,
