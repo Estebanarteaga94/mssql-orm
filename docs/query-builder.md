@@ -107,30 +107,28 @@ The public API supports two separate materialization paths:
 - `select(...).all_as::<T>()` and `select(...).first_as::<T>()` materialize DTOs with `FromRow`.
 
 ```rust
-#[derive(Debug)]
+use mssql_orm::prelude::*;
+
+#[derive(Debug, FromRow)]
 struct UserSummary {
     id: i64,
+    #[orm(column = "email_address")]
     email: String,
-}
-
-impl FromRow for UserSummary {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed("id")?,
-            email: row.get_required_typed("email")?,
-        })
-    }
 }
 
 let summaries = db
     .users
     .query()
-    .select((User::id, User::email))
+    .select((
+        User::id,
+        SelectProjection::expr_as(mssql_orm::query::Expr::from(User::email), "email_address"),
+    ))
     .all_as::<UserSummary>()
     .await?;
 ```
 
 Projected columns receive default aliases equal to their column names. Expressions require explicit aliases. Empty or duplicate aliases are rejected before execution.
+Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name unless overridden with `#[orm(column = "...")]`.
 
 ## Runtime Filters
 

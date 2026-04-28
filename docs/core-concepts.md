@@ -195,25 +195,20 @@ Tiberius is treated as the low-level driver, not as the ORM. It should not own e
 
 Rows come back through the neutral `Row` trait from `mssql-orm-core`. Types are materialized through `FromRow`.
 
-For entities, `#[derive(Entity)]` generates `FromRow` for the actual Rust fields in the entity. For DTO projections or raw SQL, users can implement `FromRow` manually:
+For entities, `#[derive(Entity)]` generates `FromRow` for the actual Rust fields in the entity. For DTO projections or raw SQL, users can derive `FromRow` for simple named-field DTOs:
 
 ```rust
 use mssql_orm::prelude::*;
 
+#[derive(FromRow)]
 struct UserListItem {
     id: i64,
+    #[orm(column = "email_address")]
     email: String,
 }
-
-impl FromRow for UserListItem {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed::<i64>("id")?,
-            email: row.get_required_typed::<String>("email")?,
-        })
-    }
-}
 ```
+
+The DTO derive reads field-name aliases by default, supports `#[orm(column = "...")]` for explicit aliases, and maps `Option<T>` from nullable or missing projected columns. Manual `impl FromRow` is still available when a DTO needs custom decoding.
 
 This is the final step of the core read path:
 

@@ -53,11 +53,21 @@ struct UpdateUser {
     email: Option<String>,
 }
 
+#[derive(FromRow)]
+struct UserSummary {
+    id: i64,
+    #[orm(column = "email_address")]
+    email: String,
+    display_name: Option<String>,
+}
+
 #[derive(DbContext)]
 struct AppDb {
     pub users: DbSet<User>,
 }
 ```
+
+`#[derive(FromRow)]` is available for DTOs used by typed projections and typed raw SQL. It supports structs with named fields, default aliases from field names, explicit field aliases with `#[orm(column = "...")]`, and nullable or missing projected columns through `Option<T>`.
 
 ## Model Contracts
 
@@ -166,6 +176,31 @@ Common query methods:
 - `first_as::<T>().await`
 
 The query builder produces AST values. SQL generation belongs to `mssql-orm-sqlserver`.
+
+Projection DTOs can derive `FromRow`:
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(Debug, FromRow)]
+struct UserSummary {
+    id: i64,
+    #[orm(column = "email_address")]
+    email: String,
+}
+
+let summaries = db
+    .users
+    .query()
+    .select((
+        User::id,
+        SelectProjection::expr_as(mssql_orm::query::Expr::from(User::email), "email_address"),
+    ))
+    .all_as::<UserSummary>()
+    .await?;
+```
+
+The derive is intentionally limited to named-field DTOs. Tuple structs, unit structs, and field-level `#[orm(...)]` attributes other than `column = "..."` are rejected at compile time.
 
 ## Raw SQL
 

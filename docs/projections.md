@@ -19,19 +19,10 @@ The projection surface is available on `DbSetQuery<E>`:
 ```rust
 use mssql_orm::prelude::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, FromRow)]
 struct UserSummary {
     id: i64,
     email: String,
-}
-
-impl FromRow for UserSummary {
-    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
-        Ok(Self {
-            id: row.get_required_typed("id")?,
-            email: row.get_required_typed("email")?,
-        })
-    }
 }
 
 let users = db
@@ -41,6 +32,43 @@ let users = db
     .all_as::<UserSummary>()
     .await?;
 ```
+
+`#[derive(FromRow)]` is the recommended DTO mapping path for projections. The derive reads each DTO field from a row column with the same name as the field, unless the field has an explicit alias with `#[orm(column = "...")]`.
+
+## Aliases and Nullable Fields
+
+Projection aliases are the contract between SQL Server results and DTO fields.
+
+```rust
+use mssql_orm::prelude::*;
+
+#[derive(Debug, PartialEq, FromRow)]
+struct UserCard {
+    id: i64,
+    #[orm(column = "email_address")]
+    email: String,
+    display_name: Option<String>,
+}
+
+let cards = db
+    .users
+    .query()
+    .select((
+        User::id,
+        SelectProjection::expr_as(mssql_orm::query::Expr::from(User::email), "email_address"),
+        SelectProjection::expr_as(mssql_orm::query::Expr::from(User::email), "display_name"),
+    ))
+    .all_as::<UserCard>()
+    .await?;
+```
+
+Rules:
+
+- field names are used as aliases by default;
+- `#[orm(column = "...")]` lets a DTO field read from a different projection alias;
+- `Option<T>` fields materialize `NULL` as `None`;
+- `Option<T>` fields also materialize a missing column as `None`, which is useful for DTOs shared across compatible projections;
+- non-optional fields require the alias to exist and contain a compatible non-null value.
 
 ## AST Shape
 
@@ -69,7 +97,15 @@ The alias is part of the contract with `FromRow`: the DTO reads `"id"` and `"ema
 Expressions need explicit aliases:
 
 ```rust
+use mssql_orm::prelude::*;
 use mssql_orm::query::SelectProjection;
+
+#[derive(Debug, PartialEq, FromRow)]
+struct UserEmailProjection {
+    id: i64,
+    #[orm(column = "email_lower")]
+    email: String,
+}
 
 let rows = db
     .users
@@ -122,18 +158,35 @@ Projections reuse the effective `DbSetQuery` path. Mandatory tenant filters and 
 
 Raw SQL remains different: `raw<T>()` does not apply ORM runtime filters automatically.
 
+## FromRow Derive Limits
+
+`#[derive(FromRow)]` for projection DTOs is intentionally small:
+
+- only structs with named fields are supported;
+- tuple structs and unit structs are rejected at compile time;
+- the only supported field attribute is `#[orm(column = "...")]`;
+- it does not infer SQL expressions, joins, or aggregate aliases;
+- it does not generate query projections from the DTO shape.
+
+Manual `impl FromRow` is still available for DTOs that need custom decoding logic.
+
 ## Not in This Cut
 
 - High-level typed aggregation DSL.
 - Automatic table aliases.
 - Self-join support.
 - Navigation-property projection.
-- Automatic DTO derivation.
+- Automatic query projection generation from DTO definitions.
 
 ## Validation
 
 Coverage lives in:
 
 - `crates/mssql-orm/tests/stage18_public_projections.rs`
+- `crates/mssql-orm/tests/stage18_from_row_derive.rs`
 - `crates/mssql-orm/tests/ui/query_projection_public_valid.rs`
+- `crates/mssql-orm/tests/ui/from_row_projection_public_valid.rs`
+- `crates/mssql-orm/tests/ui/from_row_tuple_struct.rs`
+- `crates/mssql-orm/tests/ui/from_row_unit_struct.rs`
+- `crates/mssql-orm/tests/ui/from_row_unsupported_attr.rs`
 - SQL compiler snapshot tests in `crates/mssql-orm-sqlserver`
