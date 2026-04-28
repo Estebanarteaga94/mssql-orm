@@ -1,8 +1,10 @@
 use chrono::{NaiveDate, NaiveDateTime};
 use core::sync::atomic::{AtomicU64, Ordering};
-use mssql_orm_core::{FromRow, OrmError, SqlValue};
+use mssql_orm_core::{FromRow, OrmError, Row, SqlValue};
 use mssql_orm_query::CompiledQuery;
 use mssql_orm_tiberius::MssqlConnection;
+use rust_decimal::Decimal;
+use uuid::Uuid;
 
 const TEST_CONNECTION_ENV: &str = "MSSQL_ORM_TEST_CONNECTION_STRING";
 const KEEP_TABLES_ENV: &str = "KEEP_TEST_TABLES";
@@ -24,6 +26,69 @@ impl FromRow for IntegrationUser {
             email: row.get_required_typed::<String>("email")?,
             active: row.get_required_typed::<bool>("active")?,
             created_at: row.get_required_typed::<NaiveDateTime>("created_at")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct SupportedSqlTypes {
+    bit_value: SqlValue,
+    tinyint_value: SqlValue,
+    smallint_value: SqlValue,
+    int_value: SqlValue,
+    bigint_value: SqlValue,
+    real_value: SqlValue,
+    float_value: SqlValue,
+    decimal_value: SqlValue,
+    numeric_value: SqlValue,
+    uniqueidentifier_value: SqlValue,
+    date_value: SqlValue,
+    datetime_value: SqlValue,
+    datetime2_value: SqlValue,
+    smalldatetime_value: SqlValue,
+    money_value: SqlValue,
+    smallmoney_value: SqlValue,
+    char_value: SqlValue,
+    varchar_value: SqlValue,
+    nchar_value: SqlValue,
+    nvarchar_value: SqlValue,
+    text_value: SqlValue,
+    ntext_value: SqlValue,
+    binary_value: SqlValue,
+    varbinary_value: SqlValue,
+    image_value: SqlValue,
+    null_money_value: SqlValue,
+}
+
+impl FromRow for SupportedSqlTypes {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        Ok(Self {
+            bit_value: row.get_required("bit_value")?,
+            tinyint_value: row.get_required("tinyint_value")?,
+            smallint_value: row.get_required("smallint_value")?,
+            int_value: row.get_required("int_value")?,
+            bigint_value: row.get_required("bigint_value")?,
+            real_value: row.get_required("real_value")?,
+            float_value: row.get_required("float_value")?,
+            decimal_value: row.get_required("decimal_value")?,
+            numeric_value: row.get_required("numeric_value")?,
+            uniqueidentifier_value: row.get_required("uniqueidentifier_value")?,
+            date_value: row.get_required("date_value")?,
+            datetime_value: row.get_required("datetime_value")?,
+            datetime2_value: row.get_required("datetime2_value")?,
+            smalldatetime_value: row.get_required("smalldatetime_value")?,
+            money_value: row.get_required("money_value")?,
+            smallmoney_value: row.get_required("smallmoney_value")?,
+            char_value: row.get_required("char_value")?,
+            varchar_value: row.get_required("varchar_value")?,
+            nchar_value: row.get_required("nchar_value")?,
+            nvarchar_value: row.get_required("nvarchar_value")?,
+            text_value: row.get_required("text_value")?,
+            ntext_value: row.get_required("ntext_value")?,
+            binary_value: row.get_required("binary_value")?,
+            varbinary_value: row.get_required("varbinary_value")?,
+            image_value: row.get_required("image_value")?,
+            null_money_value: row.get_required("null_money_value")?,
         })
     }
 }
@@ -117,6 +182,137 @@ async fn sqlserver_adapter_executes_and_maps_rows_against_real_database() -> Res
     cleanup_test_table(&mut connection, &table_name, keep_tables).await?;
 
     Ok(())
+}
+
+#[tokio::test]
+async fn sqlserver_adapter_maps_common_sql_server_column_types() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!("skipping SQL Server integration test because {TEST_CONNECTION_ENV} is not set");
+        return Ok(());
+    };
+
+    let mut connection = MssqlConnection::connect(&connection_string).await?;
+    let row = connection
+        .fetch_one::<SupportedSqlTypes>(CompiledQuery::new(
+            "\
+            SELECT \
+                CAST(1 AS bit) AS bit_value,\
+                CAST(255 AS tinyint) AS tinyint_value,\
+                CAST(-123 AS smallint) AS smallint_value,\
+                CAST(123456 AS int) AS int_value,\
+                CAST(1234567890123 AS bigint) AS bigint_value,\
+                CAST(3.25 AS real) AS real_value,\
+                CAST(6.5 AS float) AS float_value,\
+                CAST(1234.56 AS decimal(10, 2)) AS decimal_value,\
+                CAST(789.01 AS numeric(10, 2)) AS numeric_value,\
+                CAST('6F9619FF-8B86-D011-B42D-00C04FC964FF' AS uniqueidentifier) AS uniqueidentifier_value,\
+                CAST('2026-04-28' AS date) AS date_value,\
+                CAST('2026-04-28T12:34:56' AS datetime) AS datetime_value,\
+                CAST('2026-04-28T12:34:56.1234567' AS datetime2) AS datetime2_value,\
+                CAST('2026-04-28T12:34:00' AS smalldatetime) AS smalldatetime_value,\
+                CAST(12.34 AS money) AS money_value,\
+                CAST(5.67 AS smallmoney) AS smallmoney_value,\
+                CAST('abc' AS char(3)) AS char_value,\
+                CAST('def' AS varchar(3)) AS varchar_value,\
+                CAST(N'ghi' AS nchar(3)) AS nchar_value,\
+                CAST(N'jkl' AS nvarchar(3)) AS nvarchar_value,\
+                CAST('text-value' AS text) AS text_value,\
+                CAST(N'ntext-value' AS ntext) AS ntext_value,\
+                CAST(0x010203 AS binary(3)) AS binary_value,\
+                CAST(0x040506 AS varbinary(3)) AS varbinary_value,\
+                CAST(0x070809 AS image) AS image_value,\
+                CAST(NULL AS money) AS null_money_value\
+            ",
+            vec![],
+        ))
+        .await?
+        .expect("SELECT without FROM should return one row");
+
+    assert_eq!(row.bit_value, SqlValue::Bool(true));
+    assert_eq!(row.tinyint_value, SqlValue::I32(255));
+    assert_eq!(row.smallint_value, SqlValue::I32(-123));
+    assert_eq!(row.int_value, SqlValue::I32(123456));
+    assert_eq!(row.bigint_value, SqlValue::I64(1234567890123));
+    assert_eq!(row.real_value, SqlValue::F64(3.25));
+    assert_eq!(row.float_value, SqlValue::F64(6.5));
+    assert_eq!(
+        row.decimal_value,
+        SqlValue::Decimal(Decimal::new(123456, 2))
+    );
+    assert_eq!(row.numeric_value, SqlValue::Decimal(Decimal::new(78901, 2)));
+    assert_eq!(
+        row.uniqueidentifier_value,
+        SqlValue::Uuid(Uuid::parse_str("6F9619FF-8B86-D011-B42D-00C04FC964FF").unwrap())
+    );
+    assert_eq!(
+        row.date_value,
+        SqlValue::Date(NaiveDate::from_ymd_opt(2026, 4, 28).unwrap())
+    );
+    assert_eq!(
+        row.datetime_value,
+        SqlValue::DateTime(fixed_datetime(2026, 4, 28, 12, 34, 56))
+    );
+    assert_eq!(
+        row.datetime2_value,
+        SqlValue::DateTime(
+            NaiveDate::from_ymd_opt(2026, 4, 28)
+                .unwrap()
+                .and_hms_nano_opt(12, 34, 56, 123_456_700)
+                .unwrap()
+        )
+    );
+    assert_eq!(
+        row.smalldatetime_value,
+        SqlValue::DateTime(fixed_datetime(2026, 4, 28, 12, 34, 0))
+    );
+    assert_eq!(row.money_value, SqlValue::F64(12.34));
+    assert_eq!(row.smallmoney_value, SqlValue::F64(5.67));
+    assert_eq!(row.char_value, SqlValue::String("abc".to_string()));
+    assert_eq!(row.varchar_value, SqlValue::String("def".to_string()));
+    assert_eq!(row.nchar_value, SqlValue::String("ghi".to_string()));
+    assert_eq!(row.nvarchar_value, SqlValue::String("jkl".to_string()));
+    assert_eq!(row.text_value, SqlValue::String("text-value".to_string()));
+    assert_eq!(row.ntext_value, SqlValue::String("ntext-value".to_string()));
+    assert_eq!(row.binary_value, SqlValue::Bytes(vec![1, 2, 3]));
+    assert_eq!(row.varbinary_value, SqlValue::Bytes(vec![4, 5, 6]));
+    assert_eq!(row.image_value, SqlValue::Bytes(vec![7, 8, 9]));
+    assert_eq!(row.null_money_value, SqlValue::Null);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlserver_adapter_rejects_unsupported_sql_server_column_types() -> Result<(), OrmError> {
+    let Some(connection_string) = test_connection_string() else {
+        eprintln!("skipping SQL Server integration test because {TEST_CONNECTION_ENV} is not set");
+        return Ok(());
+    };
+
+    let mut connection = MssqlConnection::connect(&connection_string).await?;
+    let error = connection
+        .fetch_one::<UnsupportedTimeValue>(CompiledQuery::new(
+            "SELECT CAST('12:34:56' AS time) AS time_value",
+            vec![],
+        ))
+        .await
+        .expect_err("time should remain unsupported until MssqlRow maps it explicitly");
+
+    assert_eq!(
+        error.message(),
+        "unsupported SQL Server column type in MssqlRow"
+    );
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UnsupportedTimeValue;
+
+impl FromRow for UnsupportedTimeValue {
+    fn from_row<R: Row>(row: &R) -> Result<Self, OrmError> {
+        let _ = row.get_required("time_value")?;
+        Ok(Self)
+    }
 }
 
 #[tokio::test]
