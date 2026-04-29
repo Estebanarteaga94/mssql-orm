@@ -40,7 +40,9 @@ pub use context::{
     ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
     connect_shared_with_config, connect_shared_with_options,
 };
-pub use dbset_query::{DbSetQuery, DbSetQueryIncludeMany, DbSetQueryIncludeOne};
+pub use dbset_query::{
+    CollectionIncludeStrategy, DbSetQuery, DbSetQueryIncludeMany, DbSetQueryIncludeOne,
+};
 pub use mssql_orm_core::{EntityMetadata, NavigationKind, NavigationMetadata};
 pub use mssql_orm_tiberius::{
     MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
@@ -242,17 +244,18 @@ pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
-        ActiveRecord, ActiveTenant, AuditEntity, Collection, DbContext, DbContextEntitySet, DbSet,
-        DbSetQuery, DbSetQueryIncludeMany, DbSetQueryIncludeOne, EntityColumnAliasExt,
-        EntityColumnOrderExt, EntityColumnPredicateExt, EntityState, IncludeCollection,
-        IncludeNavigation, MigrationModelSource, MssqlConnectionConfig, MssqlHealthCheckOptions,
-        MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
-        MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
-        MssqlTracingOptions, Navigation, PageRequest, PredicateCompositionExt, QueryHint,
-        RawCommand, RawParam, RawParams, RawQuery, SelectProjections, SharedConnection,
-        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
-        SoftDeleteRequestValues, SoftDeleteValues, TenantContext, TenantScopedEntity, Tracked,
-        model_snapshot_from_source, model_snapshot_json_from_source,
+        ActiveRecord, ActiveTenant, AuditEntity, Collection, CollectionIncludeStrategy, DbContext,
+        DbContextEntitySet, DbSet, DbSetQuery, DbSetQueryIncludeMany, DbSetQueryIncludeOne,
+        EntityColumnAliasExt, EntityColumnOrderExt, EntityColumnPredicateExt, EntityState,
+        IncludeCollection, IncludeNavigation, MigrationModelSource, MssqlConnectionConfig,
+        MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
+        MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+        MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, Navigation, PageRequest,
+        PredicateCompositionExt, QueryHint, RawCommand, RawParam, RawParams, RawQuery,
+        SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
+        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, SoftDeleteValues,
+        TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
+        model_snapshot_json_from_source,
     };
     pub use crate::{
         AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,

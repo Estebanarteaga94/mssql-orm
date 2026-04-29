@@ -193,10 +193,14 @@ The query builder produces AST values. SQL generation belongs to `mssql-orm-sqls
 
 `include::<T>(...)` and `include_as::<T>(...)` load one `belongs_to` /
 `has_one` navigation. `include_many::<T>(...)` and `include_many_as::<T>(...)`
-load one `has_many` navigation through a join grouped by root primary key and
-reject pagination in this first cut. Root policies are applied to the effective
-query predicate, while included-entity `tenant` and default `soft_delete`
-policies are applied to the include join predicate.
+load one `has_many` navigation through a join grouped by root primary key,
+default to a 10,000 joined-row safety limit, and reject pagination in this
+first cut. Collection includes expose `max_joined_rows(...)`,
+`unbounded_join()`, `join_strategy()`, and explicit `split_query()`; the
+split-query execution path currently returns a clear not-implemented error.
+Root policies are applied to the effective query predicate, while
+included-entity `tenant` and default `soft_delete` policies are applied to the
+include join predicate.
 
 Projection DTOs can derive `FromRow`:
 

@@ -92,7 +92,23 @@ fn main() {
             .query()
             .include_many_as::<Order>("orders", "orders")
             .unwrap()
+            .join_strategy()
+            .max_joined_rows(1_000)
             .filter(Order::total_cents.aliased("orders").gte(1000_i64))
             .order_by(Order::total_cents.aliased("orders").desc());
+
+        let _include_many_split_query = db
+            .users
+            .query()
+            .include_many::<Order>("orders")
+            .unwrap()
+            .split_query();
+
+        let _include_many_unbounded_join = db
+            .users
+            .query()
+            .include_many::<Order>("orders")
+            .unwrap()
+            .unbounded_join();
     };
 }

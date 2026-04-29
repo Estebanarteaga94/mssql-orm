@@ -34,6 +34,21 @@ enum SoftDeleteVisibility {
     OnlyDeleted,
 }
 
+/// Loading strategy for a `has_many` collection include.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollectionIncludeStrategy {
+    /// Load roots and related rows through one `LEFT JOIN`, then group joined
+    /// rows by the root primary key.
+    Join,
+    /// Planned split-query strategy for large collections.
+    ///
+    /// The strategy is explicit in the public API, but execution returns a
+    /// clear error until the split-query implementation lands.
+    SplitQuery,
+}
+
+const DEFAULT_INCLUDE_MANY_JOIN_ROW_LIMIT: usize = 10_000;
+
 impl<E: Entity> DbSetQuery<E> {
     pub(crate) fn new(connection: Option<SharedConnection>, select_query: SelectQuery) -> Self {
         let active_tenant = connection
@@ -212,6 +227,8 @@ impl<E: Entity> DbSetQuery<E> {
             query: self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))?,
             navigation,
             alias,
+            strategy: CollectionIncludeStrategy::Join,
+            join_row_limit: Some(DEFAULT_INCLUDE_MANY_JOIN_ROW_LIMIT),
             _target: core::marker::PhantomData,
         })
     }
@@ -600,6 +617,8 @@ pub struct DbSetQueryIncludeMany<E: Entity, J: Entity> {
     query: DbSetQuery<E>,
     navigation: &'static str,
     alias: &'static str,
+    strategy: CollectionIncludeStrategy,
+    join_row_limit: Option<usize>,
     _target: core::marker::PhantomData<fn() -> J>,
 }
 
@@ -634,6 +653,41 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeMany<E, J> {
         self
     }
 
+    /// Uses the join-based collection loading strategy.
+    ///
+    /// This is the default strategy. The row limit protects callers from
+    /// accidentally loading an unbounded cartesian result through one join.
+    pub fn join_strategy(mut self) -> Self {
+        self.strategy = CollectionIncludeStrategy::Join;
+        self
+    }
+
+    /// Selects the planned split-query loading strategy.
+    ///
+    /// Execution currently returns a clear error because split queries need a
+    /// separate implementation that loads roots first and related rows second.
+    pub fn split_query(mut self) -> Self {
+        self.strategy = CollectionIncludeStrategy::SplitQuery;
+        self
+    }
+
+    /// Overrides the maximum number of joined rows accepted before grouping.
+    ///
+    /// Use this only when the expected root/collection cardinality is known.
+    pub fn max_joined_rows(mut self, limit: usize) -> Self {
+        self.join_row_limit = Some(limit);
+        self
+    }
+
+    /// Removes the join row safety limit.
+    ///
+    /// This keeps the API explicit for callers that intentionally accept a
+    /// large join result.
+    pub fn unbounded_join(mut self) -> Self {
+        self.join_row_limit = None;
+        self
+    }
+
     /// Includes logically deleted root rows for entities with `soft_delete`.
     ///
     /// This affects only the root entity `E`; included collection entities
@@ -659,6 +713,12 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeMany<E, J> {
         E: FromRow + IncludeCollection<J> + Send + SoftDeleteEntity + TenantScopedEntity,
         J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
+        if self.strategy == CollectionIncludeStrategy::SplitQuery {
+            return Err(OrmError::new(
+                "include_many split-query loading is not implemented yet; use join_strategy() with an explicit max_joined_rows(...) limit",
+            ));
+        }
+
         let navigation = self.navigation;
         let alias = self.alias;
         let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
@@ -670,6 +730,7 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeMany<E, J> {
             })
             .await?;
 
+        enforce_include_many_join_row_limit(rows.len(), self.join_row_limit)?;
         group_include_many_rows::<E, J>(rows, navigation)
     }
 
@@ -981,6 +1042,23 @@ where
         .collect()
 }
 
+fn enforce_include_many_join_row_limit(
+    row_count: usize,
+    limit: Option<usize>,
+) -> Result<(), OrmError> {
+    let Some(limit) = limit else {
+        return Ok(());
+    };
+
+    if row_count > limit {
+        return Err(OrmError::new(format!(
+            "include_many join produced {row_count} rows, exceeding the configured limit of {limit}; use max_joined_rows(...), unbounded_join(), or wait for split-query collection loading"
+        )));
+    }
+
+    Ok(())
+}
+
 struct PrefixedRow<'a, R: Row + ?Sized> {
     row: &'a R,
     prefix: String,
@@ -1078,7 +1156,9 @@ impl FromRow for CountRow {
 
 #[cfg(test)]
 mod tests {
-    use super::{DbSetQuery, tenant_value_matches_column_type};
+    use super::{
+        DbSetQuery, enforce_include_many_join_row_limit, tenant_value_matches_column_type,
+    };
     use crate::context::{ActiveTenant, DbSet};
     use crate::page_request::PageRequest;
     use crate::{IncludeCollection, SoftDeleteEntity, TenantScopedEntity};
@@ -1095,7 +1175,9 @@ mod tests {
 
     struct TestEntity;
     struct JoinedEntity;
+    #[derive(Debug)]
     struct NavigationRoot;
+    #[derive(Debug)]
     struct NavigationTarget;
     struct TenantNavigationRoot;
     struct TenantNavigationTarget;
@@ -1267,6 +1349,18 @@ mod tests {
     impl Entity for NavigationTarget {
         fn metadata() -> &'static EntityMetadata {
             &NAVIGATION_TARGET_METADATA
+        }
+    }
+
+    impl FromRow for NavigationRoot {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
+        }
+    }
+
+    impl FromRow for NavigationTarget {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
         }
     }
 
@@ -2337,6 +2431,37 @@ mod tests {
         let error = include.select_query().unwrap_err();
 
         assert!(error.message().contains("does not support pagination"));
+    }
+
+    #[tokio::test]
+    async fn dbset_query_include_many_split_query_reports_explicit_error() {
+        let error = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .include_many_as::<NavigationTarget>("orders", "orders")
+            .unwrap()
+            .split_query()
+            .all()
+            .await
+            .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("split-query loading is not implemented yet")
+        );
+    }
+
+    #[test]
+    fn include_many_join_row_limit_reports_clear_error() {
+        let error = enforce_include_many_join_row_limit(11, Some(10)).unwrap_err();
+
+        assert!(error.message().contains("produced 11 rows"));
+        assert!(error.message().contains("configured limit of 10"));
+    }
+
+    #[test]
+    fn include_many_join_row_limit_allows_explicit_unbounded_join() {
+        enforce_include_many_join_row_limit(usize::MAX, None).unwrap();
     }
 
     #[test]

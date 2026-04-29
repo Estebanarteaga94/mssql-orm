@@ -219,6 +219,7 @@ let users = db
     .users
     .query()
     .include_many_as::<TodoList>("lists", "lists")?
+    .max_joined_rows(2_000)
     .all()
     .await?;
 
@@ -230,7 +231,15 @@ entity primary key before assigning `Collection<T>`. This avoids returning
 duplicate root entities to the caller. Pagination is rejected on this path
 because limiting joined rows would produce unstable root-entity pages.
 
-For large collections, the preferred later implementation is split queries:
+The default join strategy has a safety limit of 10,000 joined rows before
+grouping. `max_joined_rows(...)` adjusts that limit for a query, and
+`unbounded_join()` is available only as an explicit opt-out. `split_query()` is
+available on the builder to make the intended large-collection strategy
+visible, but it currently returns an error until the two-query loader is
+implemented.
+
+For large collections, the preferred implemented direction remains split
+queries:
 
 ```text
 1. Load root rows.
@@ -239,8 +248,8 @@ For large collections, the preferred later implementation is split queries:
 ```
 
 Split queries keep row duplication predictable and avoid forcing every large
-collection include through a wide join. The exact split-query API remains a
-separate backlog item.
+collection include through a wide join. The execution path for split queries
+remains a separate backlog item.
 
 ### Planned Explicit Loading
 
@@ -287,7 +296,7 @@ Navigation support depends on earlier internal work:
 ## Limits
 
 - `include::<T>(...)` currently supports one `belongs_to` or `has_one` navigation.
-- `include_many::<T>(...)` currently supports one `has_many` navigation and rejects pagination in the join-based loading path.
+- `include_many::<T>(...)` currently supports one `has_many` navigation, defaults to join loading with a 10,000 joined-row safety limit, exposes explicit `split_query()`, and rejects pagination in the join-based loading path.
 - No lazy loading.
 - No automatic projection of joined entity graphs.
 - Tenant and soft-delete automatic filters apply to the root entity and to explicitly included entities; filters on manually joined entities must be explicit.

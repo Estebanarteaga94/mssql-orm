@@ -160,6 +160,7 @@ let customers = db
     .customers
     .query()
     .include_many_as::<Order>("orders", "orders")?
+    .max_joined_rows(2_000)
     .filter(Order::total_cents.aliased("orders").gte(1000_i64))
     .all()
     .await?;
@@ -170,8 +171,14 @@ let orders = customers[0].orders.as_slice();
 The collection include path uses a left join in this first cut, then groups
 joined rows by the root entity primary key before assigning `Collection<T>`.
 It rejects pagination because `OFFSET` / `FETCH` over joined rows would not
-produce a stable page of root entities. Large collection loading and split
-query behavior remain a separate backlog item.
+produce a stable page of root entities.
+
+The default join strategy has a safety limit of 10,000 joined rows before
+grouping. Call `max_joined_rows(...)` when the expected cardinality is known,
+or `unbounded_join()` only when the caller intentionally accepts the full joined
+result. `split_query()` is already part of the public builder to make the
+strategy explicit, but execution returns a clear error until the split-query
+loader is implemented.
 
 ## Count
 
@@ -217,6 +224,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 - The public query builder does not accept arbitrary SQL fragments.
 - Navigation joins are explicit and fallible.
 - `include::<T>(...)` supports `belongs_to` and `has_one`; `include_many::<T>(...)` supports `has_many` without pagination.
+- `include_many::<T>(...)` defaults to join loading with a 10,000 joined-row safety limit. Split-query loading is explicit but not implemented yet.
 - Included `tenant` and `soft_delete` policies use the default visibility only; there is no include-specific visibility override yet.
 - Initial public projections exist, but high-level typed aggregations are not available.
 
