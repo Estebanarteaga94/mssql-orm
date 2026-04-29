@@ -77,5 +77,7 @@ fn main() {
             .try_inner_join_navigation_as::<Order>("orders", "orders")
             .unwrap()
             .filter(Order::total_cents.aliased("orders").gte(1000_i64));
+
+        let _include_query = db.orders.query().include::<User>("user").unwrap();
     };
 }

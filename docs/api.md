@@ -178,6 +178,8 @@ Common query methods:
 - `try_left_join_navigation::<T>(...)`
 - `try_inner_join_navigation_as::<T>(...)`
 - `try_left_join_navigation_as::<T>(...)`
+- `include::<T>(...)`
+- `include_as::<T>(...)`
 - `select(...)`
 - `all().await`
 - `first().await`
@@ -312,8 +314,8 @@ These are useful for tests, tooling, snapshots, and advanced diagnostics. Normal
 ## Current Exclusions
 
 - SQL Server is the only backend.
-- Navigation properties currently expose metadata and explicit join inference only; they do not load related rows.
-- Lazy loading and automatic eager loading are not available.
+- Navigation properties currently expose metadata, explicit join inference, and single-navigation eager loading for `belongs_to` / `has_one`.
+- Lazy loading and collection eager loading are not available.
 - High-level typed aggregations are not available.
 - Composite primary-key persistence is not complete across public CRUD and Active Record.
 - `migration.rs` is not generated.

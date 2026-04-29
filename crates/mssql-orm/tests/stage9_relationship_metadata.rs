@@ -204,6 +204,27 @@ fn belongs_to_navigation_metadata_uses_structured_foreign_key_columns() {
 }
 
 #[test]
+fn belongs_to_navigation_can_receive_included_entity() {
+    let mut task = ProjectTask {
+        id: 10,
+        project_id: 7,
+        project: Navigation::empty(),
+    };
+
+    task.set_included_navigation(
+        "project",
+        Some(Project {
+            id: 7,
+            name: "Roadmap".to_string(),
+            tasks: Collection::empty(),
+        }),
+    )
+    .unwrap();
+
+    assert_eq!(task.project.as_ref().map(|project| project.id), Some(7));
+}
+
+#[test]
 fn inverse_navigation_metadata_reuses_target_foreign_key_metadata() {
     let metadata = Project::metadata();
 

@@ -1200,6 +1200,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             }
         },
     );
+    let include_navigation_impls = include_navigation_impls(&ident, &navigations)?;
 
     let (metadata_static, metadata_expr) = if has_generated_policies
         || has_inverse_navigation_metadata
@@ -1328,6 +1329,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         #audit_contract_impl
         #soft_delete_contract_impl
         #tenant_contract_impl
+        #(#include_navigation_impls)*
     })
 }
 
@@ -2560,6 +2562,67 @@ fn navigation_kind_tokens(kind: NavigationKindConfig) -> TokenStream2 {
         NavigationKindConfig::HasOne => quote! { ::mssql_orm::core::NavigationKind::HasOne },
         NavigationKindConfig::HasMany => quote! { ::mssql_orm::core::NavigationKind::HasMany },
     }
+}
+
+fn include_navigation_impls(
+    entity_ident: &Ident,
+    navigations: &[PendingNavigation],
+) -> Result<Vec<TokenStream2>> {
+    let mut grouped = BTreeMap::<String, (Path, Vec<(Ident, LitStr)>)>::new();
+
+    for navigation in navigations {
+        if !matches!(
+            navigation.kind,
+            NavigationKindConfig::BelongsTo | NavigationKindConfig::HasOne
+        ) {
+            continue;
+        }
+
+        let field_ident = Ident::new(&navigation.rust_field.value(), navigation.rust_field.span());
+        let target = &navigation.target;
+        let key = quote! { #target }.to_string();
+        grouped
+            .entry(key)
+            .or_insert_with(|| (navigation.target.clone(), Vec::new()))
+            .1
+            .push((field_ident, navigation.rust_field.clone()));
+    }
+
+    grouped
+        .into_values()
+        .map(|(target, fields)| {
+            let arms = fields.into_iter().map(|(field_ident, rust_field)| {
+                quote! {
+                    #rust_field => {
+                        self.#field_ident = ::mssql_orm::Navigation::from_option(value);
+                        Ok(())
+                    }
+                }
+            });
+
+            Ok(quote! {
+                impl ::mssql_orm::IncludeNavigation<#target> for #entity_ident {
+                    fn set_included_navigation(
+                        &mut self,
+                        navigation: &str,
+                        value: ::core::option::Option<#target>,
+                    ) -> ::core::result::Result<(), ::mssql_orm::core::OrmError> {
+                        match navigation {
+                            #(#arms,)*
+                            _ => Err(::mssql_orm::core::OrmError::new(
+                                ::std::format!(
+                                    "entity `{}` does not support include navigation `{}` for `{}`",
+                                    <Self as ::mssql_orm::core::Entity>::metadata().rust_name,
+                                    navigation,
+                                    ::core::any::type_name::<#target>(),
+                                )
+                            )),
+                        }
+                    }
+                }
+            })
+        })
+        .collect()
 }
 
 fn validate_navigation_field_type(ty: &Type, navigation: &NavigationConfig) -> Result<()> {

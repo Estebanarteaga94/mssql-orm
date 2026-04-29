@@ -113,6 +113,23 @@ aliased public columns such as `Order::total_cents.aliased("orders")`.
 Navigation joins only build SQL joins; they do not materialize related entity
 graphs.
 
+For single navigations, `include::<T>(...)` performs eager loading through a
+left join and attaches the related row to `Navigation<T>`:
+
+```rust
+let orders = db
+    .orders
+    .query()
+    .include::<Customer>("customer")?
+    .all()
+    .await?;
+
+let customer = orders[0].customer.as_ref();
+```
+
+The current include cut supports `belongs_to` and `has_one`. `has_many` remains
+separate because it needs grouping or split-query semantics.
+
 ## Count
 
 `count()` preserves the base `from` and filters. In the current state it does not carry joins, ordering, or pagination into the internal `CountQuery`; use it for base-entity counts with filters that do not depend on joined tables.
@@ -155,7 +172,8 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 ## Limits
 
 - The public query builder does not accept arbitrary SQL fragments.
-- Navigation joins are explicit and fallible; automatic relationship loading is not supported.
+- Navigation joins are explicit and fallible.
+- `include::<T>(...)` supports only `belongs_to` and `has_one`; collection includes are not supported yet.
 - Initial public projections exist, but high-level typed aggregations are not available.
 
 ## Related

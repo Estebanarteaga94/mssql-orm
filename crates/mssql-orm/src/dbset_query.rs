@@ -1,13 +1,14 @@
 use crate::context::{ActiveTenant, SharedConnection};
 use crate::page_request::PageRequest;
 use crate::query_projection::SelectProjections;
-use crate::{SoftDeleteEntity, TenantScopedEntity};
+use crate::{IncludeNavigation, SoftDeleteEntity, TenantScopedEntity};
 use mssql_orm_core::{
-    ColumnMetadata, Entity, EntityMetadata, FromRow, OrmError, Row, SqlServerType, SqlValue,
+    ColumnMetadata, Entity, EntityMetadata, FromRow, NavigationKind, OrmError, Row, SqlServerType,
+    SqlValue,
 };
 use mssql_orm_query::{
-    ColumnRef, CountQuery, Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery,
-    TableRef,
+    ColumnRef, CountQuery, Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectProjection,
+    SelectQuery, TableRef,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -124,6 +125,52 @@ impl<E: Entity> DbSetQuery<E> {
         alias: &'static str,
     ) -> Result<Self, OrmError> {
         self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))
+    }
+
+    /// Includes a single related entity through a `belongs_to` or `has_one`
+    /// navigation.
+    ///
+    /// This first eager-loading cut uses a left join and materializes the
+    /// related row into `Navigation<J>`. Collection navigations (`has_many`)
+    /// are intentionally rejected because they need grouping or split-query
+    /// semantics.
+    pub fn include<J: Entity>(
+        self,
+        navigation: &'static str,
+    ) -> Result<DbSetQueryIncludeOne<E, J>, OrmError> {
+        self.include_as::<J>(navigation, navigation)
+    }
+
+    /// Includes a single related entity using an explicit table alias.
+    pub fn include_as<J: Entity>(
+        self,
+        navigation: &'static str,
+        alias: &'static str,
+    ) -> Result<DbSetQueryIncludeOne<E, J>, OrmError> {
+        let metadata = E::metadata();
+        let navigation_metadata = metadata.navigation(navigation).ok_or_else(|| {
+            OrmError::new(format!(
+                "entity `{}` does not declare navigation `{}`",
+                metadata.rust_name, navigation
+            ))
+        })?;
+
+        if !matches!(
+            navigation_metadata.kind,
+            NavigationKind::BelongsTo | NavigationKind::HasOne
+        ) {
+            return Err(OrmError::new(format!(
+                "include only supports belongs_to and has_one navigations; `{}` is {:?}",
+                navigation_metadata.rust_field, navigation_metadata.kind
+            )));
+        }
+
+        Ok(DbSetQueryIncludeOne {
+            query: self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))?,
+            navigation,
+            alias,
+            _target: core::marker::PhantomData,
+        })
     }
 
     /// Adds an ordering expression.
@@ -454,6 +501,167 @@ impl<E: Entity> DbSetQuery<E> {
     }
 }
 
+/// Query builder returned by `DbSetQuery::include::<T>(...)` for a single
+/// included navigation.
+pub struct DbSetQueryIncludeOne<E: Entity, J: Entity> {
+    query: DbSetQuery<E>,
+    navigation: &'static str,
+    alias: &'static str,
+    _target: core::marker::PhantomData<fn() -> J>,
+}
+
+impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
+    /// Executes the query and materializes root entities with one included
+    /// navigation attached.
+    pub async fn all(self) -> Result<Vec<E>, OrmError>
+    where
+        E: FromRow + IncludeNavigation<J> + Send + SoftDeleteEntity + TenantScopedEntity,
+        J: FromRow + Send,
+    {
+        let navigation = self.navigation;
+        let alias = self.alias;
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
+        let shared_connection = self.query.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        connection
+            .fetch_all_with(compiled, move |row| {
+                materialize_include_one::<E, J>(&row, navigation, alias)
+            })
+            .await
+    }
+
+    /// Executes the query and materializes the first root entity with one
+    /// included navigation attached, if any.
+    pub async fn first(self) -> Result<Option<E>, OrmError>
+    where
+        E: FromRow + IncludeNavigation<J> + Send + SoftDeleteEntity + TenantScopedEntity,
+        J: FromRow + Send,
+    {
+        let navigation = self.navigation;
+        let alias = self.alias;
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
+        let shared_connection = self.query.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        connection
+            .fetch_one_with(compiled, move |row| {
+                materialize_include_one::<E, J>(&row, navigation, alias)
+            })
+            .await
+    }
+
+    #[cfg(test)]
+    pub(crate) fn select_query(&self) -> Result<SelectQuery, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+    {
+        self.effective_select_query()
+    }
+
+    fn effective_select_query(&self) -> Result<SelectQuery, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+    {
+        let query = self.query.effective_select_query()?;
+        apply_include_projection::<E, J>(query, self.alias)
+    }
+}
+
+fn apply_include_projection<E: Entity, J: Entity>(
+    mut query: SelectQuery,
+    alias: &'static str,
+) -> Result<SelectQuery, OrmError> {
+    let mut projection = Vec::new();
+
+    projection.extend(E::metadata().columns.iter().map(|column| {
+        SelectProjection::expr_as(
+            Expr::Column(ColumnRef::new(
+                query.from,
+                column.rust_field,
+                column.column_name,
+            )),
+            column.column_name,
+        )
+    }));
+
+    let target_table = TableRef::for_entity_as::<J>(alias);
+    for column in J::metadata().columns {
+        projection.push(SelectProjection::expr_as(
+            Expr::Column(ColumnRef::new(
+                target_table,
+                column.rust_field,
+                column.column_name,
+            )),
+            include_column_alias(alias, column.column_name),
+        ));
+    }
+
+    query.projection = projection;
+    Ok(query)
+}
+
+fn materialize_include_one<E, J>(
+    row: &impl Row,
+    navigation: &'static str,
+    alias: &'static str,
+) -> Result<E, OrmError>
+where
+    E: FromRow + IncludeNavigation<J>,
+    J: Entity + FromRow,
+{
+    let mut entity = E::from_row(row)?;
+    let related = materialize_prefixed_entity::<J>(row, alias)?;
+    entity.set_included_navigation(navigation, related)?;
+    Ok(entity)
+}
+
+fn materialize_prefixed_entity<J: Entity + FromRow>(
+    row: &impl Row,
+    alias: &'static str,
+) -> Result<Option<J>, OrmError> {
+    let prefix = include_prefix(alias);
+    let mut saw_value = false;
+
+    for column in J::metadata().columns {
+        let projected = prefixed_column_name(&prefix, column.column_name);
+        if let Some(value) = row.try_get(&projected)? {
+            if !value.is_null() {
+                saw_value = true;
+                break;
+            }
+        }
+    }
+
+    if !saw_value {
+        return Ok(None);
+    }
+
+    Ok(Some(J::from_row(&PrefixedRow { row, prefix })?))
+}
+
+struct PrefixedRow<'a, R: Row + ?Sized> {
+    row: &'a R,
+    prefix: String,
+}
+
+impl<R: Row + ?Sized> Row for PrefixedRow<'_, R> {
+    fn try_get(&self, column: &str) -> Result<Option<SqlValue>, OrmError> {
+        self.row
+            .try_get(&prefixed_column_name(&self.prefix, column))
+    }
+}
+
+fn include_prefix(alias: &'static str) -> String {
+    format!("{alias}__")
+}
+
+fn include_column_alias(alias: &'static str, column_name: &'static str) -> &'static str {
+    Box::leak(format!("{alias}__{column_name}").into_boxed_str())
+}
+
+fn prefixed_column_name(prefix: &str, column_name: &str) -> String {
+    format!("{prefix}{column_name}")
+}
+
 fn metadata_column_expr(
     metadata: &'static EntityMetadata,
     table: TableRef,
@@ -679,6 +887,17 @@ mod tests {
         navigations: &NAVIGATION_ROOT_NAVIGATIONS,
     };
 
+    static NAVIGATION_TARGET_NAVIGATIONS: [NavigationMetadata; 1] = [NavigationMetadata::new(
+        "owner",
+        NavigationKind::BelongsTo,
+        "NavigationRoot",
+        "dbo",
+        "navigation_roots",
+        &["owner_id"],
+        &["id"],
+        Some("fk_navigation_targets_owner"),
+    )];
+
     static NAVIGATION_TARGET_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "NavigationTarget",
         schema: "sales",
@@ -691,7 +910,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
-        navigations: &[],
+        navigations: &NAVIGATION_TARGET_NAVIGATIONS,
     };
 
     impl Entity for NavigationRoot {
@@ -905,6 +1124,30 @@ mod tests {
     impl TenantScopedEntity for TenantEntity {
         fn tenant_policy() -> Option<EntityPolicyMetadata> {
             Some(EntityPolicyMetadata::new("tenant", &TENANT_POLICY_COLUMNS))
+        }
+    }
+
+    impl SoftDeleteEntity for NavigationRoot {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for NavigationTarget {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for NavigationRoot {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for NavigationTarget {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
         }
     }
 
@@ -1385,6 +1628,40 @@ mod tests {
                 .message()
                 .contains("targets `sales.navigation_targets`")
         );
+    }
+
+    #[test]
+    fn dbset_query_include_projects_root_and_prefixed_related_columns() {
+        let include = DbSet::<NavigationTarget>::disconnected()
+            .query()
+            .include_as::<NavigationRoot>("owner", "owner")
+            .unwrap();
+
+        let select = include.select_query().unwrap();
+
+        assert_eq!(select.joins.len(), 1);
+        assert_eq!(select.joins[0].join_type, JoinType::Left);
+        assert_eq!(
+            select.joins[0].table,
+            TableRef::with_alias("dbo", "navigation_roots", "owner")
+        );
+        assert_eq!(select.projection.len(), 3);
+        assert_eq!(select.projection[0].alias, Some("id"));
+        assert_eq!(select.projection[1].alias, Some("owner_id"));
+        assert_eq!(select.projection[2].alias, Some("owner__id"));
+    }
+
+    #[test]
+    fn dbset_query_include_rejects_collection_navigation() {
+        let result = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .include::<NavigationTarget>("orders");
+        let error = match result {
+            Ok(_) => panic!("expected collection include to be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.message().contains("belongs_to and has_one"));
     }
 
     #[test]

@@ -101,11 +101,11 @@ Use `left_join::<T>(...)` when the relationship can be missing or when you need 
 
 ## Materialization
 
-The current public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables; they do not automatically construct object graphs.
+The default public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables. A first `include::<T>(...)` cut exists for single navigations and explicitly constructs one related `Navigation<T>`.
 
 ## 0.2 Navigation Surface
 
-Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, and explicit join inference from navigation metadata. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Query execution remains explicit; `include(...)`, entity graph materialization, explicit loading APIs and lazy loading are still pending.
+Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, and eager loading for one `belongs_to` / `has_one` navigation. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Collection includes, explicit loading APIs and lazy loading are still pending.
 
 The relationship kinds are:
 
@@ -165,20 +165,26 @@ target table matches the joined entity type. It uses `local_columns` and
 This is not eager loading: the query still materializes the root entity or an
 explicit projection only.
 
-### Planned `include(...)`
+### `include(...)` for Single Navigations
 
-The target eager-loading API is explicit:
+The current eager-loading API is explicit and supports `belongs_to` / `has_one`:
 
 ```rust
 let lists = db
     .todo_lists
     .query()
-    .include(TodoList::owner)
+    .include::<User>("owner")?
     .all()
     .await?;
 ```
 
-For `belongs_to` and `has_one`, the initial implementation may use aliased joins when it can materialize the related entity without duplicating the root entity.
+The implementation uses a left join, projects root columns with their normal
+aliases, projects included columns with an internal prefix, materializes the
+related row through `FromRow`, and attaches it to the root `Navigation<T>`.
+When the joined side is absent, the navigation stays empty.
+
+`include_as::<T>("owner", "owner_alias")` is available when the query needs a
+specific SQL table alias.
 
 For `has_many`, the preferred first implementation is split queries:
 
@@ -228,12 +234,13 @@ Navigation support depends on earlier internal work:
 - table aliases in `mssql-orm-query`;
 - SQL Server alias compilation in `mssql-orm-sqlserver`;
 - explicit navigation join inference in `DbSetQuery`;
-- materialization that can separate root columns from included-entity columns;
+- materialization that can separate root columns from included-entity columns for one included entity;
 - tests for repeated joins, self-joins, `tenant`, `soft_delete`, and row ordering.
 
 ## Limits
 
-- Navigation properties currently provide metadata and explicit join inference only; they do not load related rows.
-- No lazy loading or automatic eager loading.
+- `include::<T>(...)` currently supports only one `belongs_to` or `has_one` navigation.
+- No lazy loading.
+- No collection eager loading yet.
 - No automatic projection of joined entity graphs.
 - Tenant and soft-delete automatic filters apply to the root entity only; filters on joined entities must be explicit.

@@ -40,7 +40,7 @@ pub use context::{
     ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnection, connect_shared,
     connect_shared_with_config, connect_shared_with_options,
 };
-pub use dbset_query::DbSetQuery;
+pub use dbset_query::{DbSetQuery, DbSetQueryIncludeOne};
 pub use mssql_orm_core::{EntityMetadata, NavigationKind, NavigationMetadata};
 pub use mssql_orm_tiberius::{
     MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
@@ -116,6 +116,21 @@ pub trait TenantScopedEntity: core::Entity {
     fn tenant_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+/// Contract generated for entities that can receive an included single
+/// navigation value.
+///
+/// This is used by `DbSetQuery::include::<T>(...)` for `belongs_to` and
+/// `has_one` navigations. Collection includes use a different loading strategy
+/// and are intentionally not part of this contract.
+pub trait IncludeNavigation<T>: core::Entity {
+    /// Attaches a loaded navigation value to the field named by `navigation`.
+    fn set_included_navigation(
+        &mut self,
+        navigation: &str,
+        value: Option<T>,
+    ) -> Result<(), core::OrmError>;
+}
+
 /// Marker value for a single related entity navigation.
 ///
 /// Navigation fields are not persisted as columns. They exist so
@@ -132,9 +147,24 @@ impl<T> Navigation<T> {
         Self { value: None }
     }
 
+    /// Creates a navigation value containing a loaded related entity.
+    pub fn loaded(value: T) -> Self {
+        Self { value: Some(value) }
+    }
+
+    /// Creates a navigation value from an optional related entity.
+    pub fn from_option(value: Option<T>) -> Self {
+        Self { value }
+    }
+
     /// Returns the loaded related entity when one has been attached.
     pub fn as_ref(&self) -> Option<&T> {
         self.value.as_ref()
+    }
+
+    /// Replaces the loaded related entity.
+    pub fn set(&mut self, value: Option<T>) {
+        self.value = value;
     }
 }
 
@@ -193,15 +223,16 @@ pub mod prelude {
     pub use crate::connect_shared_from_pool;
     pub use crate::{
         ActiveRecord, ActiveTenant, AuditEntity, Collection, DbContext, DbContextEntitySet, DbSet,
-        DbSetQuery, EntityColumnAliasExt, EntityColumnOrderExt, EntityColumnPredicateExt,
-        EntityState, MigrationModelSource, MssqlConnectionConfig, MssqlHealthCheckOptions,
-        MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
-        MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
-        MssqlTracingOptions, Navigation, PageRequest, PredicateCompositionExt, QueryHint,
-        RawCommand, RawParam, RawParams, RawQuery, SelectProjections, SharedConnection,
-        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
-        SoftDeleteRequestValues, SoftDeleteValues, TenantContext, TenantScopedEntity, Tracked,
-        model_snapshot_from_source, model_snapshot_json_from_source,
+        DbSetQuery, DbSetQueryIncludeOne, EntityColumnAliasExt, EntityColumnOrderExt,
+        EntityColumnPredicateExt, EntityState, IncludeNavigation, MigrationModelSource,
+        MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
+        MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
+        MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
+        Navigation, PageRequest, PredicateCompositionExt, QueryHint, RawCommand, RawParam,
+        RawParams, RawQuery, SelectProjections, SharedConnection, SoftDeleteContext,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+        SoftDeleteValues, TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
+        model_snapshot_json_from_source,
     };
     pub use crate::{
         AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,
