@@ -127,6 +127,24 @@ let orders = db
 let customer = orders[0].customer.as_ref();
 ```
 
+After `include`, the returned query still supports filters, explicit joins,
+ordering, limits and pagination before `all()` / `first()`:
+
+```rust
+let orders = db
+    .orders
+    .query()
+    .include_as::<Customer>("customer", "customer")?
+    .filter(Customer::email.aliased("customer").contains("@company.com"))
+    .order_by(Customer::email.aliased("customer").asc())
+    .take(20)
+    .all()
+    .await?;
+```
+
+`include` remains part of entity materialization. DTO projections through
+`select(...).all_as::<T>()` stay separate from entity graph loading.
+
 The current include cut supports `belongs_to` and `has_one`. `has_many` remains
 separate because it needs grouping or split-query semantics.
 

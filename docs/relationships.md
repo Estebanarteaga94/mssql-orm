@@ -186,6 +186,24 @@ When the joined side is absent, the navigation stays empty.
 `include_as::<T>("owner", "owner_alias")` is available when the query needs a
 specific SQL table alias.
 
+The include query can still be refined before execution with root or aliased
+related predicates:
+
+```rust
+let lists = db
+    .todo_lists
+    .query()
+    .include_as::<User>("owner", "owner")?
+    .filter(User::id.aliased("owner").gt(0_i64))
+    .order_by(User::id.aliased("owner").desc())
+    .take(20)
+    .all()
+    .await?;
+```
+
+Projection DTOs remain separate from includes; `include` materializes root
+entities and attaches a `Navigation<T>`.
+
 For `has_many`, the preferred first implementation is split queries:
 
 ```text

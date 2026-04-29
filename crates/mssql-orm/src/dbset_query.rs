@@ -511,6 +511,71 @@ pub struct DbSetQueryIncludeOne<E: Entity, J: Entity> {
 }
 
 impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
+    /// Adds a predicate after configuring the include.
+    pub fn filter(mut self, predicate: Predicate) -> Self {
+        self.query = self.query.filter(predicate);
+        self
+    }
+
+    /// Adds an explicit join after configuring the include.
+    pub fn join(mut self, join: Join) -> Self {
+        self.query = self.query.join(join);
+        self
+    }
+
+    /// Adds an explicit `INNER JOIN` after configuring the include.
+    pub fn inner_join<K: Entity>(mut self, on: Predicate) -> Self {
+        self.query = self.query.inner_join::<K>(on);
+        self
+    }
+
+    /// Adds an explicit `LEFT JOIN` after configuring the include.
+    pub fn left_join<K: Entity>(mut self, on: Predicate) -> Self {
+        self.query = self.query.left_join::<K>(on);
+        self
+    }
+
+    /// Adds an ordering expression after configuring the include.
+    pub fn order_by(mut self, order: OrderBy) -> Self {
+        self.query = self.query.order_by(order);
+        self
+    }
+
+    /// Limits the number of returned rows with zero offset.
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.query = self.query.limit(limit);
+        self
+    }
+
+    /// Alias for `limit(...)`.
+    pub fn take(self, limit: u64) -> Self {
+        self.limit(limit)
+    }
+
+    /// Applies page-based pagination after configuring the include.
+    pub fn paginate(mut self, request: PageRequest) -> Self {
+        self.query = self.query.paginate(request);
+        self
+    }
+
+    /// Includes logically deleted root rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`; included-entity policy filtering
+    /// is tracked separately in the navigation backlog.
+    pub fn with_deleted(mut self) -> Self {
+        self.query = self.query.with_deleted();
+        self
+    }
+
+    /// Returns only logically deleted root rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`; included-entity policy filtering
+    /// is tracked separately in the navigation backlog.
+    pub fn only_deleted(mut self) -> Self {
+        self.query = self.query.only_deleted();
+        self
+    }
+
     /// Executes the query and materializes root entities with one included
     /// navigation attached.
     pub async fn all(self) -> Result<Vec<E>, OrmError>
@@ -1649,6 +1714,51 @@ mod tests {
         assert_eq!(select.projection[0].alias, Some("id"));
         assert_eq!(select.projection[1].alias, Some("owner_id"));
         assert_eq!(select.projection[2].alias, Some("owner__id"));
+    }
+
+    #[test]
+    fn dbset_query_include_supports_chained_filter_order_and_pagination() {
+        let include = DbSet::<NavigationTarget>::disconnected()
+            .query()
+            .include_as::<NavigationRoot>("owner", "owner")
+            .unwrap()
+            .filter(Predicate::gt(
+                Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                    "id",
+                    "id",
+                )),
+                Expr::value(SqlValue::I64(0)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                "id",
+                SortDirection::Desc,
+            ))
+            .paginate(PageRequest::new(2, 10));
+
+        let select = include.select_query().unwrap();
+
+        assert_eq!(
+            select.predicate,
+            Some(Predicate::gt(
+                Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                    "id",
+                    "id",
+                )),
+                Expr::value(SqlValue::I64(0)),
+            ))
+        );
+        assert_eq!(
+            select.order_by,
+            vec![OrderBy::new(
+                TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                "id",
+                SortDirection::Desc,
+            )]
+        );
+        assert_eq!(select.pagination, Some(Pagination::new(10, 10)));
     }
 
     #[test]

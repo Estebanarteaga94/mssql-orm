@@ -78,6 +78,13 @@ fn main() {
             .unwrap()
             .filter(Order::total_cents.aliased("orders").gte(1000_i64));
 
-        let _include_query = db.orders.query().include::<User>("user").unwrap();
+        let _include_query = db
+            .orders
+            .query()
+            .include::<User>("user")
+            .unwrap()
+            .filter(User::id.aliased("user").gt(0_i64))
+            .order_by(User::id.aliased("user").desc())
+            .take(5);
     };
 }
