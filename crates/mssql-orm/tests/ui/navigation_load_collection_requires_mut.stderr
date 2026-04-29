@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/navigation_load_collection_requires_mut.rs:35:56
+   |
+35 |         let _future = db.users.load_collection::<Post>(&user, "posts");
+   |                                ----------------------- ^^^^^ types differ in mutability
+   |                                |
+   |                                arguments to this method are incorrect
+   |
+   = note: expected mutable reference `&mut User`
+                      found reference `&User`
+note: method defined here
+  --> src/context.rs
+   |
+   |     pub async fn load_collection<J>(
+   |                  ^^^^^^^^^^^^^^^

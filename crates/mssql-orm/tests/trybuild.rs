@@ -14,6 +14,7 @@ fn entity_derive_ui() {
     tests.pass("tests/ui/dbcontext_valid.rs");
     tests.pass("tests/ui/quickstart_public_valid.rs");
     tests.pass("tests/ui/code_first_public_valid.rs");
+    tests.pass("tests/ui/navigation_public_valid.rs");
     tests.pass("tests/ui/query_builder_public_valid.rs");
     tests.pass("tests/ui/query_builder_todo_app_valid.rs");
     tests.pass("tests/ui/query_projection_public_valid.rs");
@@ -44,6 +45,7 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/entity_navigation_unannotated_wrapper.rs");
     tests.compile_fail("tests/ui/entity_navigation_duplicate_attr.rs");
     tests.compile_fail("tests/ui/entity_navigation_many_to_many_direct.rs");
+    tests.compile_fail("tests/ui/navigation_load_collection_requires_mut.rs");
     tests.compile_fail("tests/ui/entity_foreign_key_same_target_requires_name.rs");
     tests.compile_fail("tests/ui/entity_rowversion_invalid_type.rs");
     tests.compile_fail("tests/ui/insertable_missing_entity.rs");
