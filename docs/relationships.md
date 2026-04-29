@@ -308,6 +308,48 @@ The stable identity-map behavior belongs to the future tracking stabilization
 work. Until then, navigation loading avoids pretending that graph identity or
 relationship persistence is already solved.
 
+### Future Identity Map Design
+
+The stable navigation/tracking integration should be built around one identity
+map owned by the context. The key must be deterministic:
+
+```text
+(entity Rust type, schema, table, primary-key column values)
+```
+
+For root queries, includes and explicit loads, materialization should consult
+that identity map before returning or attaching an entity:
+
+1. Build the entity from the row using `FromRow`.
+2. Compute its identity key from metadata and primary-key values.
+3. Reuse the existing tracked instance when the key is already present.
+4. Insert one tracked instance when the key is new.
+5. Attach navigation wrappers to those canonical instances.
+
+This future path must avoid duplicate in-memory instances for the same entity
+inside one context, including repeated includes and split-query collection
+loads. It must also preserve the current explicitness rules: raw SQL does not
+join the identity map automatically, and disconnected entities remain plain
+values unless the caller explicitly tracks them.
+
+Relationship persistence remains a separate policy decision. The first stable
+identity map should define navigation identity and graph materialization, but
+should not infer FK updates, dependent inserts/deletes, or many-to-many changes
+from wrapper mutations until `save_changes()` has explicit relationship-state
+rules.
+
+The minimum implementation guardrails are:
+
+- support simple primary keys first, or reject composite keys with clear errors;
+- preserve `tenant`, `soft_delete`, rowversion and audit behavior on canonical
+  tracked entities;
+- define attach/detach behavior before exposing graph tracking as stable;
+- ensure included entities loaded through different aliases still resolve to
+  one canonical instance when their identity key is equal;
+- keep query compilation in `mssql-orm-sqlserver` and execution in
+  `mssql-orm-tiberius`; the identity map belongs in the public/runtime
+  `mssql-orm` layer.
+
 ### Opt-In Lazy Loading
 
 Lazy loading is not a default behavior. The first executable cut is limited to

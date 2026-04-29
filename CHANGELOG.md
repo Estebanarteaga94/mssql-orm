@@ -21,6 +21,7 @@ Planned follow-up release focused on navigation properties and stabilizing exist
 - Audit public surfaces marked as experimental, pending verification, or deferred.
 - Define stability criteria for `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes()`.
 - Replace the current experimental tracking assumptions with stable unit-of-work guarantees, identity handling, deterministic operation ordering, transaction behavior, policy integration, and public tests.
+- Design a context-owned identity map for navigation loading so root queries, includes and explicit loads can reuse one canonical tracked entity per primary key.
 - Stabilize transactions for contexts created from pools by pinning one physical connection for the full transaction closure.
 - Add a safe `mssql-orm-cli database downgrade` workflow using existing `down.sql`, migration history and checksums, with explicit targets and clear errors for non-reversible migrations.
 - Revalidate `examples/todo-app` against a real SQL Server before removing any `Pending verification` documentation.

@@ -220,6 +220,12 @@ ordinary entity values and do not register included graphs automatically.
 tracking related entities. Relationship changes inside navigation wrappers are
 not persisted by `save_changes()` in this experimental cut.
 
+The future stable design is a context-owned identity map keyed by entity type
+and primary-key values. It should let root queries, includes and explicit loads
+reuse one canonical tracked instance per row inside a context, while keeping raw
+SQL and disconnected entities explicit. That identity map is not implemented in
+the current API.
+
 Navigation includes are not projection builders. After `include(...)` or
 `include_many(...)`, the returned builder does not expose `select(...)`,
 `all_as::<T>()` or `first_as::<T>()`; use plain `DbSetQuery` with explicit

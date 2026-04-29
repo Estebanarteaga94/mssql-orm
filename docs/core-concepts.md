@@ -130,6 +130,12 @@ related entities. Mutating a navigation wrapper can still mark the root wrapper
 as `Modified` through normal `Tracked<T>` mutable access, but `save_changes()`
 does not persist relationship graph changes yet.
 
+The future stable graph-tracking direction is a context-owned identity map keyed
+by entity type and primary-key values. Root queries, includes and explicit loads
+should reuse a canonical tracked instance for the same row inside one context.
+That design belongs with `Tracked<T>` / `save_changes()` stabilization and must
+not move SQL generation or execution out of their current crates.
+
 ## Query AST
 
 The public query builder produces `mssql-orm-query` structures such as:
