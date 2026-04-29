@@ -196,6 +196,14 @@ db.customers
 This remains an explicit async call and does not add lazy loading to field
 access.
 
+Lazy loading remains a planned, opt-in-only feature. If implemented later, it
+must use distinct lazy wrapper types and explicit async load calls that receive
+a context-bearing value; `Navigation<T>` / `Collection<T>` field reads, `Deref`,
+`Debug`, `Clone` and serialization must stay memory-only. The default guidance
+is still to choose `include(...)`, `include_many(...)`, explicit loading, joins
+or projections according to the query shape instead of relying on hidden
+per-row queries.
+
 ## Count
 
 `count()` preserves the base `from` and filters. In the current state it does not carry joins, ordering, or pagination into the internal `CountQuery`; use it for base-entity counts with filters that do not depend on joined tables.

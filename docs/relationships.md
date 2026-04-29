@@ -105,7 +105,7 @@ The default public `DbSetQuery<T>` materializes entities from the base table (`T
 
 ## 0.2 Navigation Surface
 
-Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, and eager loading for one `belongs_to` / `has_one` navigation. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Collection includes, explicit loading APIs and lazy loading are still pending.
+Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, and explicit `has_many` collection loading from materialized roots. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Lazy loading remains design-only and is not implemented.
 
 The relationship kinds are:
 
@@ -283,9 +283,71 @@ field access performs I/O.
 
 ### Planned Lazy Loading
 
-Lazy loading is not a default behavior. If it is added, it must be opt-in and visible in types, for example through wrappers such as `Lazy<T>` or `LazyCollection<T>`.
+Lazy loading is not a default behavior. If it is added, it must be opt-in and visible in types, through wrappers that are distinct from `Navigation<T>` and `Collection<T>`. Normal entity field access must never perform I/O.
 
-The design must avoid normal field access that silently performs I/O. Rust async, ownership and N+1 query risk make implicit lazy loading unsuitable for the default API.
+The planned shape is explicit at both the entity type and call site:
+
+```rust
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "todo_lists", schema = "todo")]
+pub struct TodoList {
+    #[orm(primary_key)]
+    pub id: i64,
+
+    #[orm(foreign_key(entity = User, column = id))]
+    pub owner_id: i64,
+
+    #[orm(belongs_to(User, foreign_key = owner_id))]
+    pub owner: LazyNavigation<User>,
+}
+
+let mut list = db.todo_lists.find(7_i64).await?.expect("list");
+
+let owner = list
+    .owner
+    .load(&db.todo_lists)
+    .await?;
+```
+
+The exact type names are still pending implementation, but the contract is:
+
+- `LazyNavigation<T>` / `LazyCollection<T>` are separate wrappers from eager-loaded `Navigation<T>` / `Collection<T>`.
+- Loading requires an explicit async method call such as `load(...)`, `load_mut(...)` or `load_collection(...)`.
+- The call receives an explicit context-bearing value, such as `&DbSet<E>` or a future entry API. Lazy wrappers do not store an open SQL Server connection by themselves.
+- A loaded value is cached inside the wrapper for that entity instance until the caller clears or refreshes it through an explicit method.
+- The wrapper exposes state inspection, for example `is_loaded()`, so code can avoid accidental repeated loads.
+- Missing single navigations produce an empty loaded state, matching `Navigation<T>`.
+
+This keeps the I/O boundary visible in Rust syntax: `await` appears where the query happens, and ordinary field reads remain memory-only.
+
+#### Why It Is Not The First Executable Cut
+
+Rust async and ownership make transparent lazy loading a poor default for this ORM:
+
+- `async` work cannot run inside a normal `Deref` or field accessor, so implicit loading would require blocking, hidden runtimes, or surprising APIs.
+- Storing context or connection handles inside every entity would blur the current architecture where execution stays in `mssql-orm-tiberius` and public entity values remain plain data.
+- Entity clones would need clear rules for whether they share lazy state, cached values, and connection capability.
+- Long-lived entities holding context references would introduce lifetime constraints that are hard to compose with web handlers, transactions and pools.
+- Hidden per-row loads create N+1 query regressions that are hard to see in review and telemetry.
+
+For those reasons, the stable path remains explicit eager loading with
+`include(...)` / `include_many(...)`, explicit collection loading with
+`load_collection(...)`, explicit joins for query shaping, and raw SQL for fully
+manual shapes.
+
+#### Required Guardrails Before Implementation
+
+A lazy-loading implementation must provide all of these guardrails before it can
+be considered executable:
+
+- Opt-in field types only; existing `Navigation<T>` and `Collection<T>` must not become lazy by default.
+- No query from `Deref`, `as_ref`, `as_slice`, `Debug`, `Clone`, serialization or equality operations.
+- Explicit context parameter on every load call, so no entity silently owns a connection.
+- Compatibility with `tenant` and default `soft_delete` filters equal to explicit loading.
+- Clear behavior inside transactions: a load inside a transaction must use that transaction's context-bearing value, not a separate pooled connection.
+- Repeated-load semantics, cache invalidation and refresh behavior documented and tested.
+- Diagnostics or API friction for collection lazy loading, because `LazyCollection<T>` is the highest N+1 risk.
+- Tests proving that constructing, cloning, reading and formatting lazy wrappers do not execute SQL.
 
 ### Policies and Projections
 

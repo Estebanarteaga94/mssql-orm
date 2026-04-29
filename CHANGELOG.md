@@ -14,6 +14,7 @@ Planned follow-up release focused on navigation properties and stabilizing exist
 - Add navigation metadata without coupling `core` to execution and without creating a second migration pipeline.
 - Add table aliases to the query AST and SQL Server compiler before implementing inferred joins, repeated joins, self-joins, and `include(...)`.
 - Materialize included entity graphs while preserving explicit query behavior, typed projections, raw SQL boundaries, and mandatory `tenant` / `soft_delete` filters for included entities.
+- Keep lazy loading as a separate opt-in design: normal field access must never perform I/O, and any executable cut must require explicit async load calls with a context-bearing value.
 
 ### Planned Stabilization Work
 
@@ -124,7 +125,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 - SQL Server is the only supported backend.
 - Multi-database support is not available.
 - Navigation properties are not available in `0.1.0`; they are tracked as planned Stage 20 work.
-- Lazy loading and automatic eager loading are not available in `0.1.0`; explicit loading and opt-in lazy loading require Stage 20 design first.
+- Lazy loading and automatic eager loading are not available in `0.1.0`; later lazy loading must remain opt-in and visibly async.
 - Table aliases in joins are not available in `0.1.0`; alias support is planned as a prerequisite for navigation, repeated joins, and self-joins.
 - High-level typed aggregations, `group_by`, and automatic aliases for self-joins are not available in `0.1.0`; aggregation APIs are planned for `0.2.0`.
 - `count()` does not preserve joins in this release.

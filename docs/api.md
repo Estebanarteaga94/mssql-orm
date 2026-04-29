@@ -342,8 +342,8 @@ These are useful for tests, tooling, snapshots, and advanced diagnostics. Normal
 ## Current Exclusions
 
 - SQL Server is the only backend.
-- Navigation properties currently expose metadata, explicit join inference, and single-navigation eager loading for `belongs_to` / `has_one`.
-- Lazy loading and collection eager loading are not available.
+- Navigation properties currently expose metadata, explicit join inference, single-navigation eager loading for `belongs_to` / `has_one`, join-based `has_many` eager loading, and explicit `has_many` collection loading.
+- Lazy loading is not implemented. The planned design is opt-in only, visible through distinct lazy wrapper types, and must require explicit async load calls with a context-bearing value so ordinary field access never performs I/O.
 - High-level typed aggregations are not available.
 - Composite primary-key persistence is not complete across public CRUD and Active Record.
 - `migration.rs` is not generated.

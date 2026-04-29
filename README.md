@@ -124,7 +124,8 @@ Pending verification: historical validation of `todo-app` against real SQL Serve
 ## Current Limits
 
 - SQL Server only.
-- No navigation properties, lazy loading, or automatic eager loading.
+- Navigation properties currently support metadata, explicit join inference, `belongs_to` / `has_one` includes, join-based `has_many` includes, and explicit `has_many` collection loading.
+- Lazy loading is not implemented. The planned design is opt-in only and must keep I/O behind explicit async load calls, never normal field access.
 - Public CRUD, Active Record, and tracking are still focused on simple primary keys.
 - `AuditProvider` has a public runtime contract, audit-owned column metadata, context transport, and insert/update auto-fill on the main `DbSet`, Active Record, and `save_changes()` paths.
 - `raw<T>()` and `raw_exec()` do not automatically apply ORM `tenant` or `soft_delete` filters.
