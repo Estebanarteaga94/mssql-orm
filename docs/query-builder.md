@@ -142,8 +142,11 @@ let orders = db
     .await?;
 ```
 
-`include` remains part of entity materialization. DTO projections through
-`select(...).all_as::<T>()` stay separate from entity graph loading.
+`include` remains part of entity materialization. The include builders expose
+entity-loading methods such as `all()` / `first()` and chaining for filters,
+ordering and joins, but they intentionally do not expose `select(...)`,
+`all_as::<T>()` or `first_as::<T>()`. DTO projections stay on plain
+`DbSetQuery` before any include is configured.
 
 Runtime policies are applied to both sides safely. Root `tenant` and
 `soft_delete` filters are added to the effective query predicate; included
@@ -190,6 +193,13 @@ The public API supports two separate materialization paths:
 
 - `all()` and `first()` materialize full entities.
 - `select(...).all_as::<T>()` and `select(...).first_as::<T>()` materialize DTOs with `FromRow`.
+
+Includes and DTO projections are mutually separate routes. Use `include(...)`
+or `include_many(...)` when the result must be an entity graph with
+`Navigation<T>` / `Collection<T>` populated. Use `select(...).all_as::<T>()`
+when the result must be a flat SQL projection DTO. Raw SQL remains a third
+escape hatch and does not infer navigation metadata or attach navigation
+wrappers.
 
 ```rust
 use mssql_orm::prelude::*;

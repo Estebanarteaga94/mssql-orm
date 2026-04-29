@@ -1,0 +1,67 @@
+error[E0599]: no method named `select` found for struct `DbSetQueryIncludeOne<E, J>` in the current scope
+  --> tests/ui/dbset_include_projection_unavailable.rs:46:14
+   |
+41 |           let _single_projection = db
+   |  __________________________________-
+42 | |             .orders
+43 | |             .query()
+   | |              ------- method `select` is available on `DbSetQuery<Order>`
+44 | |             .include::<User>("user")
+45 | |             .unwrap()
+46 | |             .select(User::id);
+   | |             -^^^^^^ method not found in `DbSetQueryIncludeOne<Order, User>`
+   | |_____________|
+   |
+
+error[E0599]: no method named `all_as` found for struct `DbSetQueryIncludeOne<E, J>` in the current scope
+  --> tests/ui/dbset_include_projection_unavailable.rs:53:14
+   |
+48 |           let _single_dto = db
+   |  ___________________________-
+49 | |             .orders
+50 | |             .query()
+   | |              ------- method `all_as` is available on `DbSetQuery<Order>`
+51 | |             .include::<User>("user")
+52 | |             .unwrap()
+53 | |             .all_as::<UserDto>();
+   | |_____________-^^^^^^
+   |
+help: there is a method `all` with a similar name
+   |
+53 -             .all_as::<UserDto>();
+53 +             .all::<UserDto>();
+   |
+
+error[E0599]: no method named `select` found for struct `DbSetQueryIncludeMany<E, J>` in the current scope
+  --> tests/ui/dbset_include_projection_unavailable.rs:60:14
+   |
+55 |           let _collection_projection = db
+   |  ______________________________________-
+56 | |             .users
+57 | |             .query()
+   | |              ------- method `select` is available on `DbSetQuery<User>`
+58 | |             .include_many::<Order>("orders")
+59 | |             .unwrap()
+60 | |             .select(User::id);
+   | |             -^^^^^^ method not found in `DbSetQueryIncludeMany<User, Order>`
+   | |_____________|
+   |
+
+error[E0599]: no method named `all_as` found for struct `DbSetQueryIncludeMany<E, J>` in the current scope
+  --> tests/ui/dbset_include_projection_unavailable.rs:67:14
+   |
+62 |           let _collection_dto = db
+   |  _______________________________-
+63 | |             .users
+64 | |             .query()
+   | |              ------- method `all_as` is available on `DbSetQuery<User>`
+65 | |             .include_many::<Order>("orders")
+66 | |             .unwrap()
+67 | |             .all_as::<UserDto>();
+   | |_____________-^^^^^^
+   |
+help: there is a method `all` with a similar name
+   |
+67 -             .all_as::<UserDto>();
+67 +             .all::<UserDto>();
+   |

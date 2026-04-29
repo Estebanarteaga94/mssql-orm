@@ -202,6 +202,11 @@ Root policies are applied to the effective query predicate, while
 included-entity `tenant` and default `soft_delete` policies are applied to the
 include join predicate.
 
+Navigation includes are not projection builders. After `include(...)` or
+`include_many(...)`, the returned builder does not expose `select(...)`,
+`all_as::<T>()` or `first_as::<T>()`; use plain `DbSetQuery` with explicit
+joins for DTO projections, or raw SQL for fully manual result shapes.
+
 Projection DTOs can derive `FromRow`:
 
 ```rust

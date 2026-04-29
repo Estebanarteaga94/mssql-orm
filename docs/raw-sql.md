@@ -130,6 +130,13 @@ If an entity uses `#[orm(tenant = CurrentTenant)]`, public `DbSetQuery` and CRUD
 
 The same applies to `soft_delete`: raw SQL does not add `deleted_at IS NULL`, `is_deleted = 0`, or any equivalent predicate.
 
+## Navigation Boundaries
+
+Raw SQL is not integrated with navigation loading. It does not inspect
+`EntityMetadata.navigations`, infer joins, apply include aliases, or attach
+`Navigation<T>` / `Collection<T>` wrappers. If a raw query returns related data,
+map it into a DTO with `FromRow` and explicit column aliases.
+
 ## Transactions
 
 Raw SQL can run inside `db.transaction(...)` when using the transaction context passed to the closure. The same transaction limits documented in [docs/transactions.md](transactions.md) apply.

@@ -277,8 +277,8 @@ Navigation loading must preserve existing safety behavior:
 
 - `tenant` filters apply to included tenant-scoped entities inside the include `JOIN ... ON` predicate and fail closed when the active tenant is missing or incompatible.
 - default `soft_delete` visibility applies to included soft-deleted entities inside the include `JOIN ... ON` predicate; a future API may add an explicit include-time visibility override.
-- Raw SQL remains explicit and does not infer navigation filters.
-- `select(...)`, `all_as::<T>()` and DTO projections remain separate from entity graph materialization.
+- Raw SQL remains explicit, does not infer navigation filters and does not attach `Navigation<T>` / `Collection<T>`.
+- `select(...)`, `all_as::<T>()`, `first_as::<T>()` and DTO projections remain separate from entity graph materialization; include builders intentionally do not expose projection methods.
 
 ### Required Infrastructure
 

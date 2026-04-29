@@ -158,6 +158,18 @@ Projections reuse the effective `DbSetQuery` path. Mandatory tenant filters and 
 
 Raw SQL remains different: `raw<T>()` does not apply ORM runtime filters automatically.
 
+## Navigation Boundaries
+
+Projection DTOs and navigation loading are intentionally separate. A query that
+uses `include(...)` or `include_many(...)` materializes root entities and
+attaches `Navigation<T>` or `Collection<T>` values. It does not expose
+`select(...)`, `all_as::<T>()` or `first_as::<T>()`.
+
+Use `select(...).all_as::<T>()` for flat SQL DTOs. Use `include(...)` /
+`include_many(...)` for entity graphs. If a DTO needs data from related tables,
+build an explicit join and projection with aliases instead of expecting
+navigation wrappers to be populated.
+
 ## FromRow Derive Limits
 
 `#[derive(FromRow)]` for projection DTOs is intentionally small:
