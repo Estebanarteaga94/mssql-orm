@@ -2,7 +2,8 @@
 
 In `mssql-orm`, a relationship declared with `foreign_key` produces relational metadata, migration snapshots, diffs, and SQL Server DDL. Queries remain explicit: declaring a foreign key does not make joins implicit, and navigation loading must be requested through the public query APIs.
 
-See also [Core concepts](core-concepts.md).
+See also [Core concepts](core-concepts.md) and
+[Navigation properties](navigation.md).
 
 ## Declaring a Foreign Key
 
@@ -104,6 +105,10 @@ Use `left_join::<T>(...)` when the relationship can be missing or when you need 
 The default public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables. A first `include::<T>(...)` cut exists for single navigations and explicitly constructs one related `Navigation<T>`.
 
 ## Navigation Surface
+
+For the full navigation guide, including wrapper behavior, eager loading,
+explicit loading, many-to-many modeling, policies, tracking limits and runtime
+validation, see [Navigation properties](navigation.md).
 
 Navigation properties are available in the current workspace cut. The implemented surface supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, explicit `has_many` collection loading from materialized roots, and opt-in lazy state wrappers that never perform I/O by themselves. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata.
 

@@ -170,6 +170,8 @@ That separation matters because `mssql-orm-query` is a structural layer, while `
 
 ## Navigation Loading
 
+For the full user-facing guide, see [Navigation properties](navigation.md).
+
 Navigation properties are declared on entity structs with marker wrappers such
 as `Navigation<T>`, `Collection<T>`, `LazyNavigation<T>` and
 `LazyCollection<T>`. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and

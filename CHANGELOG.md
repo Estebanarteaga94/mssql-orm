@@ -129,6 +129,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
   - `docs/code-first.md`
   - `docs/api.md`
   - `docs/query-builder.md`
+  - `docs/navigation.md`
   - `docs/relationships.md`
   - `docs/transactions.md`
   - `docs/migrations.md`
@@ -186,6 +187,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 - Quickstart: [docs/quickstart.md](docs/quickstart.md)
 - Code-first: [docs/code-first.md](docs/code-first.md)
 - Query builder: [docs/query-builder.md](docs/query-builder.md)
+- Navigation properties: [docs/navigation.md](docs/navigation.md)
 - Relationships and joins: [docs/relationships.md](docs/relationships.md)
 - Transactions: [docs/transactions.md](docs/transactions.md)
 - Migrations: [docs/migrations.md](docs/migrations.md)

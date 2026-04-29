@@ -106,6 +106,7 @@ let active_users = db
 - [Code-first](docs/code-first.md): entities, derives, `DbContext`, `DbSet`, and model metadata.
 - [Public API](docs/api.md): exported surface from the root crate and prelude.
 - [Query builder](docs/query-builder.md): predicates, ordering, pagination, explicit joins, navigation joins, includes, and projections.
+- [Navigation properties](docs/navigation.md): `belongs_to`, `has_one`, `has_many`, includes, explicit loading, lazy state wrappers, and limits.
 - [Typed projections](docs/projections.md): `select(...)`, `all_as::<T>()`, `first_as::<T>()`, aliases, and DTOs.
 - [Typed raw SQL](docs/raw-sql.md): `raw<T>()`, `raw_exec()`, parameters, DTOs, and safety rules.
 - [Relationships](docs/relationships.md): foreign keys, navigation metadata, includes, explicit loading, and joins.

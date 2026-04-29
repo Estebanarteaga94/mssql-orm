@@ -100,10 +100,11 @@ These items exist only with explicit limits or partial scope:
 - `db.transaction(...)` is blocked for contexts created from a pool until a physical connection can be pinned for the whole closure.
 - `raw<T>()` and `raw_exec()` do not apply ORM filters for `tenant` or `soft_delete`. The caller must write those predicates manually.
 - Soft-delete automatic read filters apply to the root entity of `DbSetQuery<E>`, not to every manually joined entity.
-- Query aliases for multiple references to the same table are not supported; SQL Server join compilation requires unique joined tables until alias support exists.
+- Query aliases for multiple references to the same table are supported through explicit aliases. Fully automatic alias assignment is still not implemented.
+- Navigation properties expose metadata, explicit navigation joins, single-navigation includes, join-based collection includes and explicit collection loading. Graph tracking, direct many-to-many, split-query execution and automatic lazy loading remain limited or deferred.
 - High-level aggregate projection APIs are not implemented. Low-level expression functions exist, but typed aggregate ergonomics are not a public feature.
-- Audit policy columns are metadata/schema only. They are not visible entity fields, do not generate column symbols and are not automatically filled during insert/update. Audited entities expose audit-owned columns through `AuditEntity::audit_policy()`.
-- `AuditProvider` has a public runtime contract and is transported through contexts, but it is not applied to insert/update paths yet.
+- Audit policy columns are not visible entity fields and do not generate column symbols. Audited entities expose audit-owned columns through `AuditEntity::audit_policy()`.
+- `AuditProvider` has a public runtime contract, is transported through contexts, and is applied to insert/update paths when audited entities have missing audit-owned values.
 - Migration rollback generation is available only when operation payloads are reversible. Some destructive operations still require manual `down.sql`.
 - `migration.rs` is explicitly deferred from the migration artifact MVP.
 - Multi-database support is intentionally out of scope.
@@ -112,10 +113,9 @@ These items exist only with explicit limits or partial scope:
 
 The following should not be documented as available behavior:
 
-- Runtime `AuditProvider` autoloading of `created_at`, `created_by`, `updated_at` or `updated_by`.
 - Field-level access or generated symbols for policy-contributed audit columns such as `Todo::created_at`.
-- Navigation properties and inferred joins.
-- Automatic table aliases for self-joins or repeated table joins.
+- Direct many-to-many navigation, automatic nested includes, automatic lazy loading and stable graph tracking.
+- Fully automatic table alias assignment for self-joins or repeated table joins.
 - High-level typed aggregate builder APIs.
 - Complete composite-primary-key persistence across all public CRUD, Active Record and tracking paths.
 - A Rust `migration.rs` migration API parallel to the current SQL/snapshot artifact flow.
@@ -127,7 +127,7 @@ The following should not be documented as available behavior:
 
 `Entity -> EntityMetadata -> Query AST -> SQL Server SQL -> Tiberius execution -> Row -> Entity or DTO`
 
-It should avoid presenting planned-only behavior as shipped. Claims about audit autoloading, navigation properties, inferred joins, multi-database abstractions, table alias support, aggregate builders and composite primary key CRUD should be marked as unavailable or pending verification unless the implementation changes first.
+It should avoid presenting planned-only behavior as shipped. Claims about direct many-to-many navigation, automatic lazy loading, graph tracking, multi-database abstractions, aggregate builders and composite primary key CRUD should be marked as unavailable or pending verification unless the implementation changes first.
 
 The public README can safely link to this audit and to `docs/core-concepts.md` once created, but should not duplicate the full inventory.
 

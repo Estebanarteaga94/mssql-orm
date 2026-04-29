@@ -2,7 +2,8 @@
 
 The public query builder does not build SQL directly from the root crate. It produces a `mssql-orm-query` AST. SQL Server parameterized SQL is compiled by `mssql-orm-sqlserver`, and execution happens in the Tiberius adapter.
 
-See also [Core concepts](core-concepts.md).
+See also [Core concepts](core-concepts.md) and
+[Navigation properties](navigation.md).
 
 ## Entry Point
 
@@ -78,6 +79,10 @@ db.users
 SQL Server pagination requires deterministic ordering.
 
 ## Joins And Navigation Loading
+
+For complete navigation-property documentation, including model syntax,
+include behavior, explicit loading and current limits, see
+[Navigation properties](navigation.md).
 
 Joins are explicit. You can either provide the `ON` predicate manually or ask
 `DbSetQuery` to build it from navigation metadata.
@@ -269,6 +274,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 
 ## Related
 
+- Navigation properties: [docs/navigation.md](navigation.md)
 - Projections: [docs/projections.md](projections.md)
 - Raw SQL escape hatch: [docs/raw-sql.md](raw-sql.md)
 - Real example queries: [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs)

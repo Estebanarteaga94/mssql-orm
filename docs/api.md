@@ -10,7 +10,8 @@ use mssql_orm::prelude::*;
 
 The root crate concentrates the user API and reexports selected internals for tests, tooling, and advanced cases. Responsibilities remain separated by crate: `query` builds ASTs, `sqlserver` compiles SQL, `tiberius` executes, `migrate` manages snapshots/diffs/migrations, and `core` defines shared contracts.
 
-See also [Core concepts](core-concepts.md).
+See also [Core concepts](core-concepts.md) and
+[Navigation properties](navigation.md).
 
 ## Public Derives
 
@@ -117,6 +118,8 @@ Navigation fields declared with `Navigation<T>`, `Collection<T>`,
 excludes those fields from `ColumnMetadata`, emits `NavigationMetadata`, and
 initializes eager wrappers empty and lazy wrappers unloaded when materializing
 an entity without an explicit include/load operation.
+
+The full navigation guide is [Navigation properties](navigation.md).
 
 Direct `many_to_many` navigation attributes are rejected. Model many-to-many
 relationships as explicit join entities with ordinary foreign keys and
