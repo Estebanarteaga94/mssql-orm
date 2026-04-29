@@ -189,6 +189,11 @@ Common query methods:
 
 The query builder produces AST values. SQL generation belongs to `mssql-orm-sqlserver`.
 
+`include::<T>(...)` and `include_as::<T>(...)` are limited to one
+`belongs_to` / `has_one` navigation. Root policies are applied to the effective
+query predicate, while included-entity `tenant` and default `soft_delete`
+policies are applied to the include join predicate.
+
 Projection DTOs can derive `FromRow`:
 
 ```rust

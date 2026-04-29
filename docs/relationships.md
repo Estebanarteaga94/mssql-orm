@@ -183,6 +183,12 @@ aliases, projects included columns with an internal prefix, materializes the
 related row through `FromRow`, and attaches it to the root `Navigation<T>`.
 When the joined side is absent, the navigation stays empty.
 
+If the included entity declares `tenant` or `soft_delete`, those filters are
+applied inside the include join predicate. This preserves `LEFT JOIN`
+semantics: a related row hidden by tenant or soft-delete policy leaves the
+navigation empty instead of dropping the root entity. Tenant-scoped included
+entities fail closed when the context has no compatible active tenant.
+
 `include_as::<T>("owner", "owner_alias")` is available when the query needs a
 specific SQL table alias.
 
@@ -238,8 +244,8 @@ The design must avoid normal field access that silently performs I/O. Rust async
 
 Navigation loading must preserve existing safety behavior:
 
-- `tenant` filters must apply to included tenant-scoped entities and fail closed when the active tenant is missing or incompatible.
-- `soft_delete` visibility must apply to included soft-deleted entities unless a future API provides an explicit include-time visibility override.
+- `tenant` filters apply to included tenant-scoped entities inside the include `JOIN ... ON` predicate and fail closed when the active tenant is missing or incompatible.
+- default `soft_delete` visibility applies to included soft-deleted entities inside the include `JOIN ... ON` predicate; a future API may add an explicit include-time visibility override.
 - Raw SQL remains explicit and does not infer navigation filters.
 - `select(...)`, `all_as::<T>()` and DTO projections remain separate from entity graph materialization.
 

@@ -315,106 +315,19 @@ impl<E: Entity> DbSetQuery<E> {
     {
         let mut query = self.select_query.clone();
 
-        if let Some(predicate) = self.tenant_predicate()? {
+        if let Some(predicate) =
+            tenant_predicate_for::<E>(self.active_tenant.as_ref(), TableRef::for_entity::<E>())?
+        {
             query = query.filter(predicate);
         }
 
-        if let Some(predicate) = self.soft_delete_visibility_predicate()? {
+        if let Some(predicate) =
+            soft_delete_visibility_predicate_for::<E>(TableRef::for_entity::<E>(), self.visibility)?
+        {
             query = query.filter(predicate);
         }
 
         Ok(query)
-    }
-
-    fn tenant_predicate(&self) -> Result<Option<Predicate>, OrmError>
-    where
-        E: TenantScopedEntity,
-    {
-        let Some(policy) = E::tenant_policy() else {
-            return Ok(None);
-        };
-
-        if policy.columns.len() != 1 {
-            return Err(OrmError::new(
-                "tenant query filter requires exactly one tenant policy column",
-            ));
-        }
-
-        let tenant_column = &policy.columns[0];
-        let active_tenant = self.active_tenant.as_ref().ok_or_else(|| {
-            OrmError::new("tenant-scoped query requires an active tenant in the DbContext")
-        })?;
-
-        if active_tenant.column_name != tenant_column.column_name {
-            return Err(OrmError::new(format!(
-                "active tenant column `{}` does not match entity tenant column `{}`",
-                active_tenant.column_name, tenant_column.column_name
-            )));
-        }
-
-        if !tenant_value_matches_column_type(&active_tenant.value, tenant_column) {
-            return Err(OrmError::new(format!(
-                "active tenant value is not compatible with entity tenant column `{}`",
-                tenant_column.column_name
-            )));
-        }
-
-        Ok(Some(Predicate::eq(
-            Expr::Column(ColumnRef::new(
-                TableRef::for_entity::<E>(),
-                tenant_column.rust_field,
-                tenant_column.column_name,
-            )),
-            Expr::Value(active_tenant.value.clone()),
-        )))
-    }
-
-    fn soft_delete_visibility_predicate(&self) -> Result<Option<Predicate>, OrmError>
-    where
-        E: SoftDeleteEntity,
-    {
-        let Some(policy) = E::soft_delete_policy() else {
-            return Ok(None);
-        };
-
-        let visibility = match self.visibility {
-            SoftDeleteVisibility::Default => SoftDeleteVisibility::Default,
-            SoftDeleteVisibility::WithDeleted => return Ok(None),
-            SoftDeleteVisibility::OnlyDeleted => SoftDeleteVisibility::OnlyDeleted,
-        };
-
-        let indicator = policy.columns.first().ok_or_else(|| {
-            OrmError::new("soft_delete query visibility requires at least one policy column")
-        })?;
-        let column = Expr::Column(ColumnRef::new(
-            TableRef::for_entity::<E>(),
-            indicator.rust_field,
-            indicator.column_name,
-        ));
-
-        if indicator.sql_type == SqlServerType::Bit {
-            return Ok(Some(match visibility {
-                SoftDeleteVisibility::Default => {
-                    Predicate::eq(column, Expr::Value(SqlValue::Bool(false)))
-                }
-                SoftDeleteVisibility::OnlyDeleted => {
-                    Predicate::eq(column, Expr::Value(SqlValue::Bool(true)))
-                }
-                SoftDeleteVisibility::WithDeleted => unreachable!(),
-            }));
-        }
-
-        if indicator.nullable {
-            return Ok(Some(match visibility {
-                SoftDeleteVisibility::Default => Predicate::is_null(column),
-                SoftDeleteVisibility::OnlyDeleted => Predicate::is_not_null(column),
-                SoftDeleteVisibility::WithDeleted => unreachable!(),
-            }));
-        }
-
-        Err(OrmError::new(
-            "soft_delete query visibility requires the first policy column to be nullable or bit",
-        ))
     }
 
     fn require_connection(&self) -> Result<SharedConnection, OrmError> {
@@ -560,8 +473,8 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
 
     /// Includes logically deleted root rows for entities with `soft_delete`.
     ///
-    /// This affects only the root entity `E`; included-entity policy filtering
-    /// is tracked separately in the navigation backlog.
+    /// This affects only the root entity `E`; included entities still apply
+    /// their own default `soft_delete` visibility inside the include join.
     pub fn with_deleted(mut self) -> Self {
         self.query = self.query.with_deleted();
         self
@@ -569,8 +482,8 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
 
     /// Returns only logically deleted root rows for entities with `soft_delete`.
     ///
-    /// This affects only the root entity `E`; included-entity policy filtering
-    /// is tracked separately in the navigation backlog.
+    /// This affects only the root entity `E`; included entities still apply
+    /// their own default `soft_delete` visibility inside the include join.
     pub fn only_deleted(mut self) -> Self {
         self.query = self.query.only_deleted();
         self
@@ -581,7 +494,7 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
     pub async fn all(self) -> Result<Vec<E>, OrmError>
     where
         E: FromRow + IncludeNavigation<J> + Send + SoftDeleteEntity + TenantScopedEntity,
-        J: FromRow + Send,
+        J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let navigation = self.navigation;
         let alias = self.alias;
@@ -600,7 +513,7 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
     pub async fn first(self) -> Result<Option<E>, OrmError>
     where
         E: FromRow + IncludeNavigation<J> + Send + SoftDeleteEntity + TenantScopedEntity,
-        J: FromRow + Send,
+        J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
     {
         let navigation = self.navigation;
         let alias = self.alias;
@@ -618,6 +531,7 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
     pub(crate) fn select_query(&self) -> Result<SelectQuery, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
+        J: SoftDeleteEntity + TenantScopedEntity,
     {
         self.effective_select_query()
     }
@@ -625,10 +539,151 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
     fn effective_select_query(&self) -> Result<SelectQuery, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
+        J: SoftDeleteEntity + TenantScopedEntity,
     {
         let query = self.query.effective_select_query()?;
+        let query = apply_include_policy_filters::<J>(
+            query,
+            self.query.active_tenant.as_ref(),
+            self.alias,
+        )?;
         apply_include_projection::<E, J>(query, self.alias)
     }
+}
+
+fn tenant_predicate_for<E: TenantScopedEntity>(
+    active_tenant: Option<&ActiveTenant>,
+    table: TableRef,
+) -> Result<Option<Predicate>, OrmError> {
+    let Some(policy) = E::tenant_policy() else {
+        return Ok(None);
+    };
+
+    if policy.columns.len() != 1 {
+        return Err(OrmError::new(
+            "tenant query filter requires exactly one tenant policy column",
+        ));
+    }
+
+    let tenant_column = &policy.columns[0];
+    let active_tenant = active_tenant.ok_or_else(|| {
+        OrmError::new("tenant-scoped query requires an active tenant in the DbContext")
+    })?;
+
+    if active_tenant.column_name != tenant_column.column_name {
+        return Err(OrmError::new(format!(
+            "active tenant column `{}` does not match entity tenant column `{}`",
+            active_tenant.column_name, tenant_column.column_name
+        )));
+    }
+
+    if !tenant_value_matches_column_type(&active_tenant.value, tenant_column) {
+        return Err(OrmError::new(format!(
+            "active tenant value is not compatible with entity tenant column `{}`",
+            tenant_column.column_name
+        )));
+    }
+
+    Ok(Some(Predicate::eq(
+        Expr::Column(ColumnRef::new(
+            table,
+            tenant_column.rust_field,
+            tenant_column.column_name,
+        )),
+        Expr::Value(active_tenant.value.clone()),
+    )))
+}
+
+fn soft_delete_visibility_predicate_for<E: SoftDeleteEntity>(
+    table: TableRef,
+    visibility: SoftDeleteVisibility,
+) -> Result<Option<Predicate>, OrmError> {
+    let Some(policy) = E::soft_delete_policy() else {
+        return Ok(None);
+    };
+
+    let visibility = match visibility {
+        SoftDeleteVisibility::Default => SoftDeleteVisibility::Default,
+        SoftDeleteVisibility::WithDeleted => return Ok(None),
+        SoftDeleteVisibility::OnlyDeleted => SoftDeleteVisibility::OnlyDeleted,
+    };
+
+    let indicator = policy.columns.first().ok_or_else(|| {
+        OrmError::new("soft_delete query visibility requires at least one policy column")
+    })?;
+    let column = Expr::Column(ColumnRef::new(
+        table,
+        indicator.rust_field,
+        indicator.column_name,
+    ));
+
+    if indicator.sql_type == SqlServerType::Bit {
+        return Ok(Some(match visibility {
+            SoftDeleteVisibility::Default => {
+                Predicate::eq(column, Expr::Value(SqlValue::Bool(false)))
+            }
+            SoftDeleteVisibility::OnlyDeleted => {
+                Predicate::eq(column, Expr::Value(SqlValue::Bool(true)))
+            }
+            SoftDeleteVisibility::WithDeleted => unreachable!(),
+        }));
+    }
+
+    if indicator.nullable {
+        return Ok(Some(match visibility {
+            SoftDeleteVisibility::Default => Predicate::is_null(column),
+            SoftDeleteVisibility::OnlyDeleted => Predicate::is_not_null(column),
+            SoftDeleteVisibility::WithDeleted => unreachable!(),
+        }));
+    }
+
+    Err(OrmError::new(
+        "soft_delete query visibility requires the first policy column to be nullable or bit",
+    ))
+}
+
+fn apply_include_policy_filters<J: Entity + SoftDeleteEntity + TenantScopedEntity>(
+    mut query: SelectQuery,
+    active_tenant: Option<&ActiveTenant>,
+    alias: &'static str,
+) -> Result<SelectQuery, OrmError> {
+    let target_table = TableRef::for_entity_as::<J>(alias);
+    let mut predicates = Vec::new();
+
+    if let Some(predicate) = tenant_predicate_for::<J>(active_tenant, target_table)? {
+        predicates.push(predicate);
+    }
+
+    if let Some(predicate) =
+        soft_delete_visibility_predicate_for::<J>(target_table, SoftDeleteVisibility::Default)?
+    {
+        predicates.push(predicate);
+    }
+
+    if predicates.is_empty() {
+        return Ok(query);
+    }
+
+    let include_join = query
+        .joins
+        .iter_mut()
+        .find(|join| join.table == target_table)
+        .ok_or_else(|| {
+            OrmError::new(format!(
+                "include join for entity `{}` with alias `{}` was not found",
+                J::metadata().rust_name,
+                alias
+            ))
+        })?;
+
+    let policy_predicate = if predicates.len() == 1 {
+        predicates.remove(0)
+    } else {
+        Predicate::and(predicates)
+    };
+    include_join.on = Predicate::and(vec![include_join.on.clone(), policy_predicate]);
+
+    Ok(query)
 }
 
 fn apply_include_projection<E: Entity, J: Entity>(
@@ -819,6 +874,8 @@ mod tests {
     struct JoinedEntity;
     struct NavigationRoot;
     struct NavigationTarget;
+    struct TenantNavigationRoot;
+    struct TenantNavigationTarget;
     struct SoftDeleteEntityUnderTest;
     struct BoolSoftDeleteEntity;
     struct TenantEntity;
@@ -1108,6 +1165,106 @@ mod tests {
         navigations: &[],
     };
 
+    static TENANT_NAVIGATION_ROOT_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        TENANT_POLICY_COLUMNS[0],
+    ];
+
+    static TENANT_NAVIGATION_TARGET_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "owner_id",
+            column_name: "owner_id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static TENANT_NAVIGATION_TARGET_NAVIGATIONS: [NavigationMetadata; 1] =
+        [NavigationMetadata::new(
+            "owner",
+            NavigationKind::BelongsTo,
+            "TenantNavigationRoot",
+            "sales",
+            "tenant_navigation_roots",
+            &["owner_id"],
+            &["id"],
+            Some("fk_tenant_navigation_targets_owner"),
+        )];
+
+    static TENANT_NAVIGATION_ROOT_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TenantNavigationRoot",
+        schema: "sales",
+        table: "tenant_navigation_roots",
+        renamed_from: None,
+        columns: &TENANT_NAVIGATION_ROOT_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &[],
+    };
+
+    static TENANT_NAVIGATION_TARGET_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "TenantNavigationTarget",
+        schema: "sales",
+        table: "tenant_navigation_targets",
+        renamed_from: None,
+        columns: &TENANT_NAVIGATION_TARGET_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &TENANT_NAVIGATION_TARGET_NAVIGATIONS,
+    };
+
     impl Entity for SoftDeleteEntityUnderTest {
         fn metadata() -> &'static EntityMetadata {
             &SOFT_DELETE_ENTITY_METADATA
@@ -1123,6 +1280,18 @@ mod tests {
     impl Entity for TenantEntity {
         fn metadata() -> &'static EntityMetadata {
             &TENANT_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for TenantNavigationRoot {
+        fn metadata() -> &'static EntityMetadata {
+            &TENANT_NAVIGATION_ROOT_METADATA
+        }
+    }
+
+    impl Entity for TenantNavigationTarget {
+        fn metadata() -> &'static EntityMetadata {
+            &TENANT_NAVIGATION_TARGET_METADATA
         }
     }
 
@@ -1194,11 +1363,26 @@ mod tests {
 
     impl SoftDeleteEntity for NavigationRoot {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
-            None
+            Some(EntityPolicyMetadata::new(
+                "soft_delete",
+                &SOFT_DELETE_POLICY_COLUMNS,
+            ))
         }
     }
 
     impl SoftDeleteEntity for NavigationTarget {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for TenantNavigationRoot {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for TenantNavigationTarget {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
         }
@@ -1211,6 +1395,18 @@ mod tests {
     }
 
     impl TenantScopedEntity for NavigationTarget {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for TenantNavigationRoot {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            Some(EntityPolicyMetadata::new("tenant", &TENANT_POLICY_COLUMNS))
+        }
+    }
+
+    impl TenantScopedEntity for TenantNavigationTarget {
         fn tenant_policy() -> Option<EntityPolicyMetadata> {
             None
         }
@@ -1714,6 +1910,95 @@ mod tests {
         assert_eq!(select.projection[0].alias, Some("id"));
         assert_eq!(select.projection[1].alias, Some("owner_id"));
         assert_eq!(select.projection[2].alias, Some("owner__id"));
+    }
+
+    #[test]
+    fn dbset_query_include_applies_included_soft_delete_filter_to_join_on() {
+        let include = DbSet::<NavigationTarget>::disconnected()
+            .query()
+            .include_as::<NavigationRoot>("owner", "owner")
+            .unwrap();
+
+        let select = include.select_query().unwrap();
+
+        assert_eq!(
+            select.joins[0].on,
+            Predicate::and(vec![
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("sales", "navigation_targets"),
+                        "owner_id",
+                        "owner_id",
+                    )),
+                    Expr::Column(ColumnRef::new(
+                        TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                        "id",
+                        "id",
+                    )),
+                ),
+                Predicate::is_null(Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                    "deleted_at",
+                    "deleted_at",
+                ))),
+            ])
+        );
+    }
+
+    #[test]
+    fn dbset_query_include_applies_included_tenant_filter_to_join_on() {
+        let include = DbSet::<TenantNavigationTarget>::disconnected()
+            .query()
+            .with_active_tenant_for_test(ActiveTenant {
+                column_name: "tenant_id",
+                value: SqlValue::I64(42),
+            })
+            .include_as::<TenantNavigationRoot>("owner", "owner")
+            .unwrap();
+
+        let select = include.select_query().unwrap();
+
+        assert_eq!(
+            select.joins[0].on,
+            Predicate::and(vec![
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::new("sales", "tenant_navigation_targets"),
+                        "owner_id",
+                        "owner_id",
+                    )),
+                    Expr::Column(ColumnRef::new(
+                        TableRef::with_alias("sales", "tenant_navigation_roots", "owner"),
+                        "id",
+                        "id",
+                    )),
+                ),
+                Predicate::eq(
+                    Expr::Column(ColumnRef::new(
+                        TableRef::with_alias("sales", "tenant_navigation_roots", "owner"),
+                        "tenant_id",
+                        "tenant_id",
+                    )),
+                    Expr::Value(SqlValue::I64(42)),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn dbset_query_include_fails_closed_for_included_tenant_without_active_tenant() {
+        let include = DbSet::<TenantNavigationTarget>::disconnected()
+            .query()
+            .include_as::<TenantNavigationRoot>("owner", "owner")
+            .unwrap();
+
+        let error = include.select_query().unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("requires an active tenant in the DbContext")
+        );
     }
 
     #[test]

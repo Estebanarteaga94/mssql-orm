@@ -145,6 +145,13 @@ let orders = db
 `include` remains part of entity materialization. DTO projections through
 `select(...).all_as::<T>()` stay separate from entity graph loading.
 
+Runtime policies are applied to both sides safely. Root `tenant` and
+`soft_delete` filters are added to the effective query predicate; included
+entity `tenant` and default `soft_delete` filters are added to the include
+`JOIN ... ON` predicate so a missing or filtered related row does not discard
+the root row. Tenant-scoped included entities fail closed when the active
+tenant is missing, has a different column, or has an incompatible value.
+
 The current include cut supports `belongs_to` and `has_one`. `has_many` remains
 separate because it needs grouping or split-query semantics.
 
@@ -192,6 +199,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 - The public query builder does not accept arbitrary SQL fragments.
 - Navigation joins are explicit and fallible.
 - `include::<T>(...)` supports only `belongs_to` and `has_one`; collection includes are not supported yet.
+- Included `tenant` and `soft_delete` policies use the default visibility only; there is no include-specific visibility override yet.
 - Initial public projections exist, but high-level typed aggregations are not available.
 
 ## Related
