@@ -1162,14 +1162,15 @@ mod tests {
     use crate::context::{ActiveTenant, DbSet};
     use crate::page_request::PageRequest;
     use crate::{IncludeCollection, SoftDeleteEntity, TenantScopedEntity};
+    use insta::assert_snapshot;
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityColumn, EntityMetadata, EntityPolicyMetadata, FromRow,
         NavigationKind, NavigationMetadata, OrmError, PrimaryKeyMetadata, Row, SqlServerType,
         SqlValue,
     };
     use mssql_orm_query::{
-        ColumnRef, Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectProjection,
-        SelectQuery, SortDirection, TableRef,
+        ColumnRef, CompiledQuery, Expr, Join, JoinType, OrderBy, Pagination, Predicate,
+        SelectProjection, SelectQuery, SortDirection, TableRef,
     };
     use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -2240,6 +2241,35 @@ mod tests {
     }
 
     #[test]
+    fn compiled_include_sql_preserves_projection_aliases_soft_delete_and_params() {
+        let include = DbSet::<NavigationTarget>::disconnected()
+            .query()
+            .include_as::<NavigationRoot>("owner", "owner")
+            .unwrap()
+            .filter(Predicate::gt(
+                Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                    "id",
+                    "id",
+                )),
+                Expr::value(SqlValue::I64(7)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::with_alias("dbo", "navigation_roots", "owner"),
+                "id",
+                SortDirection::Desc,
+            ))
+            .paginate(PageRequest::new(2, 10));
+
+        let compiled = SqlServerCompiler::compile_select(&include.select_query().unwrap()).unwrap();
+
+        assert_snapshot!(
+            "compiled_include_one_with_soft_delete_and_parameters",
+            render_compiled_query(&compiled)
+        );
+    }
+
+    #[test]
     fn dbset_query_include_applies_included_soft_delete_filter_to_join_on() {
         let include = DbSet::<NavigationTarget>::disconnected()
             .query()
@@ -2310,6 +2340,34 @@ mod tests {
                 ),
             ])
         );
+    }
+
+    #[test]
+    fn compiled_include_sql_preserves_included_tenant_parameter_order() {
+        let include = DbSet::<TenantNavigationTarget>::disconnected()
+            .query()
+            .filter(Predicate::gt(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("sales", "tenant_navigation_targets"),
+                    "id",
+                    "id",
+                )),
+                Expr::value(SqlValue::I64(100)),
+            ))
+            .with_active_tenant_for_test(ActiveTenant {
+                column_name: "tenant_id",
+                value: SqlValue::I64(42),
+            })
+            .include_as::<TenantNavigationRoot>("owner", "owner")
+            .unwrap();
+
+        let compiled = SqlServerCompiler::compile_select(&include.select_query().unwrap()).unwrap();
+
+        assert_snapshot!(
+            "compiled_include_one_with_included_tenant_parameter_order",
+            render_compiled_query(&compiled)
+        );
+        assert_eq!(compiled.params, vec![SqlValue::I64(42), SqlValue::I64(100)]);
     }
 
     #[test]
@@ -2408,6 +2466,35 @@ mod tests {
     }
 
     #[test]
+    fn compiled_include_many_sql_preserves_grouping_projection_and_root_soft_delete() {
+        let include = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .include_many_as::<NavigationTarget>("orders", "orders")
+            .unwrap()
+            .filter(Predicate::gte(
+                Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("sales", "navigation_targets", "orders"),
+                    "owner_id",
+                    "owner_id",
+                )),
+                Expr::value(SqlValue::I64(7)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::with_alias("sales", "navigation_targets", "orders"),
+                "id",
+                SortDirection::Asc,
+            ));
+
+        let compiled = SqlServerCompiler::compile_select(&include.select_query().unwrap()).unwrap();
+
+        assert_snapshot!(
+            "compiled_include_many_with_root_soft_delete_and_parameters",
+            render_compiled_query(&compiled)
+        );
+        assert_eq!(compiled.params, vec![SqlValue::I64(7)]);
+    }
+
+    #[test]
     fn dbset_query_include_many_rejects_non_collection_navigation() {
         let result = DbSet::<NavigationTarget>::disconnected()
             .query()
@@ -2462,6 +2549,63 @@ mod tests {
     #[test]
     fn include_many_join_row_limit_allows_explicit_unbounded_join() {
         enforce_include_many_join_row_limit(usize::MAX, None).unwrap();
+    }
+
+    #[test]
+    fn compiled_self_join_sql_preserves_repeated_aliases_and_parameter_order() {
+        let query = SelectQuery::from_entity_as::<TestEntity>("root")
+            .select(vec![
+                SelectProjection::expr_as(Expr::column_as(TestEntity::id, "root"), "root_id"),
+                SelectProjection::expr_as(
+                    Expr::column_as(TestEntity::name, "parent"),
+                    "parent_name",
+                ),
+                SelectProjection::expr_as(Expr::column_as(TestEntity::name, "child"), "child_name"),
+            ])
+            .inner_join_as::<TestEntity>(
+                "parent",
+                Predicate::eq(
+                    Expr::column_as(TestEntity::id, "root"),
+                    Expr::column_as(TestEntity::id, "parent"),
+                ),
+            )
+            .left_join_as::<TestEntity>(
+                "child",
+                Predicate::eq(
+                    Expr::column_as(TestEntity::id, "root"),
+                    Expr::column_as(TestEntity::id, "child"),
+                ),
+            )
+            .filter(Predicate::like(
+                Expr::column_as(TestEntity::name, "parent"),
+                Expr::value(SqlValue::String("%admin%".to_string())),
+            ))
+            .filter(Predicate::gte(
+                Expr::column_as(TestEntity::id, "child"),
+                Expr::value(SqlValue::I64(10)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::with_alias("dbo", "test_entities", "child"),
+                "name",
+                SortDirection::Asc,
+            ))
+            .paginate(Pagination::new(20, 10));
+
+        let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+        assert_snapshot!(
+            "compiled_self_join_repeated_aliases_and_parameter_order",
+            render_compiled_query(&compiled)
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("%admin%".to_string()),
+                SqlValue::I64(10),
+                SqlValue::I64(20),
+                SqlValue::I64(10),
+            ]
+        );
     }
 
     #[test]
@@ -2580,5 +2724,20 @@ mod tests {
 
         assert!(rendered.contains("DbSetQuery"));
         assert!(rendered.contains("test_entities"));
+    }
+
+    fn render_compiled_query(compiled: &CompiledQuery) -> String {
+        let params = compiled
+            .params
+            .iter()
+            .enumerate()
+            .map(|(index, value)| format!("{}: {:?}", index + 1, value))
+            .collect::<Vec<_>>();
+
+        if params.is_empty() {
+            format!("SQL: {}\nParams:\n<none>", compiled.sql)
+        } else {
+            format!("SQL: {}\nParams:\n{}", compiled.sql, params.join("\n"))
+        }
     }
 }
