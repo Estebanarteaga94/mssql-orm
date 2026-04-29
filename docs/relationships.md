@@ -105,7 +105,7 @@ The current public `DbSetQuery<T>` materializes entities from the base table (`T
 
 ## 0.2 Navigation Surface
 
-Navigation properties are being introduced incrementally for `0.2.0`. The first implemented cut is syntax and metadata only: fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Query execution remains explicit; `include(...)`, inferred joins and explicit loading APIs are still pending.
+Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, and explicit join inference from navigation metadata. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Query execution remains explicit; `include(...)`, entity graph materialization, explicit loading APIs and lazy loading are still pending.
 
 The relationship kinds are:
 
@@ -144,6 +144,26 @@ pub struct User {
 ```
 
 `Navigation<T>` and `Collection<T>` are public marker/value wrappers. The derive does not turn those fields into `ColumnMetadata`; it only uses them to generate navigation metadata. Materializing an entity without an explicit include/load initializes these wrappers empty.
+
+### Explicit Navigation Joins
+
+`DbSetQuery` can build a SQL join predicate from a declared navigation:
+
+```rust
+let lists = db
+    .users
+    .query()
+    .try_left_join_navigation_as::<TodoList>("lists", "lists")?
+    .filter(TodoList::id.aliased("lists").gt(0_i64))
+    .all()
+    .await?;
+```
+
+The helper validates that the navigation exists on the root entity and that its
+target table matches the joined entity type. It uses `local_columns` and
+`target_columns` from `NavigationMetadata` to construct the `ON` predicate.
+This is not eager loading: the query still materializes the root entity or an
+explicit projection only.
 
 ### Planned `include(...)`
 
@@ -207,14 +227,13 @@ Navigation support depends on earlier internal work:
 - macro validation for navigation fields that are not columns;
 - table aliases in `mssql-orm-query`;
 - SQL Server alias compilation in `mssql-orm-sqlserver`;
+- explicit navigation join inference in `DbSetQuery`;
 - materialization that can separate root columns from included-entity columns;
 - tests for repeated joins, self-joins, `tenant`, `soft_delete`, and row ordering.
 
 ## Limits
 
-- Navigation properties currently provide metadata only; they do not load related rows.
+- Navigation properties currently provide metadata and explicit join inference only; they do not load related rows.
 - No lazy loading or automatic eager loading.
-- No automatic join inference from `ForeignKeyMetadata`.
-- No table aliases in the AST; SQL Server rejects repeated table references without aliases.
 - No automatic projection of joined entity graphs.
 - Tenant and soft-delete automatic filters apply to the root entity only; filters on joined entities must be explicit.

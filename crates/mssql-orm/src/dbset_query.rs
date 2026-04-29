@@ -2,9 +2,12 @@ use crate::context::{ActiveTenant, SharedConnection};
 use crate::page_request::PageRequest;
 use crate::query_projection::SelectProjections;
 use crate::{SoftDeleteEntity, TenantScopedEntity};
-use mssql_orm_core::{ColumnMetadata, Entity, FromRow, OrmError, Row, SqlServerType, SqlValue};
+use mssql_orm_core::{
+    ColumnMetadata, Entity, EntityMetadata, FromRow, OrmError, Row, SqlServerType, SqlValue,
+};
 use mssql_orm_query::{
-    ColumnRef, CountQuery, Expr, Join, OrderBy, Pagination, Predicate, SelectQuery, TableRef,
+    ColumnRef, CountQuery, Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectQuery,
+    TableRef,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -79,6 +82,48 @@ impl<E: Entity> DbSetQuery<E> {
     pub fn left_join<J: Entity>(mut self, on: Predicate) -> Self {
         self.select_query = self.select_query.left_join::<J>(on);
         self
+    }
+
+    /// Adds an `INNER JOIN` inferred from navigation metadata.
+    ///
+    /// The navigation must be declared on the root entity `E`, and its target
+    /// table must match `J`. This only builds the SQL join; it does not load or
+    /// materialize the related entity.
+    pub fn try_inner_join_navigation<J: Entity>(
+        self,
+        navigation: &'static str,
+    ) -> Result<Self, OrmError> {
+        self.try_join_navigation::<J>(navigation, JoinType::Inner, None)
+    }
+
+    /// Adds a `LEFT JOIN` inferred from navigation metadata.
+    ///
+    /// The navigation must be declared on the root entity `E`, and its target
+    /// table must match `J`. This only builds the SQL join; it does not load or
+    /// materialize the related entity.
+    pub fn try_left_join_navigation<J: Entity>(
+        self,
+        navigation: &'static str,
+    ) -> Result<Self, OrmError> {
+        self.try_join_navigation::<J>(navigation, JoinType::Left, None)
+    }
+
+    /// Adds an aliased `INNER JOIN` inferred from navigation metadata.
+    pub fn try_inner_join_navigation_as<J: Entity>(
+        self,
+        navigation: &'static str,
+        alias: &'static str,
+    ) -> Result<Self, OrmError> {
+        self.try_join_navigation::<J>(navigation, JoinType::Inner, Some(alias))
+    }
+
+    /// Adds an aliased `LEFT JOIN` inferred from navigation metadata.
+    pub fn try_left_join_navigation_as<J: Entity>(
+        self,
+        navigation: &'static str,
+        alias: &'static str,
+    ) -> Result<Self, OrmError> {
+        self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))
     }
 
     /// Adds an ordering expression.
@@ -331,6 +376,101 @@ impl<E: Entity> DbSetQuery<E> {
             .cloned()
             .ok_or_else(|| OrmError::new("DbSetQuery requires an initialized shared connection"))
     }
+
+    fn try_join_navigation<J: Entity>(
+        mut self,
+        navigation: &'static str,
+        join_type: JoinType,
+        alias: Option<&'static str>,
+    ) -> Result<Self, OrmError> {
+        let join = self.navigation_join::<J>(navigation, join_type, alias)?;
+        self.select_query = self.select_query.join(join);
+        Ok(self)
+    }
+
+    fn navigation_join<J: Entity>(
+        &self,
+        navigation: &'static str,
+        join_type: JoinType,
+        alias: Option<&'static str>,
+    ) -> Result<Join, OrmError> {
+        let root_metadata = E::metadata();
+        let target_metadata = J::metadata();
+        let navigation = root_metadata.navigation(navigation).ok_or_else(|| {
+            OrmError::new(format!(
+                "entity `{}` does not declare navigation `{}`",
+                root_metadata.rust_name, navigation
+            ))
+        })?;
+
+        if navigation.target_schema != target_metadata.schema
+            || navigation.target_table != target_metadata.table
+        {
+            return Err(OrmError::new(format!(
+                "navigation `{}` on `{}` targets `{}.{}`, not entity `{}` (`{}.{}`)",
+                navigation.rust_field,
+                root_metadata.rust_name,
+                navigation.target_schema,
+                navigation.target_table,
+                target_metadata.rust_name,
+                target_metadata.schema,
+                target_metadata.table
+            )));
+        }
+
+        if navigation.local_columns.is_empty()
+            || navigation.local_columns.len() != navigation.target_columns.len()
+        {
+            return Err(OrmError::new(format!(
+                "navigation `{}` on `{}` has invalid join column metadata",
+                navigation.rust_field, root_metadata.rust_name
+            )));
+        }
+
+        let target_table = match alias {
+            Some(alias) => TableRef::for_entity_as::<J>(alias),
+            None => TableRef::for_entity::<J>(),
+        };
+
+        let predicates = navigation
+            .local_columns
+            .iter()
+            .zip(navigation.target_columns.iter())
+            .map(|(local_column, target_column)| {
+                Ok(Predicate::eq(
+                    metadata_column_expr(root_metadata, self.select_query.from, local_column)?,
+                    metadata_column_expr(target_metadata, target_table, target_column)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, OrmError>>()?;
+
+        let on = if predicates.len() == 1 {
+            predicates[0].clone()
+        } else {
+            Predicate::and(predicates)
+        };
+
+        Ok(Join::new(join_type, target_table, on))
+    }
+}
+
+fn metadata_column_expr(
+    metadata: &'static EntityMetadata,
+    table: TableRef,
+    column_name: &str,
+) -> Result<Expr, OrmError> {
+    let column = metadata.column(column_name).ok_or_else(|| {
+        OrmError::new(format!(
+            "entity `{}` metadata does not contain column `{}` required by navigation join",
+            metadata.rust_name, column_name
+        ))
+    })?;
+
+    Ok(Expr::Column(ColumnRef::new(
+        table,
+        column.rust_field,
+        column.column_name,
+    )))
 }
 
 pub(crate) fn tenant_value_matches_column_type(value: &SqlValue, column: &ColumnMetadata) -> bool {
@@ -393,16 +533,19 @@ mod tests {
     use crate::{SoftDeleteEntity, TenantScopedEntity};
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityColumn, EntityMetadata, EntityPolicyMetadata, FromRow,
-        OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
+        NavigationKind, NavigationMetadata, OrmError, PrimaryKeyMetadata, Row, SqlServerType,
+        SqlValue,
     };
     use mssql_orm_query::{
-        Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectProjection, SelectQuery,
-        SortDirection, TableRef,
+        ColumnRef, Expr, Join, JoinType, OrderBy, Pagination, Predicate, SelectProjection,
+        SelectQuery, SortDirection, TableRef,
     };
     use mssql_orm_sqlserver::SqlServerCompiler;
 
     struct TestEntity;
     struct JoinedEntity;
+    struct NavigationRoot;
+    struct NavigationTarget;
     struct SoftDeleteEntityUnderTest;
     struct BoolSoftDeleteEntity;
     struct TenantEntity;
@@ -452,6 +595,114 @@ mod tests {
     impl Entity for JoinedEntity {
         fn metadata() -> &'static EntityMetadata {
             &JOINED_ENTITY_METADATA
+        }
+    }
+
+    static NAVIGATION_ROOT_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
+        rust_field: "id",
+        column_name: "id",
+        renamed_from: None,
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: true,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: false,
+        updatable: false,
+        max_length: None,
+        precision: None,
+        scale: None,
+    }];
+
+    static NAVIGATION_TARGET_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: false,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "owner_id",
+            column_name: "owner_id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static NAVIGATION_ROOT_NAVIGATIONS: [NavigationMetadata; 1] = [NavigationMetadata::new(
+        "orders",
+        NavigationKind::HasMany,
+        "NavigationTarget",
+        "sales",
+        "navigation_targets",
+        &["id"],
+        &["owner_id"],
+        Some("fk_navigation_targets_owner"),
+    )];
+
+    static NAVIGATION_ROOT_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "NavigationRoot",
+        schema: "dbo",
+        table: "navigation_roots",
+        renamed_from: None,
+        columns: &NAVIGATION_ROOT_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &NAVIGATION_ROOT_NAVIGATIONS,
+    };
+
+    static NAVIGATION_TARGET_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "NavigationTarget",
+        schema: "sales",
+        table: "navigation_targets",
+        renamed_from: None,
+        columns: &NAVIGATION_TARGET_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &[],
+    };
+
+    impl Entity for NavigationRoot {
+        fn metadata() -> &'static EntityMetadata {
+            &NAVIGATION_ROOT_METADATA
+        }
+    }
+
+    impl Entity for NavigationTarget {
+        fn metadata() -> &'static EntityMetadata {
+            &NAVIGATION_TARGET_METADATA
         }
     }
 
@@ -1039,6 +1290,100 @@ mod tests {
         assert_eq!(
             select.joins[1].table,
             TableRef::new("dbo", "joined_entities")
+        );
+    }
+
+    #[test]
+    fn dbset_query_infers_navigation_join_from_metadata() {
+        let dbset = DbSet::<NavigationRoot>::disconnected();
+
+        let select = dbset
+            .query()
+            .try_inner_join_navigation::<NavigationTarget>("orders")
+            .unwrap()
+            .into_select_query();
+
+        assert_eq!(select.joins.len(), 1);
+        assert_eq!(select.joins[0].join_type, JoinType::Inner);
+        assert_eq!(
+            select.joins[0].table,
+            TableRef::new("sales", "navigation_targets")
+        );
+        assert_eq!(
+            select.joins[0].on,
+            Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("dbo", "navigation_roots"),
+                    "id",
+                    "id",
+                )),
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("sales", "navigation_targets"),
+                    "owner_id",
+                    "owner_id",
+                )),
+            )
+        );
+    }
+
+    #[test]
+    fn dbset_query_infers_aliased_navigation_join_from_metadata() {
+        let dbset = DbSet::<NavigationRoot>::disconnected();
+
+        let select = dbset
+            .query()
+            .try_left_join_navigation_as::<NavigationTarget>("orders", "orders")
+            .unwrap()
+            .into_select_query();
+
+        assert_eq!(select.joins.len(), 1);
+        assert_eq!(select.joins[0].join_type, JoinType::Left);
+        assert_eq!(
+            select.joins[0].table,
+            TableRef::with_alias("sales", "navigation_targets", "orders")
+        );
+        assert_eq!(
+            select.joins[0].on,
+            Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("dbo", "navigation_roots"),
+                    "id",
+                    "id",
+                )),
+                Expr::Column(ColumnRef::new(
+                    TableRef::with_alias("sales", "navigation_targets", "orders"),
+                    "owner_id",
+                    "owner_id",
+                )),
+            )
+        );
+    }
+
+    #[test]
+    fn dbset_query_rejects_unknown_navigation_join() {
+        let error = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .try_inner_join_navigation::<NavigationTarget>("missing")
+            .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("does not declare navigation `missing`")
+        );
+    }
+
+    #[test]
+    fn dbset_query_rejects_navigation_join_target_mismatch() {
+        let error = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .try_inner_join_navigation::<JoinedEntity>("orders")
+            .unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains("targets `sales.navigation_targets`")
         );
     }
 

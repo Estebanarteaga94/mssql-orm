@@ -79,7 +79,8 @@ SQL Server pagination requires deterministic ordering.
 
 ## Joins
 
-Joins are explicit. There are no navigation properties or automatic eager loading.
+Joins are explicit. You can either provide the `ON` predicate manually or ask
+`DbSetQuery` to build it from navigation metadata.
 
 ```rust
 let rows = db
@@ -91,9 +92,26 @@ let rows = db
     .await?;
 ```
 
-The public API exposes `inner_join::<T>(...)` and `left_join::<T>(...)`.
+The public API exposes `inner_join::<T>(...)` and `left_join::<T>(...)` for
+manual joins.
 
-The current AST does not support table aliases, so avoid self-joins or repeating the same table in one query.
+When a relationship is declared as a navigation property, use the fallible
+helpers to infer the join predicate from `EntityMetadata.navigations`:
+
+```rust
+let rows = db
+    .customers
+    .query()
+    .try_inner_join_navigation_as::<Order>("orders", "orders")?
+    .filter(Order::total_cents.aliased("orders").gte(1000_i64))
+    .all()
+    .await?;
+```
+
+The `_as` variants bind the joined table to a SQL alias and can be used with
+aliased public columns such as `Order::total_cents.aliased("orders")`.
+Navigation joins only build SQL joins; they do not materialize related entity
+graphs.
 
 ## Count
 
@@ -137,8 +155,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 ## Limits
 
 - The public query builder does not accept arbitrary SQL fragments.
-- Table aliases in joins are not supported.
-- Navigation properties and automatic relationship loading are not supported.
+- Navigation joins are explicit and fallible; automatic relationship loading is not supported.
 - Initial public projections exist, but high-level typed aggregations are not available.
 
 ## Related

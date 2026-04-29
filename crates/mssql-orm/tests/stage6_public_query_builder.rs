@@ -13,6 +13,8 @@ struct QueryUser {
     #[orm(length = 180)]
     email: String,
     active: bool,
+    #[orm(has_many(QueryOrder, foreign_key = user_id))]
+    orders: Collection<QueryOrder>,
 }
 
 #[allow(dead_code)]
@@ -22,8 +24,11 @@ struct QueryOrder {
     #[orm(primary_key)]
     #[orm(identity)]
     id: i64,
+    #[orm(foreign_key(entity = QueryUser, column = id))]
     user_id: i64,
     total_cents: i64,
+    #[orm(belongs_to(QueryUser, foreign_key = user_id))]
+    user: Navigation<QueryUser>,
 }
 
 #[test]

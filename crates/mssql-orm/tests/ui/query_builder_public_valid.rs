@@ -12,6 +12,9 @@ struct User {
     email: String,
 
     active: bool,
+
+    #[orm(has_many(Order, foreign_key = user_id))]
+    orders: Collection<Order>,
 }
 
 #[derive(Entity, Debug, Clone)]
@@ -21,8 +24,12 @@ struct Order {
     #[orm(identity)]
     id: i64,
 
+    #[orm(foreign_key(entity = User, column = id))]
     user_id: i64,
     total_cents: i64,
+
+    #[orm(belongs_to(User, foreign_key = user_id))]
+    user: Navigation<User>,
 }
 
 #[derive(DbContext, Debug, Clone)]
@@ -63,5 +70,12 @@ fn main() {
             )
             .filter(Order::total_cents.aliased("orders").gte(1000_i64))
             .order_by(Order::total_cents.aliased("orders").desc());
+
+        let _navigation_join_query = db
+            .users
+            .query()
+            .try_inner_join_navigation_as::<Order>("orders", "orders")
+            .unwrap()
+            .filter(Order::total_cents.aliased("orders").gte(1000_i64));
     };
 }
