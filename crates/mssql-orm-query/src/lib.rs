@@ -390,6 +390,59 @@ mod tests {
     }
 
     #[test]
+    fn table_refs_capture_optional_aliases_without_sql_rendering() {
+        let table = TableRef::for_entity_as::<Customer>("root");
+        let column = ColumnRef::for_entity_column_as(Customer::email, "root");
+        let expr = Expr::column_as(Customer::id, "root");
+
+        assert_eq!(table.schema, "sales");
+        assert_eq!(table.table, "customers");
+        assert_eq!(table.alias, Some("root"));
+        assert_eq!(table.reference_name(), "root");
+        assert_eq!(table.without_alias(), TableRef::new("sales", "customers"));
+        assert_eq!(column.table, table);
+
+        match expr {
+            Expr::Column(column) => {
+                assert_eq!(column.table.alias, Some("root"));
+                assert_eq!(column.column_name, "id");
+            }
+            other => panic!("unexpected expr shape: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn select_query_captures_aliased_sources_and_repeated_joins() {
+        let query = SelectQuery::from_entity_as::<Customer>("c")
+            .inner_join_as::<Order>(
+                "created_orders",
+                Predicate::eq(
+                    Expr::column_as(Customer::id, "c"),
+                    Expr::column_as(Order::customer_id, "created_orders"),
+                ),
+            )
+            .left_join_as::<Order>(
+                "completed_orders",
+                Predicate::gt(
+                    Expr::column_as(Order::total_cents, "completed_orders"),
+                    Expr::value(SqlValue::I64(0)),
+                ),
+            );
+
+        assert_eq!(query.from, TableRef::with_alias("sales", "customers", "c"));
+        assert_eq!(query.joins.len(), 2);
+        assert_eq!(
+            query.joins[0].table,
+            TableRef::with_alias("sales", "orders", "created_orders")
+        );
+        assert_eq!(
+            query.joins[1].table,
+            TableRef::with_alias("sales", "orders", "completed_orders")
+        );
+        assert_ne!(query.joins[0].table, query.joins[1].table);
+    }
+
+    #[test]
     fn select_projection_captures_default_and_explicit_aliases() {
         let column_projection = SelectProjection::column(Customer::email);
         assert_eq!(column_projection.alias, Some("email"));

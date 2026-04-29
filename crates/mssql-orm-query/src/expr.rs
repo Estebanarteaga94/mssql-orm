@@ -4,16 +4,61 @@ use mssql_orm_core::{Entity, EntityColumn, SqlValue};
 pub struct TableRef {
     pub schema: &'static str,
     pub table: &'static str,
+    pub alias: Option<&'static str>,
 }
 
 impl TableRef {
     pub const fn new(schema: &'static str, table: &'static str) -> Self {
-        Self { schema, table }
+        Self {
+            schema,
+            table,
+            alias: None,
+        }
+    }
+
+    pub const fn with_alias(
+        schema: &'static str,
+        table: &'static str,
+        alias: &'static str,
+    ) -> Self {
+        Self {
+            schema,
+            table,
+            alias: Some(alias),
+        }
     }
 
     pub fn for_entity<E: Entity>() -> Self {
         let metadata = E::metadata();
         Self::new(metadata.schema, metadata.table)
+    }
+
+    pub fn for_entity_as<E: Entity>(alias: &'static str) -> Self {
+        let metadata = E::metadata();
+        Self::with_alias(metadata.schema, metadata.table, alias)
+    }
+
+    pub const fn as_alias(self, alias: &'static str) -> Self {
+        Self {
+            schema: self.schema,
+            table: self.table,
+            alias: Some(alias),
+        }
+    }
+
+    pub const fn without_alias(self) -> Self {
+        Self {
+            schema: self.schema,
+            table: self.table,
+            alias: None,
+        }
+    }
+
+    pub const fn reference_name(&self) -> &'static str {
+        match self.alias {
+            Some(alias) => alias,
+            None => self.table,
+        }
     }
 }
 
@@ -39,6 +84,22 @@ impl ColumnRef {
             column.rust_field(),
             column.column_name(),
         )
+    }
+
+    pub fn for_entity_column_as<E: Entity>(column: EntityColumn<E>, alias: &'static str) -> Self {
+        Self::new(
+            TableRef::for_entity_as::<E>(alias),
+            column.rust_field(),
+            column.column_name(),
+        )
+    }
+
+    pub const fn with_table_alias(self, alias: &'static str) -> Self {
+        Self {
+            table: self.table.as_alias(alias),
+            rust_field: self.rust_field,
+            column_name: self.column_name,
+        }
     }
 }
 
@@ -83,6 +144,10 @@ pub enum Expr {
 impl Expr {
     pub fn column<E: Entity>(column: EntityColumn<E>) -> Self {
         Self::Column(column.into())
+    }
+
+    pub fn column_as<E: Entity>(column: EntityColumn<E>, alias: &'static str) -> Self {
+        Self::Column(ColumnRef::for_entity_column_as(column, alias))
     }
 
     pub const fn value(value: SqlValue) -> Self {

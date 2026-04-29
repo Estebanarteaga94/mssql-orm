@@ -35,6 +35,8 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_select(query: &SelectQuery) -> Result<CompiledQuery, OrmError> {
+        reject_table_aliases_in_select(query)?;
+
         let mut parameters = ParameterBuilder::default();
         let projection = compile_projection(&query.projection, &mut parameters)?;
         let mut sql = format!("SELECT {projection} FROM {}", quote_table_ref(&query.from)?);
@@ -119,6 +121,12 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_count(query: &CountQuery) -> Result<CompiledQuery, OrmError> {
+        if query.from.alias.is_some() {
+            return Err(OrmError::new(
+                "SQL Server count alias compilation is not implemented yet",
+            ));
+        }
+
         let mut parameters = ParameterBuilder::default();
         let mut sql = format!(
             "SELECT COUNT(*) AS {} FROM {}",
@@ -134,6 +142,16 @@ impl crate::SqlServerCompiler {
 
         Ok(parameters.finish(sql))
     }
+}
+
+fn reject_table_aliases_in_select(query: &SelectQuery) -> Result<(), OrmError> {
+    if query.from.alias.is_some() || query.joins.iter().any(|join| join.table.alias.is_some()) {
+        return Err(OrmError::new(
+            "SQL Server select alias compilation is not implemented yet",
+        ));
+    }
+
+    Ok(())
 }
 
 fn compile_joins(
@@ -689,6 +707,25 @@ mod tests {
         assert_eq!(
             error.message(),
             "SQL Server join compilation requires unique tables until alias support exists"
+        );
+    }
+
+    #[test]
+    fn rejects_aliased_selects_until_alias_compilation_exists() {
+        let error = SqlServerCompiler::compile_select(
+            &SelectQuery::from_entity_as::<Customer>("c").inner_join_as::<Order>(
+                "o",
+                Predicate::eq(
+                    Expr::column_as(Customer::id, "c"),
+                    Expr::column_as(Order::customer_id, "o"),
+                ),
+            ),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "SQL Server select alias compilation is not implemented yet"
         );
     }
 

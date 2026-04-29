@@ -71,6 +71,17 @@ impl SelectQuery {
         }
     }
 
+    pub fn from_entity_as<E: Entity>(alias: &'static str) -> Self {
+        Self {
+            from: TableRef::for_entity_as::<E>(alias),
+            joins: Vec::new(),
+            projection: Vec::new(),
+            predicate: None,
+            order_by: Vec::new(),
+            pagination: None,
+        }
+    }
+
     pub fn select<P, I>(mut self, projection: I) -> Self
     where
         P: Into<SelectProjection>,
@@ -101,6 +112,14 @@ impl SelectQuery {
         self.join(Join::left_entity::<E>(on))
     }
 
+    pub fn inner_join_as<E: Entity>(self, alias: &'static str, on: Predicate) -> Self {
+        self.join(Join::inner_entity_as::<E>(alias, on))
+    }
+
+    pub fn left_join_as<E: Entity>(self, alias: &'static str, on: Predicate) -> Self {
+        self.join(Join::left_entity_as::<E>(alias, on))
+    }
+
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.order_by.push(order);
         self
@@ -122,6 +141,13 @@ impl CountQuery {
     pub fn from_entity<E: Entity>() -> Self {
         Self {
             from: TableRef::for_entity::<E>(),
+            predicate: None,
+        }
+    }
+
+    pub fn from_entity_as<E: Entity>(alias: &'static str) -> Self {
+        Self {
+            from: TableRef::for_entity_as::<E>(alias),
             predicate: None,
         }
     }

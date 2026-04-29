@@ -39,4 +39,12 @@ impl Join {
     pub fn left_entity<E: Entity>(on: Predicate) -> Self {
         Self::left(TableRef::for_entity::<E>(), on)
     }
+
+    pub fn inner_entity_as<E: Entity>(alias: &'static str, on: Predicate) -> Self {
+        Self::inner(TableRef::for_entity_as::<E>(alias), on)
+    }
+
+    pub fn left_entity_as<E: Entity>(alias: &'static str, on: Predicate) -> Self {
+        Self::left(TableRef::for_entity_as::<E>(alias), on)
+    }
 }
