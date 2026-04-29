@@ -1,4 +1,4 @@
-error: belongs_to requiere un campo Navigation<User>
+error: belongs_to requiere un campo Navigation<User> o LazyNavigation<User>
   --> tests/ui/entity_navigation_wrong_wrapper.rs:20:16
    |
 20 |     pub owner: Collection<User>,

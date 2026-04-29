@@ -70,6 +70,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
   - `count`
   - explicit joins (`inner_join`, `left_join`)
 - Public typed projections on `DbSetQuery` with `select(...)`, `all_as::<T>()`, and `first_as::<T>()` for DTOs that implement `FromRow`.
+- Opt-in lazy navigation state wrappers with `LazyNavigation<T>` and `LazyCollection<T>`, accepted by `#[derive(Entity)]` navigation fields without storing context or issuing hidden queries.
 - Typed raw SQL with `DbContext::raw<T>(...)`, `DbContext::raw_exec(...)`, `@P1..@Pn` parameters, `FromRow` materialization, and command execution.
 - AST in `mssql-orm-query` without direct SQL generation.
 - SQL Server compiler in `mssql-orm-sqlserver` for queries and migration DDL, using `@P1..@Pn` parameters.
@@ -125,7 +126,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 - SQL Server is the only supported backend.
 - Multi-database support is not available.
 - Navigation properties are not available in `0.1.0`; they are tracked as planned Stage 20 work.
-- Lazy loading and automatic eager loading are not available in `0.1.0`; later lazy loading must remain opt-in and visibly async.
+- Automatic lazy loading and automatic eager loading are not available in `0.1.0`; lazy wrappers are state containers only and later loaders must remain explicit and visibly async.
 - Table aliases in joins are not available in `0.1.0`; alias support is planned as a prerequisite for navigation, repeated joins, and self-joins.
 - High-level typed aggregations, `group_by`, and automatic aliases for self-joins are not available in `0.1.0`; aggregation APIs are planned for `0.2.0`.
 - `count()` does not preserve joins in this release.

@@ -466,7 +466,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         let rust_field = LitStr::new(&field_ident.to_string(), field_ident.span());
 
         if let Some(navigation) = config.navigation {
-            validate_navigation_field_type(&field.ty, &navigation)?;
+            let wrapper = validate_navigation_field_type(&field.ty, &navigation)?;
             let target = navigation.target.clone();
             let target_rust_name = LitStr::new(
                 &path_last_ident(&target)
@@ -489,6 +489,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 rust_field,
                 kind: navigation.kind,
                 kind_tokens: kind,
+                wrapper,
                 target,
                 target_rust_name,
                 foreign_key_field,
@@ -2570,7 +2571,8 @@ fn include_navigation_impls(
     entity_ident: &Ident,
     navigations: &[PendingNavigation],
 ) -> Result<Vec<TokenStream2>> {
-    let mut grouped = BTreeMap::<String, (Path, Vec<(Ident, LitStr)>)>::new();
+    let mut grouped =
+        BTreeMap::<String, (Path, Vec<(Ident, LitStr, NavigationWrapperConfig)>)>::new();
 
     for navigation in navigations {
         if !matches!(
@@ -2587,16 +2589,29 @@ fn include_navigation_impls(
             .entry(key)
             .or_insert_with(|| (navigation.target.clone(), Vec::new()))
             .1
-            .push((field_ident, navigation.rust_field.clone()));
+            .push((
+                field_ident,
+                navigation.rust_field.clone(),
+                navigation.wrapper,
+            ));
     }
 
     grouped
         .into_values()
         .map(|(target, fields)| {
-            let arms = fields.into_iter().map(|(field_ident, rust_field)| {
+            let arms = fields.into_iter().map(|(field_ident, rust_field, wrapper)| {
+                let assignment = match wrapper {
+                    NavigationWrapperConfig::Eager => {
+                        quote! { self.#field_ident = ::mssql_orm::Navigation::from_option(value); }
+                    }
+                    NavigationWrapperConfig::Lazy => {
+                        quote! { self.#field_ident = ::mssql_orm::LazyNavigation::from_option(value); }
+                    }
+                };
+
                 quote! {
                     #rust_field => {
-                        self.#field_ident = ::mssql_orm::Navigation::from_option(value);
+                        #assignment
                         Ok(())
                     }
                 }
@@ -2631,7 +2646,8 @@ fn include_collection_impls(
     entity_ident: &Ident,
     navigations: &[PendingNavigation],
 ) -> Result<Vec<TokenStream2>> {
-    let mut grouped = BTreeMap::<String, (Path, Vec<(Ident, LitStr)>)>::new();
+    let mut grouped =
+        BTreeMap::<String, (Path, Vec<(Ident, LitStr, NavigationWrapperConfig)>)>::new();
 
     for navigation in navigations {
         if !matches!(navigation.kind, NavigationKindConfig::HasMany) {
@@ -2645,16 +2661,29 @@ fn include_collection_impls(
             .entry(key)
             .or_insert_with(|| (navigation.target.clone(), Vec::new()))
             .1
-            .push((field_ident, navigation.rust_field.clone()));
+            .push((
+                field_ident,
+                navigation.rust_field.clone(),
+                navigation.wrapper,
+            ));
     }
 
     grouped
         .into_values()
         .map(|(target, fields)| {
-            let arms = fields.into_iter().map(|(field_ident, rust_field)| {
+            let arms = fields.into_iter().map(|(field_ident, rust_field, wrapper)| {
+                let assignment = match wrapper {
+                    NavigationWrapperConfig::Eager => {
+                        quote! { self.#field_ident = ::mssql_orm::Collection::from_vec(values); }
+                    }
+                    NavigationWrapperConfig::Lazy => {
+                        quote! { self.#field_ident = ::mssql_orm::LazyCollection::from_vec(values); }
+                    }
+                };
+
                 quote! {
                     #rust_field => {
-                        self.#field_ident = ::mssql_orm::Collection::from_vec(values);
+                        #assignment
                         Ok(())
                     }
                 }
@@ -2685,20 +2714,29 @@ fn include_collection_impls(
         .collect()
 }
 
-fn validate_navigation_field_type(ty: &Type, navigation: &NavigationConfig) -> Result<()> {
-    let expected_wrapper = match navigation.kind {
-        NavigationKindConfig::BelongsTo | NavigationKindConfig::HasOne => "Navigation",
-        NavigationKindConfig::HasMany => "Collection",
+fn validate_navigation_field_type(
+    ty: &Type,
+    navigation: &NavigationConfig,
+) -> Result<NavigationWrapperConfig> {
+    let expected_wrappers = match navigation.kind {
+        NavigationKindConfig::BelongsTo | NavigationKindConfig::HasOne => {
+            ("Navigation", "LazyNavigation")
+        }
+        NavigationKindConfig::HasMany => ("Collection", "LazyCollection"),
     };
 
-    let actual_target =
-        generic_wrapper_inner_last_ident(ty, expected_wrapper).ok_or_else(|| {
+    let (actual_target, wrapper) = navigation_wrapper_inner_last_ident(ty, expected_wrappers)
+        .ok_or_else(|| {
             Error::new_spanned(
                 ty,
                 format!(
-                    "{} requiere un campo {}<{}>",
+                    "{} requiere un campo {}<{}> o {}<{}>",
                     navigation.kind.attribute_name(),
-                    expected_wrapper,
+                    expected_wrappers.0,
+                    path_last_ident(&navigation.target)
+                        .map(|ident| ident.to_string())
+                        .unwrap_or_else(|| "Entidad".to_string()),
+                    expected_wrappers.1,
                     path_last_ident(&navigation.target)
                         .map(|ident| ident.to_string())
                         .unwrap_or_else(|| "Entidad".to_string()),
@@ -2728,7 +2766,19 @@ fn validate_navigation_field_type(ty: &Type, navigation: &NavigationConfig) -> R
         ));
     }
 
-    Ok(())
+    Ok(wrapper)
+}
+
+fn navigation_wrapper_inner_last_ident<'a>(
+    ty: &'a Type,
+    wrappers: (&str, &str),
+) -> Option<(&'a Ident, NavigationWrapperConfig)> {
+    generic_wrapper_inner_last_ident(ty, wrappers.0)
+        .map(|ident| (ident, NavigationWrapperConfig::Eager))
+        .or_else(|| {
+            generic_wrapper_inner_last_ident(ty, wrappers.1)
+                .map(|ident| (ident, NavigationWrapperConfig::Lazy))
+        })
 }
 
 fn generic_wrapper_inner_last_ident<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Ident> {
@@ -2757,11 +2807,12 @@ fn is_navigation_wrapper_type(ty: &Type) -> bool {
         return false;
     };
 
-    type_path
-        .path
-        .segments
-        .last()
-        .is_some_and(|segment| segment.ident == "Navigation" || segment.ident == "Collection")
+    type_path.path.segments.last().is_some_and(|segment| {
+        segment.ident == "Navigation"
+            || segment.ident == "Collection"
+            || segment.ident == "LazyNavigation"
+            || segment.ident == "LazyCollection"
+    })
 }
 
 fn path_last_ident(path: &Path) -> Option<&Ident> {
@@ -3126,6 +3177,7 @@ struct PendingNavigation {
     rust_field: LitStr,
     kind: NavigationKindConfig,
     kind_tokens: TokenStream2,
+    wrapper: NavigationWrapperConfig,
     target: Path,
     target_rust_name: LitStr,
     foreign_key_field: Ident,
@@ -3143,6 +3195,12 @@ enum NavigationKindConfig {
     BelongsTo,
     HasOne,
     HasMany,
+}
+
+#[derive(Clone, Copy)]
+enum NavigationWrapperConfig {
+    Eager,
+    Lazy,
 }
 
 impl NavigationKindConfig {

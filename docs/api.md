@@ -78,6 +78,8 @@ The prelude exposes the main metadata and mapping contracts:
 - `EntityColumn`
 - `Navigation<T>`
 - `Collection<T>`
+- `LazyNavigation<T>`
+- `LazyCollection<T>`
 - `ColumnMetadata`
 - `PrimaryKeyMetadata`
 - `IdentityMetadata`
@@ -109,7 +111,7 @@ assert_eq!(metadata.table, "users");
 assert_eq!(email_column.column_name(), "email");
 ```
 
-Navigation fields declared with `Navigation<T>` or `Collection<T>` are metadata-only in the current cut. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes, excludes those fields from `ColumnMetadata`, and initializes the wrappers empty when materializing an entity.
+Navigation fields declared with `Navigation<T>`, `Collection<T>`, `LazyNavigation<T>` or `LazyCollection<T>` are metadata-only in the current cut. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes, excludes those fields from `ColumnMetadata`, and initializes eager wrappers empty and lazy wrappers unloaded when materializing an entity.
 
 ## DbContext and DbSet
 
@@ -343,7 +345,7 @@ These are useful for tests, tooling, snapshots, and advanced diagnostics. Normal
 
 - SQL Server is the only backend.
 - Navigation properties currently expose metadata, explicit join inference, single-navigation eager loading for `belongs_to` / `has_one`, join-based `has_many` eager loading, and explicit `has_many` collection loading.
-- Lazy loading is not implemented. The planned design is opt-in only, visible through distinct lazy wrapper types, and must require explicit async load calls with a context-bearing value so ordinary field access never performs I/O.
+- Lazy wrappers are implemented as opt-in state containers, but they never query by themselves. There is no automatic single-navigation lazy loader yet.
 - High-level typed aggregations are not available.
 - Composite primary-key persistence is not complete across public CRUD and Active Record.
 - `migration.rs` is not generated.

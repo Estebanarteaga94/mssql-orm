@@ -191,6 +191,73 @@ impl<T> Default for Navigation<T> {
     }
 }
 
+/// Opt-in lazy single navigation wrapper.
+///
+/// This type never performs I/O by itself. It only records whether a related
+/// value has been explicitly loaded by an ORM operation such as `include(...)`
+/// or a future explicit lazy-loading API that receives a context-bearing value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LazyNavigation<T> {
+    value: Option<T>,
+    loaded: bool,
+}
+
+impl<T> LazyNavigation<T> {
+    /// Creates an unloaded lazy navigation.
+    pub const fn unloaded() -> Self {
+        Self {
+            value: None,
+            loaded: false,
+        }
+    }
+
+    /// Creates a loaded lazy navigation containing a related entity.
+    pub fn loaded(value: T) -> Self {
+        Self {
+            value: Some(value),
+            loaded: true,
+        }
+    }
+
+    /// Creates a loaded lazy navigation from an optional related entity.
+    pub fn from_option(value: Option<T>) -> Self {
+        Self {
+            value,
+            loaded: true,
+        }
+    }
+
+    /// Returns whether a load operation has populated this wrapper.
+    pub fn is_loaded(&self) -> bool {
+        self.loaded
+    }
+
+    /// Returns the loaded related entity when one is present.
+    ///
+    /// This is a memory-only accessor. It never executes SQL.
+    pub fn as_ref(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
+
+    /// Replaces the loaded value and marks this wrapper as loaded.
+    pub fn set_loaded(&mut self, value: Option<T>) {
+        self.value = value;
+        self.loaded = true;
+    }
+
+    /// Clears the cached value and marks this wrapper as unloaded.
+    pub fn clear(&mut self) {
+        self.value = None;
+        self.loaded = false;
+    }
+}
+
+impl<T> Default for LazyNavigation<T> {
+    fn default() -> Self {
+        Self::unloaded()
+    }
+}
+
 /// Marker value for a collection navigation.
 ///
 /// Collection navigation fields are ignored by column metadata and start empty
@@ -223,6 +290,65 @@ impl<T> Default for Collection<T> {
     }
 }
 
+/// Opt-in lazy collection navigation wrapper.
+///
+/// This type stores loaded values and load state, but it never owns a database
+/// context and never performs I/O from accessors, formatting, cloning or
+/// comparison. Loading must happen through an explicit ORM method.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LazyCollection<T> {
+    values: Vec<T>,
+    loaded: bool,
+}
+
+impl<T> LazyCollection<T> {
+    /// Creates an unloaded lazy collection.
+    pub const fn unloaded() -> Self {
+        Self {
+            values: Vec::new(),
+            loaded: false,
+        }
+    }
+
+    /// Creates a loaded lazy collection from existing values.
+    pub fn from_vec(values: Vec<T>) -> Self {
+        Self {
+            values,
+            loaded: true,
+        }
+    }
+
+    /// Returns whether a load operation has populated this wrapper.
+    pub fn is_loaded(&self) -> bool {
+        self.loaded
+    }
+
+    /// Returns loaded related entities.
+    ///
+    /// This is a memory-only accessor. It never executes SQL.
+    pub fn as_slice(&self) -> &[T] {
+        &self.values
+    }
+
+    /// Replaces the loaded values and marks this wrapper as loaded.
+    pub fn set_loaded(&mut self, values: Vec<T>) {
+        self.values = values;
+        self.loaded = true;
+    }
+
+    /// Clears the cached values and marks this wrapper as unloaded.
+    pub fn clear(&mut self) {
+        self.values.clear();
+        self.loaded = false;
+    }
+}
+
+impl<T> Default for LazyCollection<T> {
+    fn default() -> Self {
+        Self::unloaded()
+    }
+}
+
 /// Builds a model snapshot from a context type that exposes entity metadata.
 ///
 /// This is the helper used by consumer snapshot-export binaries.
@@ -247,14 +373,14 @@ pub mod prelude {
         ActiveRecord, ActiveTenant, AuditEntity, Collection, CollectionIncludeStrategy, DbContext,
         DbContextEntitySet, DbSet, DbSetQuery, DbSetQueryIncludeMany, DbSetQueryIncludeOne,
         EntityColumnAliasExt, EntityColumnOrderExt, EntityColumnPredicateExt, EntityState,
-        IncludeCollection, IncludeNavigation, MigrationModelSource, MssqlConnectionConfig,
-        MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
-        MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
-        MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions, Navigation, PageRequest,
-        PredicateCompositionExt, QueryHint, RawCommand, RawParam, RawParams, RawQuery,
-        SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
-        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, SoftDeleteValues,
-        TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
+        IncludeCollection, IncludeNavigation, LazyCollection, LazyNavigation, MigrationModelSource,
+        MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
+        MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
+        MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
+        Navigation, PageRequest, PredicateCompositionExt, QueryHint, RawCommand, RawParam,
+        RawParams, RawQuery, SelectProjections, SharedConnection, SoftDeleteContext,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+        SoftDeleteValues, TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
         model_snapshot_json_from_source,
     };
     pub use crate::{
@@ -283,12 +409,13 @@ mod tests {
         AuditProvider, AuditRequestValues, AuditValues, Changeset, ColumnValue, DbContext,
         DbContextEntitySet, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
         EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
-        IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
-        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, NavigationKind,
-        NavigationMetadata, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
-        QueryHint, RawCommand, RawParam, RawParams, RawQuery, SelectProjection, SelectProjections,
-        SharedConnection, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
-        SqlValue, TenantContext, TenantScopedEntity, Tracked,
+        IdentityMetadata, Insertable, LazyCollection, LazyNavigation, MssqlConnectionConfig,
+        MssqlOperationalOptions, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
+        MssqlTimeoutOptions, NavigationKind, NavigationMetadata, OrmError, PageRequest,
+        PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam, RawParams,
+        RawQuery, SelectProjection, SelectProjections, SharedConnection, SoftDeleteEntity,
+        SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -417,6 +544,45 @@ mod tests {
         assert_eq!(navigation.kind, NavigationKind::BelongsTo);
         assert!(navigation.targets_table("auth", "users"));
         assert!(navigation.uses_foreign_key("fk_posts_owner_id_users"));
+    }
+
+    #[test]
+    fn lazy_navigation_wrappers_are_memory_only_state_containers() {
+        let mut owner = LazyNavigation::unloaded();
+        assert!(!owner.is_loaded());
+        assert_eq!(owner.as_ref(), None);
+
+        owner.set_loaded(Some(7_i64));
+        assert!(owner.is_loaded());
+        assert_eq!(owner.as_ref(), Some(&7_i64));
+
+        let cloned = owner.clone();
+        assert_eq!(
+            format!("{:?}", cloned),
+            "LazyNavigation { value: Some(7), loaded: true }"
+        );
+
+        owner.clear();
+        assert!(!owner.is_loaded());
+        assert_eq!(owner.as_ref(), None);
+
+        let mut children = LazyCollection::unloaded();
+        assert!(!children.is_loaded());
+        assert!(children.as_slice().is_empty());
+
+        children.set_loaded(vec![1_i64, 2_i64]);
+        assert!(children.is_loaded());
+        assert_eq!(children.as_slice(), &[1_i64, 2_i64]);
+
+        let cloned = children.clone();
+        assert_eq!(
+            format!("{:?}", cloned),
+            "LazyCollection { values: [1, 2], loaded: true }"
+        );
+
+        children.clear();
+        assert!(!children.is_loaded());
+        assert!(children.as_slice().is_empty());
     }
 
     #[test]

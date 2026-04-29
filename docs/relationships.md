@@ -105,7 +105,7 @@ The default public `DbSetQuery<T>` materializes entities from the base table (`T
 
 ## 0.2 Navigation Surface
 
-Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, and explicit `has_many` collection loading from materialized roots. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Lazy loading remains design-only and is not implemented.
+Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, explicit `has_many` collection loading from materialized roots, and opt-in lazy state wrappers that never perform I/O by themselves. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata.
 
 The relationship kinds are:
 
@@ -144,6 +144,12 @@ pub struct User {
 ```
 
 `Navigation<T>` and `Collection<T>` are public marker/value wrappers. The derive does not turn those fields into `ColumnMetadata`; it only uses them to generate navigation metadata. Materializing an entity without an explicit include/load initializes these wrappers empty.
+
+`LazyNavigation<T>` and `LazyCollection<T>` are opt-in lazy-state wrappers. They
+are accepted by the same `belongs_to`, `has_one` and `has_many` attributes, are
+also excluded from column metadata, and start unloaded when materialized from a
+row. They do not store a connection or context and do not query from ordinary
+field access.
 
 ### Explicit Navigation Joins
 
@@ -281,9 +287,11 @@ The tracked variant attaches the collection without marking the entity as
 `has_many` local column is that primary key. It is an explicit async call; no
 field access performs I/O.
 
-### Planned Lazy Loading
+### Opt-In Lazy Loading
 
-Lazy loading is not a default behavior. If it is added, it must be opt-in and visible in types, through wrappers that are distinct from `Navigation<T>` and `Collection<T>`. Normal entity field access must never perform I/O.
+Lazy loading is not a default behavior. The first executable cut is limited to
+opt-in wrapper state and explicit loading integration. Normal entity field
+access never performs I/O.
 
 The planned shape is explicit at both the entity type and call site:
 
@@ -299,28 +307,33 @@ pub struct TodoList {
 
     #[orm(belongs_to(User, foreign_key = owner_id))]
     pub owner: LazyNavigation<User>,
+
+    #[orm(has_many(TodoItem, foreign_key = list_id))]
+    pub items: LazyCollection<TodoItem>,
 }
-
-let mut list = db.todo_lists.find(7_i64).await?.expect("list");
-
-let owner = list
-    .owner
-    .load(&db.todo_lists)
-    .await?;
 ```
 
-The exact type names are still pending implementation, but the contract is:
+Lazy wrappers expose memory-only state APIs:
+
+```rust
+assert!(!list.owner.is_loaded());
+assert_eq!(list.owner.as_ref(), None);
+```
+
+The current executable contract is:
 
 - `LazyNavigation<T>` / `LazyCollection<T>` are separate wrappers from eager-loaded `Navigation<T>` / `Collection<T>`.
-- Loading requires an explicit async method call such as `load(...)`, `load_mut(...)` or `load_collection(...)`.
-- The call receives an explicit context-bearing value, such as `&DbSet<E>` or a future entry API. Lazy wrappers do not store an open SQL Server connection by themselves.
+- `include(...)` / `include_many(...)` can populate lazy wrappers and mark them loaded.
+- `load_collection(...)` / `load_collection_tracked(...)` can populate `LazyCollection<T>` and mark it loaded.
+- A future single-navigation explicit loader may populate `LazyNavigation<T>` outside an include; it must receive an explicit context-bearing value, such as `&DbSet<E>` or a future entry API.
+- Lazy wrappers do not store an open SQL Server connection by themselves.
 - A loaded value is cached inside the wrapper for that entity instance until the caller clears or refreshes it through an explicit method.
 - The wrapper exposes state inspection, for example `is_loaded()`, so code can avoid accidental repeated loads.
 - Missing single navigations produce an empty loaded state, matching `Navigation<T>`.
 
 This keeps the I/O boundary visible in Rust syntax: `await` appears where the query happens, and ordinary field reads remain memory-only.
 
-#### Why It Is Not The First Executable Cut
+#### Why Implicit Loading Is Not The First Executable Cut
 
 Rust async and ownership make transparent lazy loading a poor default for this ORM:
 
@@ -337,8 +350,7 @@ manual shapes.
 
 #### Required Guardrails Before Implementation
 
-A lazy-loading implementation must provide all of these guardrails before it can
-be considered executable:
+A broader lazy-loading implementation must provide all of these guardrails:
 
 - Opt-in field types only; existing `Navigation<T>` and `Collection<T>` must not become lazy by default.
 - No query from `Deref`, `as_ref`, `as_slice`, `Debug`, `Clone`, serialization or equality operations.
@@ -376,6 +388,6 @@ Navigation support depends on earlier internal work:
 - `include::<T>(...)` currently supports one `belongs_to` or `has_one` navigation.
 - `include_many::<T>(...)` currently supports one `has_many` navigation, defaults to join loading with a 10,000 joined-row safety limit, exposes explicit `split_query()`, and rejects pagination in the join-based loading path.
 - `load_collection::<T>(...)` currently supports `has_many` collection loading for single-column root primary keys.
-- No lazy loading.
+- Lazy wrappers exist, but they do not query by themselves; there is no automatic single-navigation lazy loader yet.
 - No automatic projection of joined entity graphs.
 - Tenant and soft-delete automatic filters apply to the root entity and to explicitly included entities; filters on manually joined entities must be explicit.

@@ -196,13 +196,14 @@ db.customers
 This remains an explicit async call and does not add lazy loading to field
 access.
 
-Lazy loading remains a planned, opt-in-only feature. If implemented later, it
-must use distinct lazy wrapper types and explicit async load calls that receive
-a context-bearing value; `Navigation<T>` / `Collection<T>` field reads, `Deref`,
-`Debug`, `Clone` and serialization must stay memory-only. The default guidance
-is still to choose `include(...)`, `include_many(...)`, explicit loading, joins
-or projections according to the query shape instead of relying on hidden
-per-row queries.
+Lazy loading remains opt-in only. `LazyNavigation<T>` and `LazyCollection<T>`
+can be used as navigation fields when the model wants loaded/unloaded state,
+but the wrappers do not own a context and never issue queries from accessors,
+`Debug`, `Clone` or comparison. Current loading still happens through explicit
+query APIs: `include(...)`, `include_many(...)` and `load_collection(...)`.
+The default guidance is still to choose includes, explicit loading, joins or
+projections according to the query shape instead of relying on hidden per-row
+queries.
 
 ## Count
 

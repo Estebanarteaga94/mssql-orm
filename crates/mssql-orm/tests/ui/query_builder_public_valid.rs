@@ -14,7 +14,7 @@ struct User {
     active: bool,
 
     #[orm(has_many(Order, foreign_key = user_id))]
-    orders: Collection<Order>,
+    orders: LazyCollection<Order>,
 }
 
 #[derive(Entity, Debug, Clone)]
@@ -29,7 +29,7 @@ struct Order {
     total_cents: i64,
 
     #[orm(belongs_to(User, foreign_key = user_id))]
-    user: Navigation<User>,
+    user: LazyNavigation<User>,
 }
 
 #[derive(DbContext, Debug, Clone)]
@@ -115,7 +115,7 @@ fn main() {
             id: 1,
             email: "user@example.com".to_string(),
             active: true,
-            orders: Collection::empty(),
+            orders: LazyCollection::unloaded(),
         };
         let _load_collection = db.users.load_collection::<Order>(&mut user, "orders");
 
@@ -123,7 +123,7 @@ fn main() {
             id: 1,
             email: "tracked@example.com".to_string(),
             active: true,
-            orders: Collection::empty(),
+            orders: LazyCollection::unloaded(),
         });
         let _load_tracked_collection =
             db.users
