@@ -20,10 +20,26 @@ pub fn quote_table_ref(table: &TableRef) -> Result<String, OrmError> {
     quote_qualified_identifier(table.schema, table.table)
 }
 
+pub fn quote_table_source(table: &TableRef) -> Result<String, OrmError> {
+    let source = quote_table_ref(table)?;
+
+    match table.alias {
+        Some(alias) => Ok(format!("{source} AS {}", quote_identifier(alias)?)),
+        None => Ok(source),
+    }
+}
+
+pub fn quote_table_reference(table: &TableRef) -> Result<String, OrmError> {
+    match table.alias {
+        Some(alias) => quote_identifier(alias),
+        None => quote_table_ref(table),
+    }
+}
+
 pub fn quote_column_ref(column: &ColumnRef) -> Result<String, OrmError> {
     Ok(format!(
         "{}.{}",
-        quote_table_ref(&column.table)?,
+        quote_table_reference(&column.table)?,
         quote_identifier(column.column_name)?,
     ))
 }
@@ -50,7 +66,10 @@ fn validate_identifier(identifier: &str) -> Result<(), OrmError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{quote_column_ref, quote_identifier, quote_qualified_identifier, quote_table_ref};
+    use super::{
+        quote_column_ref, quote_identifier, quote_qualified_identifier, quote_table_ref,
+        quote_table_reference, quote_table_source,
+    };
     use mssql_orm_query::{ColumnRef, TableRef};
 
     #[test]
@@ -111,5 +130,18 @@ mod tests {
             quote_column_ref(&column).unwrap(),
             "[sales].[customers].[email]"
         );
+    }
+
+    #[test]
+    fn quotes_aliased_table_sources_and_column_refs_from_ast() {
+        let table = TableRef::with_alias("sales", "customers", "c");
+        let column = ColumnRef::new(table, "email", "email");
+
+        assert_eq!(
+            quote_table_source(&table).unwrap(),
+            "[sales].[customers] AS [c]"
+        );
+        assert_eq!(quote_table_reference(&table).unwrap(), "[c]");
+        assert_eq!(quote_column_ref(&column).unwrap(), "[c].[email]");
     }
 }

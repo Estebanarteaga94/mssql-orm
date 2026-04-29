@@ -5,7 +5,7 @@ use mssql_orm_core::{
 };
 use mssql_orm_query::{
     CountQuery, DeleteQuery, Expr, InsertQuery, OrderBy, Pagination, Predicate, SelectQuery,
-    UpdateQuery,
+    SortDirection, TableRef, UpdateQuery,
 };
 use mssql_orm_sqlserver::SqlServerCompiler;
 
@@ -266,6 +266,43 @@ fn snapshots_compiled_joined_select_sql_and_params() {
     let compiled = SqlServerCompiler::compile_select(&query).unwrap();
 
     assert_snapshot!("compiled_select_with_join", render_snapshot(&compiled));
+}
+
+#[test]
+fn snapshots_compiled_aliased_joined_select_sql_and_params() {
+    let query = SelectQuery::from_entity_as::<Customer>("c")
+        .select(vec![
+            Expr::column_as(Customer::email, "c"),
+            Expr::column_as(Order::total_cents, "created_orders"),
+        ])
+        .inner_join_as::<Order>(
+            "created_orders",
+            Predicate::eq(
+                Expr::column_as(Customer::id, "c"),
+                Expr::column_as(Order::customer_id, "created_orders"),
+            ),
+        )
+        .left_join_as::<Order>(
+            "completed_orders",
+            Predicate::gte(
+                Expr::column_as(Order::total_cents, "completed_orders"),
+                Expr::value(SqlValue::I64(5000)),
+            ),
+        )
+        .filter(Predicate::gt(
+            Expr::column_as(Order::total_cents, "created_orders"),
+            Expr::value(SqlValue::I64(1000)),
+        ))
+        .order_by(OrderBy::new(
+            TableRef::for_entity_as::<Order>("completed_orders"),
+            "total_cents",
+            SortDirection::Desc,
+        ))
+        .paginate(Pagination::page(1, 10));
+
+    let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+    assert_snapshot!("compiled_select_with_aliases", render_snapshot(&compiled));
 }
 
 #[test]

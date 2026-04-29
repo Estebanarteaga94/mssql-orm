@@ -1,4 +1,6 @@
-use crate::quoting::{quote_identifier, quote_table_ref};
+use crate::quoting::{
+    quote_column_ref, quote_identifier, quote_table_ref, quote_table_reference, quote_table_source,
+};
 use mssql_orm_core::{ColumnValue, OrmError, SqlValue};
 use mssql_orm_query::{
     BinaryOp, CompiledQuery, CountQuery, DeleteQuery, Expr, InsertQuery, Join, JoinType, OrderBy,
@@ -35,11 +37,12 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_select(query: &SelectQuery) -> Result<CompiledQuery, OrmError> {
-        reject_table_aliases_in_select(query)?;
-
         let mut parameters = ParameterBuilder::default();
         let projection = compile_projection(&query.projection, &mut parameters)?;
-        let mut sql = format!("SELECT {projection} FROM {}", quote_table_ref(&query.from)?);
+        let mut sql = format!(
+            "SELECT {projection} FROM {}",
+            quote_table_source(&query.from)?
+        );
         sql.push_str(&compile_joins(&query.from, &query.joins, &mut parameters)?);
 
         if let Some(predicate) = &query.predicate {
@@ -121,17 +124,11 @@ impl crate::SqlServerCompiler {
     }
 
     pub fn compile_count(query: &CountQuery) -> Result<CompiledQuery, OrmError> {
-        if query.from.alias.is_some() {
-            return Err(OrmError::new(
-                "SQL Server count alias compilation is not implemented yet",
-            ));
-        }
-
         let mut parameters = ParameterBuilder::default();
         let mut sql = format!(
             "SELECT COUNT(*) AS {} FROM {}",
             quote_identifier("count")?,
-            quote_table_ref(&query.from)?,
+            quote_table_source(&query.from)?,
         );
 
         if let Some(predicate) = &query.predicate {
@@ -142,16 +139,6 @@ impl crate::SqlServerCompiler {
 
         Ok(parameters.finish(sql))
     }
-}
-
-fn reject_table_aliases_in_select(query: &SelectQuery) -> Result<(), OrmError> {
-    if query.from.alias.is_some() || query.joins.iter().any(|join| join.table.alias.is_some()) {
-        return Err(OrmError::new(
-            "SQL Server select alias compilation is not implemented yet",
-        ));
-    }
-
-    Ok(())
 }
 
 fn compile_joins(
@@ -165,7 +152,7 @@ fn compile_joins(
     for join in joins {
         if seen_tables.contains(&join.table) {
             return Err(OrmError::new(
-                "SQL Server join compilation requires unique tables until alias support exists",
+                "SQL Server join compilation requires aliases for repeated table sources",
             ));
         }
 
@@ -175,7 +162,7 @@ fn compile_joins(
             JoinType::Inner => "INNER JOIN ",
             JoinType::Left => "LEFT JOIN ",
         });
-        compiled.push_str(&quote_table_ref(&join.table)?);
+        compiled.push_str(&quote_table_source(&join.table)?);
         compiled.push_str(" ON ");
         compiled.push_str(&compile_predicate(&join.on, parameters)?);
     }
@@ -219,11 +206,7 @@ fn compile_projection(
 
 fn compile_expr(expr: &Expr, parameters: &mut ParameterBuilder) -> Result<String, OrmError> {
     match expr {
-        Expr::Column(column) => Ok(format!(
-            "{}.{}",
-            quote_table_ref(&column.table)?,
-            quote_identifier(column.column_name)?,
-        )),
+        Expr::Column(column) => quote_column_ref(column),
         Expr::Value(value) => Ok(parameters.push(value.clone())),
         Expr::Binary { left, op, right } => Ok(format!(
             "({} {} {})",
@@ -314,7 +297,7 @@ fn compile_order_by(order_by: &[OrderBy]) -> Result<String, OrmError> {
         .map(|order| {
             Ok(format!(
                 "{}.{} {}",
-                quote_table_ref(&order.table)?,
+                quote_table_reference(&order.table)?,
                 quote_identifier(order.column_name)?,
                 match order.direction {
                     SortDirection::Asc => "ASC",
@@ -695,7 +678,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_joined_tables_until_alias_support_exists() {
+    fn rejects_duplicate_unaliased_joined_tables() {
         let error = SqlServerCompiler::compile_select(
             &SelectQuery::from_entity::<Customer>().inner_join::<Customer>(Predicate::eq(
                 Expr::from(Customer::id),
@@ -706,27 +689,89 @@ mod tests {
 
         assert_eq!(
             error.message(),
-            "SQL Server join compilation requires unique tables until alias support exists"
+            "SQL Server join compilation requires aliases for repeated table sources"
         );
     }
 
     #[test]
-    fn rejects_aliased_selects_until_alias_compilation_exists() {
-        let error = SqlServerCompiler::compile_select(
-            &SelectQuery::from_entity_as::<Customer>("c").inner_join_as::<Order>(
-                "o",
+    fn compiles_aliased_selects_with_repeated_joined_tables() {
+        let query = SelectQuery::from_entity_as::<Customer>("c")
+            .select(vec![
+                Expr::column_as(Customer::email, "c"),
+                Expr::column_as(Order::total_cents, "created_orders"),
+            ])
+            .inner_join_as::<Order>(
+                "created_orders",
                 Predicate::eq(
                     Expr::column_as(Customer::id, "c"),
+                    Expr::column_as(Order::customer_id, "created_orders"),
+                ),
+            )
+            .left_join_as::<Order>(
+                "completed_orders",
+                Predicate::gte(
+                    Expr::column_as(Order::total_cents, "completed_orders"),
+                    Expr::value(SqlValue::I64(5000)),
+                ),
+            )
+            .filter(Predicate::gt(
+                Expr::column_as(Order::total_cents, "created_orders"),
+                Expr::value(SqlValue::I64(1000)),
+            ))
+            .order_by(OrderBy::new(
+                TableRef::for_entity_as::<Order>("completed_orders"),
+                "total_cents",
+                mssql_orm_query::SortDirection::Desc,
+            ))
+            .paginate(Pagination::page(1, 10));
+
+        let compiled = SqlServerCompiler::compile_select(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "SELECT [c].[email] AS [email], [created_orders].[total_cents] AS [total_cents] FROM [sales].[customers] AS [c] INNER JOIN [sales].[orders] AS [created_orders] ON ([c].[id] = [created_orders].[customer_id]) LEFT JOIN [sales].[orders] AS [completed_orders] ON ([completed_orders].[total_cents] >= @P1) WHERE ([created_orders].[total_cents] > @P2) ORDER BY [completed_orders].[total_cents] DESC OFFSET @P3 ROWS FETCH NEXT @P4 ROWS ONLY"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::I64(5000),
+                SqlValue::I64(1000),
+                SqlValue::I64(0),
+                SqlValue::I64(10),
+            ]
+        );
+    }
+
+    #[test]
+    fn compiles_aliased_count_query() {
+        let query = CountQuery::from_entity_as::<Customer>("c").filter(Predicate::eq(
+            Expr::column_as(Customer::active, "c"),
+            Expr::value(SqlValue::Bool(true)),
+        ));
+
+        let compiled = SqlServerCompiler::compile_count(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "SELECT COUNT(*) AS [count] FROM [sales].[customers] AS [c] WHERE ([c].[active] = @P1)"
+        );
+        assert_eq!(compiled.params, vec![SqlValue::Bool(true)]);
+    }
+
+    #[test]
+    fn rejects_empty_table_aliases() {
+        let error = SqlServerCompiler::compile_select(
+            &SelectQuery::from_entity_as::<Customer>("").inner_join_as::<Order>(
+                "o",
+                Predicate::eq(
+                    Expr::column_as(Customer::id, ""),
                     Expr::column_as(Order::customer_id, "o"),
                 ),
             ),
         )
         .unwrap_err();
 
-        assert_eq!(
-            error.message(),
-            "SQL Server select alias compilation is not implemented yet"
-        );
+        assert_eq!(error.message(), "SQL Server identifier cannot be empty");
     }
 
     #[test]
