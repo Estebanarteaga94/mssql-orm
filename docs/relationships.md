@@ -1,6 +1,6 @@
 # Relationships and Joins
 
-In `mssql-orm`, a relationship declared with `foreign_key` produces relational metadata, migration snapshots, diffs, and SQL Server DDL. Queries remain explicit: declaring a foreign key does not add navigation properties or automatic joins.
+In `mssql-orm`, a relationship declared with `foreign_key` produces relational metadata, migration snapshots, diffs, and SQL Server DDL. Queries remain explicit: declaring a foreign key does not make joins implicit, and navigation loading must be requested through the public query APIs.
 
 See also [Core concepts](core-concepts.md).
 
@@ -150,6 +150,65 @@ are accepted by the same `belongs_to`, `has_one` and `has_many` attributes, are
 also excluded from column metadata, and start unloaded when materialized from a
 row. They do not store a connection or context and do not query from ordinary
 field access.
+
+### Many-To-Many Through an Explicit Entity
+
+Direct `#[orm(many_to_many(...))]` navigation is intentionally rejected in this
+release line. Model many-to-many relationships with an explicit join entity so
+schema, inserts, deletes, audit, tenant and soft-delete behavior stay ordinary
+and visible.
+
+```rust
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "users", schema = "todo")]
+pub struct User {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(has_many(UserRole, foreign_key = user_id))]
+    pub user_roles: Collection<UserRole>,
+}
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "roles", schema = "todo")]
+pub struct Role {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(has_many(UserRole, foreign_key = role_id))]
+    pub user_roles: Collection<UserRole>,
+}
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "user_roles", schema = "todo")]
+pub struct UserRole {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(foreign_key(entity = User, column = id))]
+    pub user_id: i64,
+
+    #[orm(foreign_key(entity = Role, column = id))]
+    pub role_id: i64,
+
+    #[orm(belongs_to(User, foreign_key = user_id))]
+    pub user: Navigation<User>,
+
+    #[orm(belongs_to(Role, foreign_key = role_id))]
+    pub role: Navigation<Role>,
+}
+```
+
+Query through the join entity using explicit joins, navigation joins or
+`include(...)` / `include_many(...)` on the supported `belongs_to` and
+`has_many` edges. Persisting relationship changes is also explicit: insert or
+delete `UserRole` rows directly. Mutating `User.roles`-style direct
+collections is not supported because `save_changes()` does not yet define
+stable relationship-update semantics for added/removed links, duplicate links,
+composite keys, tenant boundaries or soft-deleted join rows.
 
 ### Explicit Navigation Joins
 

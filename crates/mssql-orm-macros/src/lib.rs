@@ -2128,6 +2128,10 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
                     meta,
                     NavigationKindConfig::HasMany,
                 )?);
+            } else if meta.path.is_ident("many_to_many") {
+                return Err(meta.error(
+                    "many_to_many directo no está soportado todavía; modele la relación con una entidad intermedia explícita",
+                ));
             } else if meta.path.is_ident("on_delete") {
                 config.on_delete = Some(parse_referential_action_expr(meta.value()?.parse()?)?);
             } else {

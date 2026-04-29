@@ -196,6 +196,12 @@ db.customers
 This remains an explicit async call and does not add lazy loading to field
 access.
 
+Direct many-to-many navigation is not part of the executable query surface.
+Represent many-to-many relationships as a normal join entity with two
+`belongs_to` edges and query that entity with explicit joins or supported
+includes. The ORM does not infer hidden join tables and does not persist link
+adds/removes from direct collection mutations.
+
 Lazy loading remains opt-in only. `LazyNavigation<T>` and `LazyCollection<T>`
 can be used as navigation fields when the model wants loaded/unloaded state,
 but the wrappers do not own a context and never issue queries from accessors,
@@ -257,6 +263,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 - Navigation joins are explicit and fallible.
 - `include::<T>(...)` supports `belongs_to` and `has_one`; `include_many::<T>(...)` supports `has_many` without pagination.
 - `include_many::<T>(...)` defaults to join loading with a 10,000 joined-row safety limit. Split-query loading is explicit but not implemented yet.
+- Direct `many_to_many` navigation is rejected; use an explicit join entity until relationship-update semantics are stable.
 - Included `tenant` and `soft_delete` policies use the default visibility only; there is no include-specific visibility override yet.
 - Initial public projections exist, but high-level typed aggregations are not available.
 

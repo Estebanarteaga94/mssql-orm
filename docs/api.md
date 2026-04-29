@@ -113,6 +113,11 @@ assert_eq!(email_column.column_name(), "email");
 
 Navigation fields declared with `Navigation<T>`, `Collection<T>`, `LazyNavigation<T>` or `LazyCollection<T>` are metadata-only in the current cut. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes, excludes those fields from `ColumnMetadata`, and initializes eager wrappers empty and lazy wrappers unloaded when materializing an entity.
 
+Direct `many_to_many` navigation attributes are rejected. Model many-to-many
+relationships as explicit join entities with ordinary foreign keys and
+supported `belongs_to` / `has_many` navigations until relationship-update
+semantics are stable.
+
 ## DbContext and DbSet
 
 The main data-access API is:
@@ -219,6 +224,10 @@ ordinary entity values and do not register included graphs automatically.
 `load_collection_tracked(...)` mutates only the tracked root wrapper without
 tracking related entities. Relationship changes inside navigation wrappers are
 not persisted by `save_changes()` in this experimental cut.
+
+Many-to-many link changes follow the same rule: insert, update or delete the
+explicit join entity rows directly. There is no direct collection navigation
+whose mutations are translated into link-table updates.
 
 The future stable design is a context-owned identity map keyed by entity type
 and primary-key values. It should let root queries, includes and explicit loads

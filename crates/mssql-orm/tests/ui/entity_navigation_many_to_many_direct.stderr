@@ -1,0 +1,5 @@
+error: many_to_many directo no está soportado todavía; modele la relación con una entidad intermedia explícita
+  --> tests/ui/entity_navigation_many_to_many_direct.rs:36:11
+   |
+36 |     #[orm(many_to_many(Group, through = UserGroup))]
+   |           ^^^^^^^^^^^^
