@@ -37,6 +37,10 @@ pub trait SoftDeleteProvider: Send + Sync {
     ) -> Result<(), OrmError>;
 }
 
+pub trait SoftDeleteValues {
+    fn soft_delete_values(self) -> Vec<ColumnValue>;
+}
+
 #[allow(dead_code)]
 pub(crate) fn apply_soft_delete_values<E: SoftDeleteEntity>(
     operation: SoftDeleteOperation,
@@ -51,6 +55,21 @@ pub(crate) fn apply_soft_delete_values<E: SoftDeleteEntity>(
     };
 
     let mut values = values;
+    let mut seen = values
+        .iter()
+        .map(|value| value.column_name)
+        .collect::<BTreeSet<_>>();
+
+    if let Some(request_values) = request_values {
+        validate_no_duplicate_columns(request_values.values())?;
+        append_missing_soft_delete_values(
+            policy.columns,
+            &mut values,
+            &mut seen,
+            request_values.values(),
+        )?;
+    }
+
     let context = SoftDeleteContext {
         entity: E::metadata(),
         operation,
@@ -100,6 +119,31 @@ pub(crate) fn apply_soft_delete_values<E: SoftDeleteEntity>(
     }
 
     Ok(values)
+}
+
+#[allow(dead_code)]
+fn append_missing_soft_delete_values(
+    columns: &'static [ColumnMetadata],
+    resolved: &mut Vec<ColumnValue>,
+    seen: &mut BTreeSet<&'static str>,
+    values: &[ColumnValue],
+) -> Result<(), OrmError> {
+    for value in values {
+        let Some(column) = columns
+            .iter()
+            .find(|column| column.column_name == value.column_name)
+        else {
+            continue;
+        };
+
+        validate_soft_delete_column_value(column, &value.value)?;
+
+        if seen.insert(value.column_name) {
+            resolved.push(value.clone());
+        }
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -318,6 +362,26 @@ mod tests {
             Some(&request_values),
         )
         .expect("provider should populate required soft delete columns");
+
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[0].column_name, "deleted_by");
+        assert_eq!(values[1].column_name, "deleted_at");
+    }
+
+    #[test]
+    fn apply_soft_delete_values_uses_request_values_without_provider() {
+        let request_values = SoftDeleteRequestValues::new(vec![ColumnValue::new(
+            "deleted_at",
+            SqlValue::String("2026-04-28T00:00:00".to_string()),
+        )]);
+
+        let values = apply_soft_delete_values::<TestSoftDeleteEntity>(
+            SoftDeleteOperation::Delete,
+            vec![],
+            None,
+            Some(&request_values),
+        )
+        .expect("request values should populate soft delete columns");
 
         assert_eq!(values.len(), 1);
         assert_eq!(values[0].column_name, "deleted_at");

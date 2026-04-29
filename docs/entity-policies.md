@@ -202,11 +202,11 @@ Visibility convention:
 
 Current limit: automatic soft-delete filtering applies only to the root entity of `DbSetQuery<E>`, not to every manually joined entity.
 
-## Ergonomic Soft Delete Values Design
+## Ergonomic Soft Delete Values
 
 The low-level `SoftDeleteProvider` / `SoftDeleteRequestValues` contract remains the foundation for runtime delete values. It is flexible, but it forces users to build `ColumnValue`s manually. The ergonomic layer should be typed and should reuse the same `#[derive(SoftDeleteFields)]` struct that already defines the policy columns.
 
-Target shape:
+Implemented shape:
 
 ```rust
 use chrono::{DateTime, Utc};
@@ -248,11 +248,11 @@ The semantic markers are explicit metadata, not name inference:
 - `#[orm(is_deleted)]` marks a boolean flag column.
 - `#[orm(column = "...")]` keeps working when the physical column name differs from the Rust field.
 
-The derive should generate a runtime conversion trait, for example:
+The derive generates a runtime conversion trait:
 
 ```rust
 pub trait SoftDeleteValues {
-    fn soft_delete_values(&self) -> Vec<ColumnValue>;
+    fn soft_delete_values(self) -> Vec<ColumnValue>;
 }
 ```
 
@@ -262,9 +262,9 @@ pub trait SoftDeleteValues {
 fn with_soft_delete_values<V: SoftDeleteValues>(&self, values: V) -> Self;
 ```
 
-Internally this helper should convert the typed struct into the existing low-level `SoftDeleteRequestValues` or provider path. It must not replace `SoftDeleteProvider`, and it must not move delete semantics into `core`, `query`, `sqlserver`, or `tiberius`.
+Internally this helper converts the typed struct into the existing low-level `SoftDeleteRequestValues` path. It does not replace `SoftDeleteProvider`, and it does not move delete semantics into `core`, `query`, `sqlserver`, or `tiberius`.
 
-Design rules for the future implementation:
+Design rules:
 
 - The user selects columns by declaring fields in the `SoftDeleteFields` struct.
 - The user selects semantic roles through explicit attributes, not by column-name guessing.
@@ -462,4 +462,3 @@ Coverage includes:
 - Generated entity column symbols for policy-only columns.
 - Automatic policy filters over all manually joined entities.
 - Predefined global tenant conventions without a user-defined tenant context.
-- Implementation of the typed `with_soft_delete_values(SoftDelete { ... })` convenience API.

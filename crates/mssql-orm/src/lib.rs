@@ -51,6 +51,7 @@ pub use query_projection::SelectProjections;
 pub use raw_sql::{QueryHint, RawCommand, RawParam, RawParams, RawQuery};
 pub use soft_delete_runtime::{
     SoftDeleteContext, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+    SoftDeleteValues,
 };
 pub use tracking::{EntityState, Tracked};
 #[doc(hidden)]
@@ -98,8 +99,9 @@ pub mod prelude {
         MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
         PageRequest, PredicateCompositionExt, QueryHint, RawCommand, RawParam, RawParams, RawQuery,
         SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
-        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, TenantContext,
-        TenantScopedEntity, Tracked, model_snapshot_from_source, model_snapshot_json_from_source,
+        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, SoftDeleteValues,
+        TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
+        model_snapshot_json_from_source,
     };
     pub use crate::{
         AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,
@@ -472,7 +474,10 @@ mod tests {
     fn exposes_dbcontext_soft_delete_runtime_helpers() {
         let _with_soft_delete_provider = DerivedDbContext::with_soft_delete_provider;
         let _with_soft_delete_request_values = DerivedDbContext::with_soft_delete_request_values;
+        let _with_soft_delete_values = DerivedDbContext::with_soft_delete_values::<SoftDelete>;
         let _clear_soft_delete_request_values = DerivedDbContext::clear_soft_delete_request_values;
+        let _shared_with_soft_delete_values =
+            SharedConnection::with_soft_delete_values::<SoftDelete>;
     }
 
     #[test]
@@ -568,6 +573,13 @@ mod tests {
     struct AuditEntry {
         id: i64,
         payload: String,
+    }
+
+    #[allow(dead_code)]
+    #[derive(SoftDeleteFields)]
+    struct SoftDelete {
+        #[orm(deleted_at)]
+        deleted_at: Option<String>,
     }
 
     #[derive(Insertable, Debug, Clone)]

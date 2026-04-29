@@ -238,6 +238,7 @@ Public policy-related contracts and derives include:
 - `SoftDeleteContext`
 - `SoftDeleteOperation`
 - `SoftDeleteRequestValues`
+- `SoftDeleteValues`
 - `ActiveTenant`
 
 Implemented behavior:
@@ -249,6 +250,8 @@ Implemented behavior:
 - `SharedConnection` and derived `DbContext`s transport `AuditProvider`, `AuditRequestValues`, and typed `AuditValues`; transaction contexts inherit the same shared runtime.
 - Insert/update paths consume that runtime: `DbSet::insert`, `DbSet::update`, Active Record `save`, and `save_changes()` for `Added`/`Modified` complete missing audit columns declared by `AuditEntity::audit_policy()`.
 - `soft_delete = SoftDelete` changes delete behavior and read visibility for the root entity.
+- `#[derive(SoftDeleteFields)]` implements `SoftDeleteValues`, so the same soft-delete policy struct can be passed as typed request values with `with_soft_delete_values(SoftDelete { ... })`.
+- `SharedConnection` and derived `DbContext`s transport `SoftDeleteProvider`, `SoftDeleteRequestValues`, and typed `SoftDeleteValues`; typed values are converted into the existing request-values path.
 - `tenant = CurrentTenant` adds fail-closed tenant filtering and tenant insert validation/fill for opt-in entities.
 
 Deferred behavior:

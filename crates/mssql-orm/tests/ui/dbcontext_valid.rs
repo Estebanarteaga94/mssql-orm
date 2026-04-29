@@ -21,6 +21,12 @@ struct CurrentTenant {
     tenant_id: i64,
 }
 
+#[derive(SoftDeleteFields)]
+struct SoftDelete {
+    #[orm(deleted_at)]
+    deleted_at: Option<String>,
+}
+
 fn main() {
     let _connect = AppDbContext::connect;
     let _connect_with_options = AppDbContext::connect_with_options;
@@ -32,12 +38,14 @@ fn main() {
     let _clear_audit_request_values = AppDbContext::clear_audit_request_values;
     let _with_soft_delete_provider = AppDbContext::with_soft_delete_provider;
     let _with_soft_delete_request_values = AppDbContext::with_soft_delete_request_values;
+    let _with_soft_delete_values = AppDbContext::with_soft_delete_values::<SoftDelete>;
     let _clear_soft_delete_request_values = AppDbContext::clear_soft_delete_request_values;
     let _with_tenant = AppDbContext::with_tenant::<CurrentTenant>;
     let _clear_tenant = AppDbContext::clear_tenant;
     let _shared_with_audit_provider = SharedConnection::with_audit_provider;
     let _shared_with_audit_request_values = SharedConnection::with_audit_request_values;
     let _shared_clear_audit_request_values = SharedConnection::clear_audit_request_values;
+    let _shared_with_soft_delete_values = SharedConnection::with_soft_delete_values::<SoftDelete>;
     let _shared_with_tenant = SharedConnection::with_tenant::<CurrentTenant>;
     let _shared_clear_tenant = SharedConnection::clear_tenant;
     let _db_set: fn(&AppDbContext) -> &DbSet<User> =
