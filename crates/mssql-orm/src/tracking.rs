@@ -30,9 +30,13 @@ use std::sync::{Arc, Mutex};
 /// Lifecycle state for an experimentally tracked entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityState {
+    /// Entity was loaded and has not requested mutable access.
     Unchanged,
+    /// Entity was added locally and should be inserted by `save_changes()`.
     Added,
+    /// Entity was loaded and then mutably accessed.
     Modified,
+    /// Entity was explicitly marked for deletion.
     Deleted,
 }
 

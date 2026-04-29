@@ -6,7 +6,13 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// SQL Server query hints supported by typed raw queries.
+///
+/// Hints are rendered by the ORM at the end of the raw SQL as an
+/// `OPTION (...)` clause. Do not also write a top-level `OPTION (...)` clause
+/// manually in the SQL string.
 pub enum QueryHint {
+    /// Adds `OPTION (RECOMPILE)` to the query.
     Recompile,
 }
 
@@ -29,7 +35,13 @@ impl RawPlaceholderPlan {
     }
 }
 
+/// Converts one raw SQL parameter into an ORM `SqlValue`.
+///
+/// Raw SQL placeholders are positional and must be written as `@P1`, `@P2`,
+/// and so on. Reusing the same placeholder index reuses the same parameter
+/// value.
 pub trait RawParam {
+    /// Converts this value into a SQL Server parameter value.
     fn into_sql_value(self) -> SqlValue;
 }
 
@@ -79,7 +91,12 @@ where
     }
 }
 
+/// Converts a parameter collection into raw SQL parameter values.
+///
+/// Implemented for `()`, `Vec<T>` where `T: RawParam`, and tuples up to 12
+/// elements.
 pub trait RawParams {
+    /// Converts this collection into positional SQL values.
     fn into_sql_values(self) -> Vec<SqlValue>;
 }
 
@@ -127,6 +144,11 @@ impl_raw_params_tuple!(A, B, C, D, E, F, G, H, I, J, K);
 impl_raw_params_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 
 #[derive(Clone)]
+/// Typed raw SQL query that materializes rows as `T`.
+///
+/// `T` must implement `FromRow`. Raw SQL is executed exactly as written after
+/// parameter validation and optional query hint rendering; it does not apply
+/// ORM tenant or soft-delete filters automatically.
 pub struct RawQuery<T> {
     connection: SharedConnection,
     sql: String,
@@ -149,6 +171,7 @@ where
         }
     }
 
+    /// Appends one positional parameter.
     pub fn param<P>(mut self, value: P) -> Self
     where
         P: RawParam,
@@ -157,6 +180,7 @@ where
         self
     }
 
+    /// Appends multiple positional parameters.
     pub fn params<P>(mut self, values: P) -> Self
     where
         P: RawParams,
@@ -165,17 +189,22 @@ where
         self
     }
 
+    /// Adds a SQL Server query hint to render at the end of the raw query.
+    ///
+    /// Repeated hints are deduplicated with stable ordering.
     pub fn query_hint(mut self, hint: QueryHint) -> Self {
         self.query_hints.insert(hint);
         self
     }
 
+    /// Executes the query and materializes all rows.
     pub async fn all(self) -> Result<Vec<T>, OrmError> {
         let compiled = self.compiled_query()?;
         let mut connection = self.connection.lock().await?;
         connection.fetch_all(compiled).await
     }
 
+    /// Executes the query and materializes the first row, if any.
     pub async fn first(self) -> Result<Option<T>, OrmError> {
         let compiled = self.compiled_query()?;
         let mut connection = self.connection.lock().await?;
@@ -188,6 +217,11 @@ where
 }
 
 #[derive(Clone)]
+/// Raw SQL command for statements that do not materialize rows.
+///
+/// Use this for `INSERT`, `UPDATE`, `DELETE`, DDL, or stored procedure calls
+/// where the caller only needs the execution result. Query hints are supported
+/// only on `RawQuery<T>`.
 pub struct RawCommand {
     connection: SharedConnection,
     sql: String,
@@ -203,6 +237,7 @@ impl RawCommand {
         }
     }
 
+    /// Appends one positional parameter.
     pub fn param<P>(mut self, value: P) -> Self
     where
         P: RawParam,
@@ -211,6 +246,7 @@ impl RawCommand {
         self
     }
 
+    /// Appends multiple positional parameters.
     pub fn params<P>(mut self, values: P) -> Self
     where
         P: RawParams,
@@ -219,6 +255,7 @@ impl RawCommand {
         self
     }
 
+    /// Executes the command and returns affected-row information.
     pub async fn execute(self) -> Result<ExecuteResult, OrmError> {
         let compiled = self.compiled_query()?;
         let mut connection = self.connection.lock().await?;

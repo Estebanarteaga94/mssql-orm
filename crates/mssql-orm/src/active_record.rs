@@ -23,7 +23,14 @@ pub trait EntityPersist: Entity {
     fn sync_persisted(&mut self, persisted: Self);
 }
 
+/// Convenience Active Record style API for entities.
+///
+/// Every `Entity` implements this trait. The methods delegate to the `DbSet`
+/// declared on a `DbContext`, so Active Record remains a thin convenience
+/// layer over the same query, insert, update, delete, tenant, audit, and
+/// soft-delete pipelines used by the explicit context API.
 pub trait ActiveRecord: Entity + Sized {
+    /// Starts a query for this entity through the context's `DbSet<Self>`.
     fn query<C>(db: &C) -> DbSetQuery<Self>
     where
         C: DbContextEntitySet<Self>,
@@ -32,6 +39,7 @@ pub trait ActiveRecord: Entity + Sized {
         db.db_set().query()
     }
 
+    /// Finds one entity by single-column primary key through the context.
     fn find<C, K>(db: &C, key: K) -> impl Future<Output = Result<Option<Self>, OrmError>> + Send
     where
         C: DbContextEntitySet<Self>,
@@ -41,6 +49,11 @@ pub trait ActiveRecord: Entity + Sized {
         db.db_set().find(key)
     }
 
+    /// Deletes this entity through the context's `DbSet<Self>`.
+    ///
+    /// Entities with `soft_delete` use logical delete. Entities with
+    /// rowversion participate in the same concurrency-conflict detection as
+    /// the explicit `DbSet` delete path.
     fn delete<C>(&self, db: &C) -> impl Future<Output = Result<bool, OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,
@@ -61,6 +74,11 @@ pub trait ActiveRecord: Entity + Sized {
         }
     }
 
+    /// Inserts or updates this entity according to the derived persistence
+    /// strategy.
+    ///
+    /// The method syncs the in-memory entity with the persisted row returned
+    /// by SQL Server.
     fn save<C>(&mut self, db: &C) -> impl Future<Output = Result<(), OrmError>> + Send
     where
         C: DbContextEntitySet<Self> + Sync,

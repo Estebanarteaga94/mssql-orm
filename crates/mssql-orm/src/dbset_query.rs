@@ -9,6 +9,12 @@ use mssql_orm_query::{
 use mssql_orm_sqlserver::SqlServerCompiler;
 
 #[derive(Clone)]
+/// Fluent query builder bound to one `DbSet<E>`.
+///
+/// `DbSetQuery` stores query intent as AST until execution. SQL text is
+/// generated only by the SQL Server compiler. Mandatory runtime policies such
+/// as tenant filtering and root-entity soft-delete visibility are applied when
+/// the query is compiled or executed.
 pub struct DbSetQuery<E: Entity> {
     connection: Option<SharedConnection>,
     active_tenant: Option<ActiveTenant>,
@@ -44,50 +50,64 @@ impl<E: Entity> DbSetQuery<E> {
         self
     }
 
+    /// Replaces the underlying `SelectQuery` AST while keeping this query bound
+    /// to the same connection and runtime policies.
     pub fn with_select_query(mut self, select_query: SelectQuery) -> Self {
         self.select_query = select_query;
         self
     }
 
+    /// Adds a predicate to the query.
     pub fn filter(mut self, predicate: Predicate) -> Self {
         self.select_query = self.select_query.filter(predicate);
         self
     }
 
+    /// Adds an explicit join described by the query AST.
     pub fn join(mut self, join: Join) -> Self {
         self.select_query = self.select_query.join(join);
         self
     }
 
+    /// Adds an explicit `INNER JOIN` to another entity.
     pub fn inner_join<J: Entity>(mut self, on: Predicate) -> Self {
         self.select_query = self.select_query.inner_join::<J>(on);
         self
     }
 
+    /// Adds an explicit `LEFT JOIN` to another entity.
     pub fn left_join<J: Entity>(mut self, on: Predicate) -> Self {
         self.select_query = self.select_query.left_join::<J>(on);
         self
     }
 
+    /// Adds an ordering expression.
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.select_query = self.select_query.order_by(order);
         self
     }
 
+    /// Limits the number of returned rows with zero offset.
     pub fn limit(mut self, limit: u64) -> Self {
         self.select_query = self.select_query.paginate(Pagination::new(0, limit));
         self
     }
 
+    /// Alias for `limit(...)`.
     pub fn take(self, limit: u64) -> Self {
         self.limit(limit)
     }
 
+    /// Applies page-based pagination.
     pub fn paginate(mut self, request: PageRequest) -> Self {
         self.select_query = self.select_query.paginate(request.to_pagination());
         self
     }
 
+    /// Selects an explicit projection instead of materializing full entities.
+    ///
+    /// Use `all_as::<T>()` or `first_as::<T>()` to materialize the projection
+    /// into a DTO implementing `FromRow`.
     pub fn select<P>(mut self, projection: P) -> Self
     where
         P: SelectProjections,
@@ -103,11 +123,17 @@ impl<E: Entity> DbSetQuery<E> {
         &self.select_query
     }
 
+    /// Includes logically deleted rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`, not every manually joined entity.
     pub fn with_deleted(mut self) -> Self {
         self.visibility = SoftDeleteVisibility::WithDeleted;
         self
     }
 
+    /// Returns only logically deleted rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`, not every manually joined entity.
     pub fn only_deleted(mut self) -> Self {
         self.visibility = SoftDeleteVisibility::OnlyDeleted;
         self
@@ -118,6 +144,7 @@ impl<E: Entity> DbSetQuery<E> {
         self.select_query
     }
 
+    /// Executes the query and materializes full entities.
     pub async fn all(self) -> Result<Vec<E>, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -128,6 +155,7 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_all(compiled).await
     }
 
+    /// Executes the query and materializes the first full entity, if any.
     pub async fn first(self) -> Result<Option<E>, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -138,6 +166,7 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_one(compiled).await
     }
 
+    /// Executes the query and materializes projected rows as DTOs.
     pub async fn all_as<T>(self) -> Result<Vec<T>, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
@@ -149,6 +178,7 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_all(compiled).await
     }
 
+    /// Executes the query and materializes the first projected DTO, if any.
     pub async fn first_as<T>(self) -> Result<Option<T>, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
@@ -160,6 +190,7 @@ impl<E: Entity> DbSetQuery<E> {
         connection.fetch_one(compiled).await
     }
 
+    /// Executes the query as a `COUNT(*)` over the effective filters.
     pub async fn count(self) -> Result<i64, OrmError>
     where
         E: SoftDeleteEntity + TenantScopedEntity,
