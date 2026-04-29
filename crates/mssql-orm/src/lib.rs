@@ -13,6 +13,7 @@ mod context;
 mod dbset_query;
 mod page_request;
 mod predicate_composition;
+mod query_alias;
 mod query_order;
 mod query_predicates;
 mod query_projection;
@@ -50,6 +51,7 @@ pub use mssql_orm_tiberius::{
 pub use mssql_orm_tiberius::{MssqlPool, MssqlPoolBuilder, MssqlPooledConnection};
 pub use page_request::PageRequest;
 pub use predicate_composition::PredicateCompositionExt;
+pub use query_alias::{AliasedEntityColumn, EntityColumnAliasExt};
 pub use query_order::EntityColumnOrderExt;
 pub use query_predicates::EntityColumnPredicateExt;
 pub use query_projection::SelectProjections;
@@ -186,12 +188,13 @@ pub fn model_snapshot_json_from_source<S: MigrationModelSource>() -> Result<Stri
 }
 
 pub mod prelude {
+    pub use crate::AliasedEntityColumn;
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
         ActiveRecord, ActiveTenant, AuditEntity, Collection, DbContext, DbContextEntitySet, DbSet,
-        DbSetQuery, EntityColumnOrderExt, EntityColumnPredicateExt, EntityState,
-        MigrationModelSource, MssqlConnectionConfig, MssqlHealthCheckOptions,
+        DbSetQuery, EntityColumnAliasExt, EntityColumnOrderExt, EntityColumnPredicateExt,
+        EntityState, MigrationModelSource, MssqlConnectionConfig, MssqlHealthCheckOptions,
         MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
         MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
         MssqlTracingOptions, Navigation, PageRequest, PredicateCompositionExt, QueryHint,

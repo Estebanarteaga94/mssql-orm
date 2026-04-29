@@ -1,5 +1,5 @@
 use mssql_orm::prelude::*;
-use mssql_orm::query::{Expr, Predicate};
+use mssql_orm::query::{Expr, Predicate, SelectQuery};
 
 #[derive(Entity, Debug, Clone)]
 #[orm(table = "users", schema = "dbo")]
@@ -48,5 +48,20 @@ fn main() {
                 .limit(10)
                 .paginate(PageRequest::new(2, 10)),
         );
+
+        let _aliased_query = SelectQuery::from_entity_as::<User>("u")
+            .select([
+                SelectProjection::from(User::email.aliased("u")),
+                SelectProjection::from(Order::total_cents.aliased("orders")),
+            ])
+            .inner_join_as::<Order>(
+                "orders",
+                Predicate::eq(
+                    Expr::from(User::id.aliased("u")),
+                    Expr::from(Order::user_id.aliased("orders")),
+                ),
+            )
+            .filter(Order::total_cents.aliased("orders").gte(1000_i64))
+            .order_by(Order::total_cents.aliased("orders").desc());
     };
 }

@@ -1,3 +1,4 @@
+use crate::AliasedEntityColumn;
 use mssql_orm_core::{Entity, EntityColumn, SqlTypeMapping};
 use mssql_orm_query::{Expr, Predicate};
 
@@ -121,9 +122,92 @@ impl<E: Entity> EntityColumnPredicateExt<E> for EntityColumn<E> {
     }
 }
 
+impl<E: Entity> EntityColumnPredicateExt<E> for AliasedEntityColumn<E> {
+    fn eq<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::eq(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn ne<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::ne(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn gt<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::gt(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn gte<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::gte(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn lt<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::lt(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn lte<V>(self, value: V) -> Predicate
+    where
+        V: SqlTypeMapping,
+    {
+        Predicate::lte(Expr::from(self), Expr::value(value.to_sql_value()))
+    }
+
+    fn is_null(self) -> Predicate {
+        Predicate::is_null(Expr::from(self))
+    }
+
+    fn is_not_null(self) -> Predicate {
+        Predicate::is_not_null(Expr::from(self))
+    }
+
+    fn contains(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "%{}%",
+                value.into()
+            ))),
+        )
+    }
+
+    fn starts_with(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "{}%",
+                value.into()
+            ))),
+        )
+    }
+
+    fn ends_with(self, value: impl Into<String>) -> Predicate {
+        Predicate::like(
+            Expr::from(self),
+            Expr::value(mssql_orm_core::SqlValue::String(format!(
+                "%{}",
+                value.into()
+            ))),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::EntityColumnPredicateExt;
+    use crate::EntityColumnAliasExt;
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityColumn, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
         SqlValue,
@@ -276,6 +360,27 @@ mod tests {
                 expected_column,
                 Expr::Value(SqlValue::String("%ana".to_string()))
             )
+        );
+    }
+
+    #[test]
+    fn aliased_columns_build_predicates_against_table_alias() {
+        let expected_column = Expr::Column(ColumnRef::new(
+            TableRef::with_alias("dbo", "test_entities", "t"),
+            "name",
+            "name",
+        ));
+
+        assert_eq!(
+            TestEntity::name.aliased("t").contains("ana"),
+            Predicate::like(
+                expected_column.clone(),
+                Expr::Value(SqlValue::String("%ana%".to_string()))
+            )
+        );
+        assert_eq!(
+            TestEntity::name.aliased("t").is_not_null(),
+            Predicate::is_not_null(expected_column)
         );
     }
 }

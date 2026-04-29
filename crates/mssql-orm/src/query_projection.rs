@@ -1,3 +1,4 @@
+use crate::AliasedEntityColumn;
 use mssql_orm_core::{Entity, EntityColumn};
 use mssql_orm_query::{Expr, SelectProjection};
 
@@ -36,6 +37,15 @@ impl SelectProjections for Expr {
 }
 
 impl<E> SelectProjections for EntityColumn<E>
+where
+    E: Entity,
+{
+    fn into_select_projections(self) -> Vec<SelectProjection> {
+        vec![SelectProjection::from(self)]
+    }
+}
+
+impl<E> SelectProjections for AliasedEntityColumn<E>
 where
     E: Entity,
 {

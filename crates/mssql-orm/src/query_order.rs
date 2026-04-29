@@ -1,5 +1,6 @@
+use crate::AliasedEntityColumn;
 use mssql_orm_core::{Entity, EntityColumn};
-use mssql_orm_query::OrderBy;
+use mssql_orm_query::{OrderBy, SortDirection};
 
 pub trait EntityColumnOrderExt<E: Entity> {
     fn asc(self) -> OrderBy;
@@ -17,9 +18,22 @@ impl<E: Entity> EntityColumnOrderExt<E> for EntityColumn<E> {
     }
 }
 
+impl<E: Entity> EntityColumnOrderExt<E> for AliasedEntityColumn<E> {
+    fn asc(self) -> OrderBy {
+        let column = self.column_ref();
+        OrderBy::new(column.table, column.column_name, SortDirection::Asc)
+    }
+
+    fn desc(self) -> OrderBy {
+        let column = self.column_ref();
+        OrderBy::new(column.table, column.column_name, SortDirection::Desc)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::EntityColumnOrderExt;
+    use crate::EntityColumnAliasExt;
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityColumn, EntityMetadata, PrimaryKeyMetadata, SqlServerType,
     };
@@ -105,6 +119,18 @@ mod tests {
             TestEntity::created_at.desc(),
             OrderBy::new(
                 TableRef::new("dbo", "test_entities"),
+                "created_at",
+                SortDirection::Desc
+            )
+        );
+    }
+
+    #[test]
+    fn aliased_columns_build_order_by_against_table_alias() {
+        assert_eq!(
+            TestEntity::created_at.aliased("t").desc(),
+            OrderBy::new(
+                TableRef::with_alias("dbo", "test_entities", "t"),
                 "created_at",
                 SortDirection::Desc
             )
