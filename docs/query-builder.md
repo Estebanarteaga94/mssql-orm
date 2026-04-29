@@ -153,7 +153,25 @@ the root row. Tenant-scoped included entities fail closed when the active
 tenant is missing, has a different column, or has an incompatible value.
 
 The current include cut supports `belongs_to` and `has_one`. `has_many` remains
-separate because it needs grouping or split-query semantics.
+available through `include_many::<T>(...)` / `include_many_as::<T>(...)`:
+
+```rust
+let customers = db
+    .customers
+    .query()
+    .include_many_as::<Order>("orders", "orders")?
+    .filter(Order::total_cents.aliased("orders").gte(1000_i64))
+    .all()
+    .await?;
+
+let orders = customers[0].orders.as_slice();
+```
+
+The collection include path uses a left join in this first cut, then groups
+joined rows by the root entity primary key before assigning `Collection<T>`.
+It rejects pagination because `OFFSET` / `FETCH` over joined rows would not
+produce a stable page of root entities. Large collection loading and split
+query behavior remain a separate backlog item.
 
 ## Count
 
@@ -198,7 +216,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 
 - The public query builder does not accept arbitrary SQL fragments.
 - Navigation joins are explicit and fallible.
-- `include::<T>(...)` supports only `belongs_to` and `has_one`; collection includes are not supported yet.
+- `include::<T>(...)` supports `belongs_to` and `has_one`; `include_many::<T>(...)` supports `has_many` without pagination.
 - Included `tenant` and `soft_delete` policies use the default visibility only; there is no include-specific visibility override yet.
 - Initial public projections exist, but high-level typed aggregations are not available.
 

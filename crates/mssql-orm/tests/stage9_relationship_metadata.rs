@@ -225,6 +225,37 @@ fn belongs_to_navigation_can_receive_included_entity() {
 }
 
 #[test]
+fn has_many_navigation_can_receive_included_collection() {
+    let mut project = Project {
+        id: 7,
+        name: "Roadmap".to_string(),
+        tasks: Collection::empty(),
+    };
+
+    project
+        .set_included_collection(
+            "tasks",
+            vec![
+                ProjectTask {
+                    id: 10,
+                    project_id: 7,
+                    project: Navigation::empty(),
+                },
+                ProjectTask {
+                    id: 11,
+                    project_id: 7,
+                    project: Navigation::empty(),
+                },
+            ],
+        )
+        .unwrap();
+
+    assert_eq!(project.tasks.as_slice().len(), 2);
+    assert_eq!(project.tasks.as_slice()[0].id, 10);
+    assert_eq!(project.tasks.as_slice()[1].id, 11);
+}
+
+#[test]
 fn inverse_navigation_metadata_reuses_target_foreign_key_metadata() {
     let metadata = Project::metadata();
 

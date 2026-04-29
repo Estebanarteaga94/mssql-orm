@@ -86,5 +86,13 @@ fn main() {
             .filter(User::id.aliased("user").gt(0_i64))
             .order_by(User::id.aliased("user").desc())
             .take(5);
+
+        let _include_many_query = db
+            .users
+            .query()
+            .include_many_as::<Order>("orders", "orders")
+            .unwrap()
+            .filter(Order::total_cents.aliased("orders").gte(1000_i64))
+            .order_by(Order::total_cents.aliased("orders").desc());
     };
 }

@@ -210,7 +210,27 @@ let lists = db
 Projection DTOs remain separate from includes; `include` materializes root
 entities and attaches a `Navigation<T>`.
 
-For `has_many`, the preferred first implementation is split queries:
+### `include_many(...)` for Collection Navigations
+
+`has_many` collection eager loading is exposed separately:
+
+```rust
+let users = db
+    .users
+    .query()
+    .include_many_as::<TodoList>("lists", "lists")?
+    .all()
+    .await?;
+
+let lists = users[0].lists.as_slice();
+```
+
+The first implementation uses a left join and groups joined rows by the root
+entity primary key before assigning `Collection<T>`. This avoids returning
+duplicate root entities to the caller. Pagination is rejected on this path
+because limiting joined rows would produce unstable root-entity pages.
+
+For large collections, the preferred later implementation is split queries:
 
 ```text
 1. Load root rows.
@@ -218,7 +238,9 @@ For `has_many`, the preferred first implementation is split queries:
 3. Attach related rows to the matching root navigation collection.
 ```
 
-Split queries keep row duplication predictable and avoid forcing every collection include through a wide join. A later join-based strategy can be added only after aliasing, grouping, identity handling and result-shaping are stable.
+Split queries keep row duplication predictable and avoid forcing every large
+collection include through a wide join. The exact split-query API remains a
+separate backlog item.
 
 ### Planned Explicit Loading
 
@@ -258,13 +280,14 @@ Navigation support depends on earlier internal work:
 - table aliases in `mssql-orm-query`;
 - SQL Server alias compilation in `mssql-orm-sqlserver`;
 - explicit navigation join inference in `DbSetQuery`;
-- materialization that can separate root columns from included-entity columns for one included entity;
+- materialization that can separate root columns from included-entity columns;
+- grouping by root primary key for `has_many` collection includes;
 - tests for repeated joins, self-joins, `tenant`, `soft_delete`, and row ordering.
 
 ## Limits
 
-- `include::<T>(...)` currently supports only one `belongs_to` or `has_one` navigation.
+- `include::<T>(...)` currently supports one `belongs_to` or `has_one` navigation.
+- `include_many::<T>(...)` currently supports one `has_many` navigation and rejects pagination in the join-based loading path.
 - No lazy loading.
-- No collection eager loading yet.
 - No automatic projection of joined entity graphs.
-- Tenant and soft-delete automatic filters apply to the root entity only; filters on joined entities must be explicit.
+- Tenant and soft-delete automatic filters apply to the root entity and to explicitly included entities; filters on manually joined entities must be explicit.

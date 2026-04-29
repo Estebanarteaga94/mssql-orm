@@ -1201,6 +1201,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         },
     );
     let include_navigation_impls = include_navigation_impls(&ident, &navigations)?;
+    let include_collection_impls = include_collection_impls(&ident, &navigations)?;
 
     let (metadata_static, metadata_expr) = if has_generated_policies
         || has_inverse_navigation_metadata
@@ -1330,6 +1331,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         #soft_delete_contract_impl
         #tenant_contract_impl
         #(#include_navigation_impls)*
+        #(#include_collection_impls)*
     })
 }
 
@@ -2612,6 +2614,64 @@ fn include_navigation_impls(
                             _ => Err(::mssql_orm::core::OrmError::new(
                                 ::std::format!(
                                     "entity `{}` does not support include navigation `{}` for `{}`",
+                                    <Self as ::mssql_orm::core::Entity>::metadata().rust_name,
+                                    navigation,
+                                    ::core::any::type_name::<#target>(),
+                                )
+                            )),
+                        }
+                    }
+                }
+            })
+        })
+        .collect()
+}
+
+fn include_collection_impls(
+    entity_ident: &Ident,
+    navigations: &[PendingNavigation],
+) -> Result<Vec<TokenStream2>> {
+    let mut grouped = BTreeMap::<String, (Path, Vec<(Ident, LitStr)>)>::new();
+
+    for navigation in navigations {
+        if !matches!(navigation.kind, NavigationKindConfig::HasMany) {
+            continue;
+        }
+
+        let field_ident = Ident::new(&navigation.rust_field.value(), navigation.rust_field.span());
+        let target = &navigation.target;
+        let key = quote! { #target }.to_string();
+        grouped
+            .entry(key)
+            .or_insert_with(|| (navigation.target.clone(), Vec::new()))
+            .1
+            .push((field_ident, navigation.rust_field.clone()));
+    }
+
+    grouped
+        .into_values()
+        .map(|(target, fields)| {
+            let arms = fields.into_iter().map(|(field_ident, rust_field)| {
+                quote! {
+                    #rust_field => {
+                        self.#field_ident = ::mssql_orm::Collection::from_vec(values);
+                        Ok(())
+                    }
+                }
+            });
+
+            Ok(quote! {
+                impl ::mssql_orm::IncludeCollection<#target> for #entity_ident {
+                    fn set_included_collection(
+                        &mut self,
+                        navigation: &str,
+                        values: ::std::vec::Vec<#target>,
+                    ) -> ::core::result::Result<(), ::mssql_orm::core::OrmError> {
+                        match navigation {
+                            #(#arms,)*
+                            _ => Err(::mssql_orm::core::OrmError::new(
+                                ::std::format!(
+                                    "entity `{}` does not support include collection `{}` for `{}`",
                                     <Self as ::mssql_orm::core::Entity>::metadata().rust_name,
                                     navigation,
                                     ::core::any::type_name::<#target>(),

@@ -1,7 +1,7 @@
 use crate::context::{ActiveTenant, SharedConnection};
 use crate::page_request::PageRequest;
 use crate::query_projection::SelectProjections;
-use crate::{IncludeNavigation, SoftDeleteEntity, TenantScopedEntity};
+use crate::{IncludeCollection, IncludeNavigation, SoftDeleteEntity, TenantScopedEntity};
 use mssql_orm_core::{
     ColumnMetadata, Entity, EntityMetadata, FromRow, NavigationKind, OrmError, Row, SqlServerType,
     SqlValue,
@@ -166,6 +166,49 @@ impl<E: Entity> DbSetQuery<E> {
         }
 
         Ok(DbSetQueryIncludeOne {
+            query: self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))?,
+            navigation,
+            alias,
+            _target: core::marker::PhantomData,
+        })
+    }
+
+    /// Includes a collection navigation through a `has_many` relationship.
+    ///
+    /// This first collection include cut uses a left join, materializes joined
+    /// rows, then groups them by the root entity primary key before assigning
+    /// `Collection<J>`. Pagination is rejected for this join-based path
+    /// because limiting joined rows is not equivalent to limiting root
+    /// entities.
+    pub fn include_many<J: Entity>(
+        self,
+        navigation: &'static str,
+    ) -> Result<DbSetQueryIncludeMany<E, J>, OrmError> {
+        self.include_many_as::<J>(navigation, navigation)
+    }
+
+    /// Includes a collection navigation using an explicit table alias.
+    pub fn include_many_as<J: Entity>(
+        self,
+        navigation: &'static str,
+        alias: &'static str,
+    ) -> Result<DbSetQueryIncludeMany<E, J>, OrmError> {
+        let metadata = E::metadata();
+        let navigation_metadata = metadata.navigation(navigation).ok_or_else(|| {
+            OrmError::new(format!(
+                "entity `{}` does not declare navigation `{}`",
+                metadata.rust_name, navigation
+            ))
+        })?;
+
+        if !matches!(navigation_metadata.kind, NavigationKind::HasMany) {
+            return Err(OrmError::new(format!(
+                "include_many only supports has_many navigations; `{}` is {:?}",
+                navigation_metadata.rust_field, navigation_metadata.kind
+            )));
+        }
+
+        Ok(DbSetQueryIncludeMany {
             query: self.try_join_navigation::<J>(navigation, JoinType::Left, Some(alias))?,
             navigation,
             alias,
@@ -551,6 +594,115 @@ impl<E: Entity, J: Entity> DbSetQueryIncludeOne<E, J> {
     }
 }
 
+/// Query builder returned by `DbSetQuery::include_many::<T>(...)` for a
+/// collection navigation.
+pub struct DbSetQueryIncludeMany<E: Entity, J: Entity> {
+    query: DbSetQuery<E>,
+    navigation: &'static str,
+    alias: &'static str,
+    _target: core::marker::PhantomData<fn() -> J>,
+}
+
+impl<E: Entity, J: Entity> DbSetQueryIncludeMany<E, J> {
+    /// Adds a predicate after configuring the collection include.
+    pub fn filter(mut self, predicate: Predicate) -> Self {
+        self.query = self.query.filter(predicate);
+        self
+    }
+
+    /// Adds an explicit join after configuring the collection include.
+    pub fn join(mut self, join: Join) -> Self {
+        self.query = self.query.join(join);
+        self
+    }
+
+    /// Adds an explicit `INNER JOIN` after configuring the collection include.
+    pub fn inner_join<K: Entity>(mut self, on: Predicate) -> Self {
+        self.query = self.query.inner_join::<K>(on);
+        self
+    }
+
+    /// Adds an explicit `LEFT JOIN` after configuring the collection include.
+    pub fn left_join<K: Entity>(mut self, on: Predicate) -> Self {
+        self.query = self.query.left_join::<K>(on);
+        self
+    }
+
+    /// Adds an ordering expression after configuring the collection include.
+    pub fn order_by(mut self, order: OrderBy) -> Self {
+        self.query = self.query.order_by(order);
+        self
+    }
+
+    /// Includes logically deleted root rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`; included collection entities
+    /// still apply their own default `soft_delete` visibility inside the join.
+    pub fn with_deleted(mut self) -> Self {
+        self.query = self.query.with_deleted();
+        self
+    }
+
+    /// Returns only logically deleted root rows for entities with `soft_delete`.
+    ///
+    /// This affects only the root entity `E`; included collection entities
+    /// still apply their own default `soft_delete` visibility inside the join.
+    pub fn only_deleted(mut self) -> Self {
+        self.query = self.query.only_deleted();
+        self
+    }
+
+    /// Executes the query and materializes root entities with one collection
+    /// navigation attached.
+    pub async fn all(self) -> Result<Vec<E>, OrmError>
+    where
+        E: FromRow + IncludeCollection<J> + Send + SoftDeleteEntity + TenantScopedEntity,
+        J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+    {
+        let navigation = self.navigation;
+        let alias = self.alias;
+        let compiled = SqlServerCompiler::compile_select(&self.effective_select_query()?)?;
+        let shared_connection = self.query.require_connection()?;
+        let mut connection = shared_connection.lock().await?;
+        let rows = connection
+            .fetch_all_with(compiled, move |row| {
+                materialize_include_many_row::<E, J>(&row, alias)
+            })
+            .await?;
+
+        group_include_many_rows::<E, J>(rows, navigation)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn select_query(&self) -> Result<SelectQuery, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+        J: SoftDeleteEntity + TenantScopedEntity,
+    {
+        self.effective_select_query()
+    }
+
+    fn effective_select_query(&self) -> Result<SelectQuery, OrmError>
+    where
+        E: SoftDeleteEntity + TenantScopedEntity,
+        J: SoftDeleteEntity + TenantScopedEntity,
+    {
+        let query = self.query.effective_select_query()?;
+        if query.pagination.is_some() {
+            return Err(OrmError::new(
+                "include_many does not support pagination in the join-based collection loading cut",
+            ));
+        }
+
+        let query = apply_include_policy_filters::<J>(
+            query,
+            self.query.active_tenant.as_ref(),
+            self.alias,
+        )?;
+        apply_include_projection::<E, J>(query, self.alias)
+    }
+}
+
 fn tenant_predicate_for<E: TenantScopedEntity>(
     active_tenant: Option<&ActiveTenant>,
     table: TableRef,
@@ -758,6 +910,77 @@ fn materialize_prefixed_entity<J: Entity + FromRow>(
     Ok(Some(J::from_row(&PrefixedRow { row, prefix })?))
 }
 
+struct IncludeManyRow<E, J> {
+    root_key: Vec<SqlValue>,
+    root: E,
+    related: Option<J>,
+}
+
+fn materialize_include_many_row<E, J>(
+    row: &impl Row,
+    alias: &'static str,
+) -> Result<IncludeManyRow<E, J>, OrmError>
+where
+    E: Entity + FromRow,
+    J: Entity + FromRow,
+{
+    Ok(IncludeManyRow {
+        root_key: root_primary_key_values::<E>(row)?,
+        root: E::from_row(row)?,
+        related: materialize_prefixed_entity::<J>(row, alias)?,
+    })
+}
+
+fn root_primary_key_values<E: Entity>(row: &impl Row) -> Result<Vec<SqlValue>, OrmError> {
+    let metadata = E::metadata();
+    if metadata.primary_key.columns.is_empty() {
+        return Err(OrmError::new(format!(
+            "include_many requires entity `{}` to declare a primary key for row grouping",
+            metadata.rust_name
+        )));
+    }
+
+    metadata
+        .primary_key
+        .columns
+        .iter()
+        .map(|column_name| row.get_required(column_name))
+        .collect()
+}
+
+fn group_include_many_rows<E, J>(
+    rows: Vec<IncludeManyRow<E, J>>,
+    navigation: &'static str,
+) -> Result<Vec<E>, OrmError>
+where
+    E: IncludeCollection<J>,
+{
+    let mut grouped: Vec<(Vec<SqlValue>, E, Vec<J>)> = Vec::new();
+
+    for row in rows {
+        if let Some((_, _, related_values)) = grouped
+            .iter_mut()
+            .find(|(root_key, _, _)| *root_key == row.root_key)
+        {
+            if let Some(related) = row.related {
+                related_values.push(related);
+            }
+            continue;
+        }
+
+        let related_values = row.related.into_iter().collect();
+        grouped.push((row.root_key, row.root, related_values));
+    }
+
+    grouped
+        .into_iter()
+        .map(|(_, mut root, related_values)| {
+            root.set_included_collection(navigation, related_values)?;
+            Ok(root)
+        })
+        .collect()
+}
+
 struct PrefixedRow<'a, R: Row + ?Sized> {
     row: &'a R,
     prefix: String,
@@ -858,7 +1081,7 @@ mod tests {
     use super::{DbSetQuery, tenant_value_matches_column_type};
     use crate::context::{ActiveTenant, DbSet};
     use crate::page_request::PageRequest;
-    use crate::{SoftDeleteEntity, TenantScopedEntity};
+    use crate::{IncludeCollection, SoftDeleteEntity, TenantScopedEntity};
     use mssql_orm_core::{
         ColumnMetadata, Entity, EntityColumn, EntityMetadata, EntityPolicyMetadata, FromRow,
         NavigationKind, NavigationMetadata, OrmError, PrimaryKeyMetadata, Row, SqlServerType,
@@ -1409,6 +1632,16 @@ mod tests {
     impl TenantScopedEntity for TenantNavigationTarget {
         fn tenant_policy() -> Option<EntityPolicyMetadata> {
             None
+        }
+    }
+
+    impl IncludeCollection<NavigationTarget> for NavigationRoot {
+        fn set_included_collection(
+            &mut self,
+            _navigation: &str,
+            _values: Vec<NavigationTarget>,
+        ) -> Result<(), OrmError> {
+            Ok(())
         }
     }
 
@@ -2057,6 +2290,53 @@ mod tests {
         };
 
         assert!(error.message().contains("belongs_to and has_one"));
+    }
+
+    #[test]
+    fn dbset_query_include_many_projects_root_and_prefixed_related_columns() {
+        let include = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .include_many_as::<NavigationTarget>("orders", "orders")
+            .unwrap();
+
+        let select = include.select_query().unwrap();
+
+        assert_eq!(select.joins.len(), 1);
+        assert_eq!(select.joins[0].join_type, JoinType::Left);
+        assert_eq!(
+            select.joins[0].table,
+            TableRef::with_alias("sales", "navigation_targets", "orders")
+        );
+        assert_eq!(select.projection.len(), 3);
+        assert_eq!(select.projection[0].alias, Some("id"));
+        assert_eq!(select.projection[1].alias, Some("orders__id"));
+        assert_eq!(select.projection[2].alias, Some("orders__owner_id"));
+    }
+
+    #[test]
+    fn dbset_query_include_many_rejects_non_collection_navigation() {
+        let result = DbSet::<NavigationTarget>::disconnected()
+            .query()
+            .include_many::<NavigationRoot>("owner");
+        let error = match result {
+            Ok(_) => panic!("expected non-collection include_many to be rejected"),
+            Err(error) => error,
+        };
+
+        assert!(error.message().contains("has_many"));
+    }
+
+    #[test]
+    fn dbset_query_include_many_rejects_pagination_for_join_grouping() {
+        let include = DbSet::<NavigationRoot>::disconnected()
+            .query()
+            .take(10)
+            .include_many_as::<NavigationTarget>("orders", "orders")
+            .unwrap();
+
+        let error = include.select_query().unwrap_err();
+
+        assert!(error.message().contains("does not support pagination"));
     }
 
     #[test]

@@ -180,6 +180,8 @@ Common query methods:
 - `try_left_join_navigation_as::<T>(...)`
 - `include::<T>(...)`
 - `include_as::<T>(...)`
+- `include_many::<T>(...)`
+- `include_many_as::<T>(...)`
 - `select(...)`
 - `all().await`
 - `first().await`
@@ -189,8 +191,10 @@ Common query methods:
 
 The query builder produces AST values. SQL generation belongs to `mssql-orm-sqlserver`.
 
-`include::<T>(...)` and `include_as::<T>(...)` are limited to one
-`belongs_to` / `has_one` navigation. Root policies are applied to the effective
+`include::<T>(...)` and `include_as::<T>(...)` load one `belongs_to` /
+`has_one` navigation. `include_many::<T>(...)` and `include_many_as::<T>(...)`
+load one `has_many` navigation through a join grouped by root primary key and
+reject pagination in this first cut. Root policies are applied to the effective
 query predicate, while included-entity `tenant` and default `soft_delete`
 policies are applied to the include join predicate.
 
