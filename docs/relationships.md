@@ -251,19 +251,35 @@ Split queries keep row duplication predictable and avoid forcing every large
 collection include through a wide join. The execution path for split queries
 remains a separate backlog item.
 
-### Planned Explicit Loading
+### Explicit Loading
 
-Explicit loading should be available without lazy loading:
+The current explicit loading cut supports `has_many` collections from a
+materialized root entity:
 
 ```rust
-let user = db.users.find(7_i64).await?.expect("user");
+let mut user = db.users.find(7_i64).await?.expect("user");
 
-db.entry(&user)
-    .load(User::lists)
+db.users
+    .load_collection::<TodoList>(&mut user, "lists")
+    .await?;
+
+let lists = user.lists.as_slice();
+```
+
+For tracked entities, use the tracked variant:
+
+```rust
+let mut user = db.users.find_tracked(7_i64).await?.expect("user");
+
+db.users
+    .load_collection_tracked::<TodoList>(&mut user, "lists")
     .await?;
 ```
 
-The exact ownership shape is still part of the implementation design. The public requirement is that loading is visible at the call site and returns errors through the normal `OrmError` path.
+The tracked variant attaches the collection without marking the entity as
+`Modified`. This first cut supports single-column root primary keys where the
+`has_many` local column is that primary key. It is an explicit async call; no
+field access performs I/O.
 
 ### Planned Lazy Loading
 
@@ -297,6 +313,7 @@ Navigation support depends on earlier internal work:
 
 - `include::<T>(...)` currently supports one `belongs_to` or `has_one` navigation.
 - `include_many::<T>(...)` currently supports one `has_many` navigation, defaults to join loading with a 10,000 joined-row safety limit, exposes explicit `split_query()`, and rejects pagination in the join-based loading path.
+- `load_collection::<T>(...)` currently supports `has_many` collection loading for single-column root primary keys.
 - No lazy loading.
 - No automatic projection of joined entity graphs.
 - Tenant and soft-delete automatic filters apply to the root entity and to explicitly included entities; filters on manually joined entities must be explicit.

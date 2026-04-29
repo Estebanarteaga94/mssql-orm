@@ -146,6 +146,10 @@ impl<T> Tracked<T> {
         &mut self.inner.current
     }
 
+    pub(crate) fn current_mut_without_state_change(&mut self) -> &mut T {
+        &mut self.inner.current
+    }
+
     fn mark_modified_if_unchanged(&mut self) {
         if self.inner.state == EntityState::Unchanged {
             self.inner.state = EntityState::Modified;

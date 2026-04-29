@@ -110,5 +110,23 @@ fn main() {
             .include_many::<Order>("orders")
             .unwrap()
             .unbounded_join();
+
+        let mut user = User {
+            id: 1,
+            email: "user@example.com".to_string(),
+            active: true,
+            orders: Collection::empty(),
+        };
+        let _load_collection = db.users.load_collection::<Order>(&mut user, "orders");
+
+        let mut tracked_user = Tracked::from_loaded(User {
+            id: 1,
+            email: "tracked@example.com".to_string(),
+            active: true,
+            orders: Collection::empty(),
+        });
+        let _load_tracked_collection =
+            db.users
+                .load_collection_tracked::<Order>(&mut tracked_user, "orders");
     };
 }

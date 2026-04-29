@@ -183,6 +183,19 @@ result. `split_query()` is already part of the public builder to make the
 strategy explicit, but execution returns a clear error until the split-query
 loader is implemented.
 
+When the root entity is already materialized, use explicit loading instead of
+rewriting the root query:
+
+```rust
+let mut customer = db.customers.find(7_i64).await?.expect("customer");
+db.customers
+    .load_collection::<Order>(&mut customer, "orders")
+    .await?;
+```
+
+This remains an explicit async call and does not add lazy loading to field
+access.
+
 ## Count
 
 `count()` preserves the base `from` and filters. In the current state it does not carry joins, ordering, or pagination into the internal `CountQuery`; use it for base-entity counts with filters that do not depend on joined tables.

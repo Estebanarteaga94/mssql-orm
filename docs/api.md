@@ -202,6 +202,16 @@ Root policies are applied to the effective query predicate, while
 included-entity `tenant` and default `soft_delete` policies are applied to the
 include join predicate.
 
+Explicit collection loading is available from `DbSet<E>`:
+
+- `load_collection::<T>(&mut entity, "navigation").await`
+- `load_collection_tracked::<T>(&mut tracked, "navigation").await`
+
+This first explicit loading cut supports `has_many` navigations where the root
+entity has a single-column primary key and the navigation local column is that
+primary key. The tracked variant attaches the collection without marking the
+tracked entity as modified.
+
 Navigation includes are not projection builders. After `include(...)` or
 `include_many(...)`, the returned builder does not expose `select(...)`,
 `all_as::<T>()` or `first_as::<T>()`; use plain `DbSetQuery` with explicit

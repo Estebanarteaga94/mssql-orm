@@ -6,8 +6,8 @@ use crate::soft_delete_runtime::{
 };
 use crate::{AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, AuditValues};
 use crate::{
-    RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity, Tracked,
-    TrackingRegistry, TrackingRegistryHandle,
+    IncludeCollection, RawCommand, RawQuery, SoftDeleteEntity, TenantContext, TenantScopedEntity,
+    Tracked, TrackingRegistry, TrackingRegistryHandle,
 };
 use core::future::Future;
 use std::marker::PhantomData;
@@ -15,7 +15,8 @@ use std::sync::Arc;
 
 use crate::{EntityPersist, EntityPrimaryKey};
 use mssql_orm_core::{
-    Changeset, Entity, EntityMetadata, FromRow, Insertable, OrmError, SqlTypeMapping, SqlValue,
+    Changeset, Entity, EntityMetadata, FromRow, Insertable, NavigationKind, OrmError,
+    SqlTypeMapping, SqlValue,
 };
 use mssql_orm_query::{
     ColumnRef, DeleteQuery, Expr, InsertQuery, Predicate, SelectQuery, TableRef, UpdateQuery,
@@ -858,6 +859,47 @@ impl<E: Entity> DbSet<E> {
             .clone()
     }
 
+    /// Explicitly loads a `has_many` collection navigation into an already
+    /// materialized entity.
+    ///
+    /// This performs I/O only at this call site. It does not install lazy
+    /// loading behavior on the entity or navigation field.
+    pub async fn load_collection<J>(
+        &self,
+        entity: &mut E,
+        navigation: &'static str,
+    ) -> Result<(), OrmError>
+    where
+        E: EntityPrimaryKey + IncludeCollection<J>,
+        J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+    {
+        let related = self
+            .explicit_collection_query::<J>(entity, navigation)?
+            .all()
+            .await?;
+        entity.set_included_collection(navigation, related)
+    }
+
+    /// Explicitly loads a `has_many` collection navigation into a tracked
+    /// entity without marking it as modified.
+    pub async fn load_collection_tracked<J>(
+        &self,
+        tracked: &mut Tracked<E>,
+        navigation: &'static str,
+    ) -> Result<(), OrmError>
+    where
+        E: EntityPrimaryKey + IncludeCollection<J>,
+        J: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
+    {
+        let related = self
+            .explicit_collection_query::<J>(tracked.current(), navigation)?
+            .all()
+            .await?;
+        tracked
+            .current_mut_without_state_change()
+            .set_included_collection(navigation, related)
+    }
+
     #[doc(hidden)]
     pub fn tracking_registry(&self) -> TrackingRegistryHandle {
         Arc::clone(&self.tracking_registry)
@@ -874,6 +916,86 @@ impl<E: Entity> DbSet<E> {
         self.connection
             .as_ref()
             .and_then(SharedConnection::active_tenant)
+    }
+
+    fn explicit_collection_query<J>(
+        &self,
+        entity: &E,
+        navigation: &'static str,
+    ) -> Result<DbSetQuery<J>, OrmError>
+    where
+        E: EntityPrimaryKey,
+        J: Entity,
+    {
+        let navigation_metadata = E::metadata().navigation(navigation).ok_or_else(|| {
+            OrmError::new(format!(
+                "entity `{}` does not declare navigation `{}`",
+                E::metadata().rust_name,
+                navigation
+            ))
+        })?;
+
+        if navigation_metadata.kind != NavigationKind::HasMany {
+            return Err(OrmError::new(format!(
+                "explicit collection loading only supports has_many navigations; `{}` is {:?}",
+                navigation_metadata.rust_field, navigation_metadata.kind
+            )));
+        }
+
+        if navigation_metadata.local_columns.len() != 1
+            || navigation_metadata.target_columns.len() != 1
+        {
+            return Err(OrmError::new(
+                "explicit collection loading currently supports only single-column navigation joins",
+            ));
+        }
+
+        let root_primary_key = E::metadata().primary_key.columns;
+        if root_primary_key.len() != 1
+            || root_primary_key[0] != navigation_metadata.local_columns[0]
+        {
+            return Err(OrmError::new(
+                "explicit collection loading requires the has_many local column to be the root entity single-column primary key",
+            ));
+        }
+
+        let target_metadata = J::metadata();
+        if navigation_metadata.target_schema != target_metadata.schema
+            || navigation_metadata.target_table != target_metadata.table
+        {
+            return Err(OrmError::new(format!(
+                "navigation `{}` on `{}` targets `{}.{}`, not entity `{}` (`{}.{}`)",
+                navigation_metadata.rust_field,
+                E::metadata().rust_name,
+                navigation_metadata.target_schema,
+                navigation_metadata.target_table,
+                target_metadata.rust_name,
+                target_metadata.schema,
+                target_metadata.table
+            )));
+        }
+
+        let target_column = target_metadata
+            .column(navigation_metadata.target_columns[0])
+            .ok_or_else(|| {
+                OrmError::new(format!(
+                    "entity `{}` metadata does not contain column `{}` required by explicit collection loading",
+                    target_metadata.rust_name, navigation_metadata.target_columns[0]
+                ))
+            })?;
+
+        let key = entity.primary_key_value()?;
+        Ok(DbSetQuery::new(
+            self.connection.as_ref().cloned(),
+            SelectQuery::from_entity::<J>().filter(Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::for_entity::<J>(),
+                    target_column.rust_field,
+                    target_column.column_name,
+                )),
+                Expr::Value(key),
+            )),
+        ))
     }
 }
 
@@ -1387,12 +1509,14 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, SoftDeleteContext,
-        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
+        AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPrimaryKey,
+        IncludeCollection, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
+        SoftDeleteProvider, TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
-        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
-        Insertable, OrmError, PrimaryKeyMetadata, Row, SqlServerType, SqlValue,
+        ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata,
+        ForeignKeyMetadata, FromRow, Insertable, NavigationKind, NavigationMetadata, OrmError,
+        PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlValue,
     };
     use mssql_orm_migrate::{
         ColumnSnapshot, MigrationOperation, ModelSnapshot, SchemaSnapshot, TableSnapshot,
@@ -1410,6 +1534,12 @@ mod tests {
     struct SoftDeleteEntityUnderTest;
     struct SoftDeleteVersionedEntity;
     struct CompositeKeyEntity;
+    #[derive(Debug, Clone)]
+    struct ExplicitLoadRoot {
+        id: i64,
+        children_loaded: usize,
+    }
+    struct ExplicitLoadChild;
     struct DummyContext {
         entities: DbSet<TestEntity>,
     }
@@ -1498,6 +1628,112 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
+    };
+
+    static EXPLICIT_LOAD_ROOT_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
+        rust_field: "id",
+        column_name: "id",
+        renamed_from: None,
+        sql_type: SqlServerType::BigInt,
+        nullable: false,
+        primary_key: true,
+        identity: None,
+        default_sql: None,
+        computed_sql: None,
+        rowversion: false,
+        insertable: true,
+        updatable: false,
+        max_length: None,
+        precision: None,
+        scale: None,
+    }];
+
+    static EXPLICIT_LOAD_CHILD_COLUMNS: [ColumnMetadata; 2] = [
+        ColumnMetadata {
+            rust_field: "id",
+            column_name: "id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: true,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: false,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+        ColumnMetadata {
+            rust_field: "root_id",
+            column_name: "root_id",
+            renamed_from: None,
+            sql_type: SqlServerType::BigInt,
+            nullable: false,
+            primary_key: false,
+            identity: None,
+            default_sql: None,
+            computed_sql: None,
+            rowversion: false,
+            insertable: true,
+            updatable: true,
+            max_length: None,
+            precision: None,
+            scale: None,
+        },
+    ];
+
+    static EXPLICIT_LOAD_NAVIGATIONS: [NavigationMetadata; 1] = [NavigationMetadata::new(
+        "children",
+        NavigationKind::HasMany,
+        "ExplicitLoadChild",
+        "dbo",
+        "explicit_load_children",
+        &["id"],
+        &["root_id"],
+        Some("fk_explicit_load_children_root"),
+    )];
+
+    static EXPLICIT_LOAD_CHILD_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata {
+        name: "fk_explicit_load_children_root",
+        columns: &["root_id"],
+        referenced_schema: "dbo",
+        referenced_table: "explicit_load_roots",
+        referenced_columns: &["id"],
+        on_delete: ReferentialAction::NoAction,
+        on_update: ReferentialAction::NoAction,
+    }];
+
+    static EXPLICIT_LOAD_ROOT_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "ExplicitLoadRoot",
+        schema: "dbo",
+        table: "explicit_load_roots",
+        renamed_from: None,
+        columns: &EXPLICIT_LOAD_ROOT_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &EXPLICIT_LOAD_NAVIGATIONS,
+    };
+
+    static EXPLICIT_LOAD_CHILD_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "ExplicitLoadChild",
+        schema: "dbo",
+        table: "explicit_load_children",
+        renamed_from: None,
+        columns: &EXPLICIT_LOAD_CHILD_COLUMNS,
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &EXPLICIT_LOAD_CHILD_FOREIGN_KEYS,
         navigations: &[],
     };
 
@@ -2011,6 +2247,18 @@ mod tests {
         }
     }
 
+    impl Entity for ExplicitLoadRoot {
+        fn metadata() -> &'static EntityMetadata {
+            &EXPLICIT_LOAD_ROOT_METADATA
+        }
+    }
+
+    impl Entity for ExplicitLoadChild {
+        fn metadata() -> &'static EntityMetadata {
+            &EXPLICIT_LOAD_CHILD_METADATA
+        }
+    }
+
     impl SoftDeleteEntity for TestEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
@@ -2101,6 +2349,12 @@ mod tests {
         }
     }
 
+    impl SoftDeleteEntity for ExplicitLoadChild {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl TenantScopedEntity for TestEntity {
         fn tenant_policy() -> Option<EntityPolicyMetadata> {
             None
@@ -2146,9 +2400,42 @@ mod tests {
         }
     }
 
+    impl TenantScopedEntity for ExplicitLoadChild {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl FromRow for TestEntity {
         fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
             Ok(Self)
+        }
+    }
+
+    impl FromRow for ExplicitLoadChild {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
+        }
+    }
+
+    impl EntityPrimaryKey for ExplicitLoadRoot {
+        fn primary_key_value(&self) -> Result<SqlValue, OrmError> {
+            Ok(SqlValue::I64(self.id))
+        }
+    }
+
+    impl IncludeCollection<ExplicitLoadChild> for ExplicitLoadRoot {
+        fn set_included_collection(
+            &mut self,
+            navigation: &str,
+            values: Vec<ExplicitLoadChild>,
+        ) -> Result<(), OrmError> {
+            if navigation != "children" {
+                return Err(OrmError::new("unexpected navigation"));
+            }
+
+            self.children_loaded = values.len();
+            Ok(())
         }
     }
 
@@ -2379,6 +2666,65 @@ mod tests {
             error.message(),
             "DbSet currently supports this operation only for entities with a single primary key column"
         );
+    }
+
+    #[test]
+    fn explicit_collection_loading_builds_related_entity_query() {
+        let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
+        let root = ExplicitLoadRoot {
+            id: 7,
+            children_loaded: 0,
+        };
+
+        let query = dbset
+            .explicit_collection_query::<ExplicitLoadChild>(&root, "children")
+            .unwrap()
+            .into_select_query();
+
+        assert_eq!(
+            query,
+            SelectQuery::from_entity::<ExplicitLoadChild>().filter(Predicate::eq(
+                Expr::Column(ColumnRef::new(
+                    TableRef::new("dbo", "explicit_load_children"),
+                    "root_id",
+                    "root_id",
+                )),
+                Expr::Value(SqlValue::I64(7)),
+            ))
+        );
+    }
+
+    #[test]
+    fn explicit_collection_loading_rejects_unknown_navigation() {
+        let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
+        let root = ExplicitLoadRoot {
+            id: 7,
+            children_loaded: 0,
+        };
+
+        let error = dbset
+            .explicit_collection_query::<ExplicitLoadChild>(&root, "missing")
+            .unwrap_err();
+
+        assert!(error.message().contains("does not declare navigation"));
+    }
+
+    #[test]
+    fn explicit_collection_loading_tracked_assignment_does_not_mark_modified() {
+        let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
+        let mut tracked = Tracked::from_loaded(ExplicitLoadRoot {
+            id: 7,
+            children_loaded: 0,
+        });
+
+        tracked
+            .current_mut_without_state_change()
+            .set_included_collection("children", vec![ExplicitLoadChild])
+            .unwrap();
+
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(tracked.current().children_loaded, 1);
+        drop(dbset);
     }
 
     #[tokio::test]
