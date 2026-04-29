@@ -77,7 +77,7 @@ db.users
 
 SQL Server pagination requires deterministic ordering.
 
-## Joins
+## Joins And Navigation Loading
 
 Joins are explicit. You can either provide the `ON` predicate manually or ask
 `DbSetQuery` to build it from navigation metadata.

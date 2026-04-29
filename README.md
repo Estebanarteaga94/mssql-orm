@@ -105,10 +105,10 @@ let active_users = db
 - [Quickstart](docs/quickstart.md): connection, CRUD, and query builder basics.
 - [Code-first](docs/code-first.md): entities, derives, `DbContext`, `DbSet`, and model metadata.
 - [Public API](docs/api.md): exported surface from the root crate and prelude.
-- [Query builder](docs/query-builder.md): predicates, ordering, pagination, joins, and projections.
+- [Query builder](docs/query-builder.md): predicates, ordering, pagination, explicit joins, navigation joins, includes, and projections.
 - [Typed projections](docs/projections.md): `select(...)`, `all_as::<T>()`, `first_as::<T>()`, aliases, and DTOs.
 - [Typed raw SQL](docs/raw-sql.md): `raw<T>()`, `raw_exec()`, parameters, DTOs, and safety rules.
-- [Relationships](docs/relationships.md): foreign keys and explicit joins.
+- [Relationships](docs/relationships.md): foreign keys, navigation metadata, includes, explicit loading, and joins.
 - [Transactions](docs/transactions.md): runtime transaction behavior and pool limits.
 - [Migrations](docs/migrations.md): snapshots, diff, `migration add`, and `database update`.
 - [Entity Policies](docs/entity-policies.md): audit metadata and runtime values, soft delete, tenant scoping, and policy limits.
@@ -125,6 +125,7 @@ Pending verification: historical validation of `todo-app` against real SQL Serve
 
 - SQL Server only.
 - Navigation properties currently support metadata, explicit join inference, `belongs_to` / `has_one` includes, join-based `has_many` includes, and explicit `has_many` collection loading.
+- Direct many-to-many navigation is rejected; model it with an explicit join entity.
 - Lazy wrappers exist as opt-in state containers, but they never query by themselves; there is no automatic single-navigation lazy loader yet.
 - Public CRUD, Active Record, and tracking are still focused on simple primary keys.
 - `AuditProvider` has a public runtime contract, audit-owned column metadata, context transport, and insert/update auto-fill on the main `DbSet`, Active Record, and `save_changes()` paths.

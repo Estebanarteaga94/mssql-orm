@@ -111,7 +111,12 @@ assert_eq!(metadata.table, "users");
 assert_eq!(email_column.column_name(), "email");
 ```
 
-Navigation fields declared with `Navigation<T>`, `Collection<T>`, `LazyNavigation<T>` or `LazyCollection<T>` are metadata-only in the current cut. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes, excludes those fields from `ColumnMetadata`, and initializes eager wrappers empty and lazy wrappers unloaded when materializing an entity.
+Navigation fields declared with `Navigation<T>`, `Collection<T>`,
+`LazyNavigation<T>` or `LazyCollection<T>` are not persisted columns.
+`#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes,
+excludes those fields from `ColumnMetadata`, emits `NavigationMetadata`, and
+initializes eager wrappers empty and lazy wrappers unloaded when materializing
+an entity without an explicit include/load operation.
 
 Direct `many_to_many` navigation attributes are rejected. Model many-to-many
 relationships as explicit join entities with ordinary foreign keys and

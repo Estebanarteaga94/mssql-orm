@@ -168,6 +168,40 @@ At this stage, the query crate still only describes intent. It does not know how
 
 That separation matters because `mssql-orm-query` is a structural layer, while `mssql-orm-sqlserver` is the SQL Server dialect layer.
 
+## Navigation Loading
+
+Navigation properties are declared on entity structs with marker wrappers such
+as `Navigation<T>`, `Collection<T>`, `LazyNavigation<T>` and
+`LazyCollection<T>`. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and
+`has_many`, excludes those fields from column metadata, and writes neutral
+`NavigationMetadata` into `EntityMetadata.navigations`.
+
+The current public loading surface is explicit:
+
+- navigation joins can be inferred from metadata with
+  `try_inner_join_navigation(...)`, `try_left_join_navigation(...)` and their
+  `_as` alias variants;
+- `include::<T>(...)` / `include_as::<T>(...)` eager-load one `belongs_to` or
+  `has_one` navigation through a left join;
+- `include_many::<T>(...)` / `include_many_as::<T>(...)` eager-load one
+  `has_many` collection through a join grouped by root primary key;
+- `DbSet::load_collection(...)` and `DbSet::load_collection_tracked(...)`
+  explicitly load a `has_many` collection from a materialized root.
+
+Navigation loading stays separate from projections and raw SQL. Include
+builders materialize entity graphs and intentionally do not expose
+`select(...)`, `all_as::<T>()` or `first_as::<T>()`. Raw SQL never infers
+navigation metadata or attaches navigation wrappers.
+
+Runtime policies keep their existing boundaries. Root `tenant` and
+`soft_delete` filters are applied to the effective root query; included entity
+`tenant` and default `soft_delete` filters are applied inside the include
+`JOIN ... ON` predicate so a filtered related row does not discard the root.
+
+Direct `many_to_many` navigation is rejected by the derive. Model many-to-many
+as an explicit join entity with ordinary foreign keys and supported
+`belongs_to` / `has_many` navigations.
+
 ## SQL Server Compilation
 
 `mssql-orm-sqlserver` compiles query AST values into `CompiledQuery` values. A compiled query contains:
@@ -326,8 +360,9 @@ Important limits:
 - audit columns do not become Rust fields on the entity,
 - audit columns do not generate column symbols such as `Todo::created_at`,
 - audited entities expose audit-owned columns through `AuditEntity::audit_policy()`,
-- audit insert/update autoloading through an `AuditProvider` is not implemented,
-- the `AuditProvider` runtime contract is transported through contexts, but is not applied to writes yet,
+- audit insert/update auto-fill is implemented on the main `DbSet`, Active
+  Record and `save_changes()` write paths when an audited entity has missing
+  audit-owned values,
 - soft-delete automatic filters apply to the root entity of a `DbSetQuery`, not every joined entity,
 - raw SQL does not apply policy filters automatically.
 
@@ -339,10 +374,15 @@ These are intentional limits of the current implementation:
 - Public persistence workflows are centered on simple primary keys.
 - `Tracked<T>` and `save_changes()` are experimental.
 - `db.transaction(...)` is not supported on contexts created from a pool until a physical connection can be pinned for the whole closure.
-- Navigation properties and inferred joins are not implemented.
-- Automatic table aliases for repeated table joins or self-joins are not implemented.
+- Navigation properties are implemented for metadata, inferred explicit joins,
+  single-navigation includes, join-based `has_many` includes, and explicit
+  `has_many` collection loading; automatic relationship persistence and graph
+  tracking are not implemented.
+- Table aliases are implemented for explicit aliases, repeated joins and
+  self-joins; fully automatic alias assignment is not implemented.
 - High-level typed aggregate builders are not implemented.
-- Runtime `AuditProvider` autoloading is not implemented.
+- Lazy navigation wrappers are state containers only and never query by
+  themselves.
 - `migration.rs` is not implemented.
 
 When documenting or using the project, treat these as unavailable unless the code and audit are updated first.

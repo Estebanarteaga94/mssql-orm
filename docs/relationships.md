@@ -103,9 +103,9 @@ Use `left_join::<T>(...)` when the relationship can be missing or when you need 
 
 The default public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables. A first `include::<T>(...)` cut exists for single navigations and explicitly constructs one related `Navigation<T>`.
 
-## 0.2 Navigation Surface
+## Navigation Surface
 
-Navigation properties are being introduced incrementally for `0.2.0`. The implemented cut supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, explicit `has_many` collection loading from materialized roots, and opt-in lazy state wrappers that never perform I/O by themselves. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata.
+Navigation properties are available in the current workspace cut. The implemented surface supports syntax, metadata, table aliases, explicit join inference from navigation metadata, eager loading for one `belongs_to` / `has_one` navigation, join-based `has_many` eager loading, explicit `has_many` collection loading from materialized roots, and opt-in lazy state wrappers that never perform I/O by themselves. Fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata.
 
 The relationship kinds are:
 
