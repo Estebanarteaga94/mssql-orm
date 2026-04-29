@@ -89,6 +89,22 @@ async fn navigation_runtime_loads_graph_shapes_against_real_sql_server() -> Resu
         assert_eq!(profile.user_id, 1);
         assert_eq!(profile.bio, "Profile Ana");
 
+        let user_without_profile = db
+            .users
+            .query()
+            .include_as::<RuntimeProfile>("profile", "profile")?
+            .filter(Predicate::eq(
+                Expr::from(RuntimeUser::id),
+                Expr::value(SqlValue::I64(2)),
+            ))
+            .first()
+            .await?
+            .expect("user without has_one profile should still be returned");
+        assert!(
+            user_without_profile.profile.as_ref().is_none(),
+            "missing has_one rows must leave the navigation empty without dropping the root"
+        );
+
         let post_with_user = db
             .posts
             .query()
@@ -128,6 +144,36 @@ async fn navigation_runtime_loads_graph_shapes_against_real_sql_server() -> Resu
             .collect::<Vec<_>>();
         included_titles.sort_unstable();
         assert_eq!(included_titles, vec!["First post", "Second post"]);
+
+        let users_with_all_posts = db
+            .users
+            .query()
+            .include_many_as::<RuntimePost>("posts", "posts")?
+            .order_by(RuntimeUser::id.asc())
+            .all()
+            .await?;
+        assert_eq!(
+            users_with_all_posts
+                .iter()
+                .map(|user| user.id)
+                .collect::<Vec<_>>(),
+            vec![1, 2],
+            "include_many must group joined rows without duplicating roots"
+        );
+
+        let mut first_user_titles = users_with_all_posts[0]
+            .posts
+            .as_slice()
+            .iter()
+            .map(|post| post.title.as_str())
+            .collect::<Vec<_>>();
+        first_user_titles.sort_unstable();
+        assert_eq!(first_user_titles, vec!["First post", "Second post"]);
+        assert_eq!(users_with_all_posts[1].posts.as_slice().len(), 1);
+        assert_eq!(
+            users_with_all_posts[1].posts.as_slice()[0].title,
+            "Other post"
+        );
 
         let mut loaded_user = db.users.find(1_i64).await?.expect("materialized user");
         assert!(loaded_user.posts.as_slice().is_empty());
@@ -172,6 +218,40 @@ async fn navigation_runtime_loads_graph_shapes_against_real_sql_server() -> Resu
             .load_collection::<RuntimePost>(&mut bounded_nested_user, "posts")
             .await?;
         assert_eq!(bounded_nested_user.posts.as_slice().len(), 2);
+
+        let mut bounded_nested_root = db
+            .users
+            .query()
+            .include_as::<RuntimeProfile>("profile", "profile")?
+            .filter(Predicate::eq(
+                Expr::from(RuntimeUser::id),
+                Expr::value(SqlValue::I64(1)),
+            ))
+            .first()
+            .await?
+            .expect("bounded nested root user");
+        assert!(
+            bounded_nested_root.profile.as_ref().is_some(),
+            "root has_one include should populate the first graph edge"
+        );
+        db.users
+            .load_collection::<RuntimePost>(&mut bounded_nested_root, "posts")
+            .await?;
+        let mut bounded_root_titles = bounded_nested_root
+            .posts
+            .as_slice()
+            .iter()
+            .map(|post| post.title.as_str())
+            .collect::<Vec<_>>();
+        bounded_root_titles.sort_unstable();
+        assert_eq!(bounded_root_titles, vec!["First post", "Second post"]);
+        assert!(
+            bounded_nested_root.posts.as_slice()[0]
+                .user
+                .as_ref()
+                .is_none(),
+            "bounded graph loading must not introduce hidden nested includes"
+        );
 
         Ok(())
     }
