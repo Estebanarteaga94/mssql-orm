@@ -95,6 +95,7 @@ static CUSTOMER_METADATA: EntityMetadata = EntityMetadata {
     primary_key: PrimaryKeyMetadata::new(Some("pk_customers"), &["id"]),
     indexes: &[],
     foreign_keys: &[],
+    navigations: &[],
 };
 
 impl Entity for Customer {
@@ -166,6 +167,7 @@ static ORDER_METADATA: EntityMetadata = EntityMetadata {
     primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &["id"]),
     indexes: &[],
     foreign_keys: &[],
+    navigations: &[],
 };
 
 impl Entity for Order {

@@ -76,12 +76,16 @@ The prelude exposes the main metadata and mapping contracts:
 - `Entity`
 - `EntityMetadata`
 - `EntityColumn`
+- `Navigation<T>`
+- `Collection<T>`
 - `ColumnMetadata`
 - `PrimaryKeyMetadata`
 - `IdentityMetadata`
 - `IndexMetadata`
 - `IndexColumnMetadata`
 - `ForeignKeyMetadata`
+- `NavigationMetadata`
+- `NavigationKind`
 - `ReferentialAction`
 - `EntityPolicy`
 - `EntityPolicyMetadata`
@@ -104,6 +108,8 @@ let email_column = User::email;
 assert_eq!(metadata.table, "users");
 assert_eq!(email_column.column_name(), "email");
 ```
+
+Navigation fields declared with `Navigation<T>` or `Collection<T>` are metadata-only in the current cut. `#[derive(Entity)]` accepts `belongs_to`, `has_one` and `has_many` attributes, excludes those fields from `ColumnMetadata`, and initializes the wrappers empty when materializing an entity.
 
 ## DbContext and DbSet
 
@@ -302,7 +308,7 @@ These are useful for tests, tooling, snapshots, and advanced diagnostics. Normal
 ## Current Exclusions
 
 - SQL Server is the only backend.
-- Navigation properties are not available.
+- Navigation properties currently expose metadata only; they do not load related rows.
 - Lazy loading and automatic eager loading are not available.
 - Table aliases in joins are not available.
 - High-level typed aggregations are not available.

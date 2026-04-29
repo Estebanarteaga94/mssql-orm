@@ -1,0 +1,5 @@
+error: belongs_to requiere foreign_key = campo_con_foreign_key existente
+  --> tests/ui/entity_navigation_missing_foreign_key.rs:18:42
+   |
+18 |     #[orm(belongs_to(User, foreign_key = owner_id))]
+   |                                          ^^^^^^^^

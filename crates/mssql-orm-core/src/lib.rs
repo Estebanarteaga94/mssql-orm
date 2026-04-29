@@ -558,6 +558,61 @@ impl ForeignKeyMetadata {
     }
 }
 
+/// Relationship direction represented by a navigation property.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationKind {
+    BelongsTo,
+    HasOne,
+    HasMany,
+    ManyToMany,
+}
+
+/// Navigation property metadata attached to an entity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NavigationMetadata {
+    pub rust_field: &'static str,
+    pub kind: NavigationKind,
+    pub target_rust_name: &'static str,
+    pub target_schema: &'static str,
+    pub target_table: &'static str,
+    pub local_columns: &'static [&'static str],
+    pub target_columns: &'static [&'static str],
+    pub foreign_key_name: Option<&'static str>,
+}
+
+impl NavigationMetadata {
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
+        rust_field: &'static str,
+        kind: NavigationKind,
+        target_rust_name: &'static str,
+        target_schema: &'static str,
+        target_table: &'static str,
+        local_columns: &'static [&'static str],
+        target_columns: &'static [&'static str],
+        foreign_key_name: Option<&'static str>,
+    ) -> Self {
+        Self {
+            rust_field,
+            kind,
+            target_rust_name,
+            target_schema,
+            target_table,
+            local_columns,
+            target_columns,
+            foreign_key_name,
+        }
+    }
+
+    pub fn targets_table(&self, schema: &str, table: &str) -> bool {
+        self.target_schema == schema && self.target_table == table
+    }
+
+    pub fn uses_foreign_key(&self, foreign_key_name: &str) -> bool {
+        self.foreign_key_name == Some(foreign_key_name)
+    }
+}
+
 /// Static metadata describing an entity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntityMetadata {
@@ -569,6 +624,7 @@ pub struct EntityMetadata {
     pub primary_key: PrimaryKeyMetadata,
     pub indexes: &'static [IndexMetadata],
     pub foreign_keys: &'static [ForeignKeyMetadata],
+    pub navigations: &'static [NavigationMetadata],
 }
 
 impl EntityMetadata {
@@ -619,6 +675,40 @@ impl EntityMetadata {
             .filter(|foreign_key| foreign_key.references_table(schema, table))
             .collect()
     }
+
+    pub fn navigation(&self, rust_field: &str) -> Option<&'static NavigationMetadata> {
+        self.navigations
+            .iter()
+            .find(|navigation| navigation.rust_field == rust_field)
+    }
+
+    pub fn navigations_by_kind(&self, kind: NavigationKind) -> Vec<&'static NavigationMetadata> {
+        self.navigations
+            .iter()
+            .filter(|navigation| navigation.kind == kind)
+            .collect()
+    }
+
+    pub fn navigations_for_foreign_key(
+        &self,
+        foreign_key_name: &str,
+    ) -> Vec<&'static NavigationMetadata> {
+        self.navigations
+            .iter()
+            .filter(|navigation| navigation.uses_foreign_key(foreign_key_name))
+            .collect()
+    }
+
+    pub fn navigations_targeting(
+        &self,
+        schema: &str,
+        table: &str,
+    ) -> Vec<&'static NavigationMetadata> {
+        self.navigations
+            .iter()
+            .filter(|navigation| navigation.targets_table(schema, table))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -626,9 +716,9 @@ mod tests {
     use super::{
         CRATE_IDENTITY, Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn,
         EntityMetadata, EntityPolicy, EntityPolicyMetadata, ForeignKeyMetadata, FromRow,
-        IdentityMetadata, IndexColumnMetadata, IndexMetadata, Insertable, OrmError,
-        PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlTypeMapping, SqlValue,
-        column_name_exists,
+        IdentityMetadata, IndexColumnMetadata, IndexMetadata, Insertable, NavigationKind,
+        NavigationMetadata, OrmError, PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType,
+        SqlTypeMapping, SqlValue, column_name_exists,
     };
     use chrono::{NaiveDate, NaiveDateTime};
     use rust_decimal::Decimal;
@@ -724,6 +814,17 @@ mod tests {
         ReferentialAction::NoAction,
     )];
 
+    const USER_NAVIGATIONS: [NavigationMetadata; 1] = [NavigationMetadata::new(
+        "tenant",
+        NavigationKind::BelongsTo,
+        "Tenant",
+        "dbo",
+        "tenants",
+        &["tenant_id"],
+        &["id"],
+        Some("fk_users_tenants"),
+    )];
+
     const AUDIT_POLICY_COLUMNS: [ColumnMetadata; 2] = [
         ColumnMetadata {
             rust_field: "created_at",
@@ -770,6 +871,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(Some("pk_users"), &USER_PRIMARY_KEY_COLUMNS),
         indexes: &USER_INDEXES,
         foreign_keys: &USER_FOREIGN_KEYS,
+        navigations: &USER_NAVIGATIONS,
     };
 
     struct User;
@@ -872,6 +974,7 @@ mod tests {
         assert_eq!(metadata.primary_key.name, Some("pk_users"));
         assert_eq!(metadata.indexes.len(), 1);
         assert_eq!(metadata.foreign_keys.len(), 1);
+        assert_eq!(metadata.navigations.len(), 1);
         assert_eq!(metadata.primary_key.columns, &["id", "tenant_id"]);
     }
 
@@ -937,6 +1040,53 @@ mod tests {
         assert!(
             metadata
                 .foreign_keys_referencing("sales", "customers")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn navigation_metadata_supports_relationship_lookups() {
+        let metadata = User::metadata();
+        let navigation = metadata.navigation("tenant").expect("navigation metadata");
+
+        assert_eq!(navigation.kind, NavigationKind::BelongsTo);
+        assert_eq!(navigation.target_rust_name, "Tenant");
+        assert_eq!(navigation.target_schema, "dbo");
+        assert_eq!(navigation.target_table, "tenants");
+        assert_eq!(navigation.local_columns, &["tenant_id"]);
+        assert_eq!(navigation.target_columns, &["id"]);
+        assert_eq!(navigation.foreign_key_name, Some("fk_users_tenants"));
+        assert!(navigation.targets_table("dbo", "tenants"));
+        assert!(!navigation.targets_table("sales", "tenants"));
+        assert!(navigation.uses_foreign_key("fk_users_tenants"));
+        assert!(!navigation.uses_foreign_key("fk_users_accounts"));
+
+        let by_kind = metadata.navigations_by_kind(NavigationKind::BelongsTo);
+        assert_eq!(by_kind.len(), 1);
+        assert_eq!(by_kind[0].rust_field, "tenant");
+
+        let by_foreign_key = metadata.navigations_for_foreign_key("fk_users_tenants");
+        assert_eq!(by_foreign_key.len(), 1);
+        assert_eq!(by_foreign_key[0].rust_field, "tenant");
+
+        let by_target = metadata.navigations_targeting("dbo", "tenants");
+        assert_eq!(by_target.len(), 1);
+        assert_eq!(by_target[0].rust_field, "tenant");
+
+        assert!(metadata.navigation("missing").is_none());
+        assert!(
+            metadata
+                .navigations_by_kind(NavigationKind::HasMany)
+                .is_empty()
+        );
+        assert!(
+            metadata
+                .navigations_for_foreign_key("fk_users_missing")
+                .is_empty()
+        );
+        assert!(
+            metadata
+                .navigations_targeting("sales", "customers")
                 .is_empty()
         );
     }

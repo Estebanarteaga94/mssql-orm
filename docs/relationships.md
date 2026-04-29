@@ -103,9 +103,116 @@ Use `left_join::<T>(...)` when the relationship can be missing or when you need 
 
 The current public `DbSetQuery<T>` materializes entities from the base table (`T`). Joins are used to filter or order through related tables; they do not automatically construct object graphs.
 
+## 0.2 Navigation Surface
+
+Navigation properties are being introduced incrementally for `0.2.0`. The first implemented cut is syntax and metadata only: fields can declare navigation attributes, the derive excludes those fields from column metadata, and `EntityMetadata.navigations` exposes neutral relationship metadata. Query execution remains explicit; `include(...)`, inferred joins and explicit loading APIs are still pending.
+
+The relationship kinds are:
+
+- `belongs_to`: the dependent entity stores the foreign key and points to one principal entity.
+- `has_one`: the principal entity points to at most one dependent entity.
+- `has_many`: the principal entity points to a collection of dependent entities.
+- `many_to_many`: initially modeled through an explicit join entity. Direct many-to-many navigation remains a later layer until update semantics are stable.
+
+The supported field shapes are marker wrappers, not persisted columns:
+
+```rust
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "todo_lists", schema = "todo")]
+pub struct TodoList {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(foreign_key(entity = User, column = id))]
+    pub owner_id: i64,
+
+    #[orm(belongs_to(User, foreign_key = owner_id))]
+    pub owner: Navigation<User>,
+}
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "users", schema = "todo")]
+pub struct User {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(has_many(TodoList, foreign_key = owner_id))]
+    pub lists: Collection<TodoList>,
+}
+```
+
+`Navigation<T>` and `Collection<T>` are public marker/value wrappers. The derive does not turn those fields into `ColumnMetadata`; it only uses them to generate navigation metadata. Materializing an entity without an explicit include/load initializes these wrappers empty.
+
+### Planned `include(...)`
+
+The target eager-loading API is explicit:
+
+```rust
+let lists = db
+    .todo_lists
+    .query()
+    .include(TodoList::owner)
+    .all()
+    .await?;
+```
+
+For `belongs_to` and `has_one`, the initial implementation may use aliased joins when it can materialize the related entity without duplicating the root entity.
+
+For `has_many`, the preferred first implementation is split queries:
+
+```text
+1. Load root rows.
+2. Load related rows with one filtered query.
+3. Attach related rows to the matching root navigation collection.
+```
+
+Split queries keep row duplication predictable and avoid forcing every collection include through a wide join. A later join-based strategy can be added only after aliasing, grouping, identity handling and result-shaping are stable.
+
+### Planned Explicit Loading
+
+Explicit loading should be available without lazy loading:
+
+```rust
+let user = db.users.find(7_i64).await?.expect("user");
+
+db.entry(&user)
+    .load(User::lists)
+    .await?;
+```
+
+The exact ownership shape is still part of the implementation design. The public requirement is that loading is visible at the call site and returns errors through the normal `OrmError` path.
+
+### Planned Lazy Loading
+
+Lazy loading is not a default behavior. If it is added, it must be opt-in and visible in types, for example through wrappers such as `Lazy<T>` or `LazyCollection<T>`.
+
+The design must avoid normal field access that silently performs I/O. Rust async, ownership and N+1 query risk make implicit lazy loading unsuitable for the default API.
+
+### Policies and Projections
+
+Navigation loading must preserve existing safety behavior:
+
+- `tenant` filters must apply to included tenant-scoped entities and fail closed when the active tenant is missing or incompatible.
+- `soft_delete` visibility must apply to included soft-deleted entities unless a future API provides an explicit include-time visibility override.
+- Raw SQL remains explicit and does not infer navigation filters.
+- `select(...)`, `all_as::<T>()` and DTO projections remain separate from entity graph materialization.
+
+### Required Infrastructure
+
+Navigation support depends on earlier internal work:
+
+- navigation metadata in `mssql-orm-core`;
+- macro validation for navigation fields that are not columns;
+- table aliases in `mssql-orm-query`;
+- SQL Server alias compilation in `mssql-orm-sqlserver`;
+- materialization that can separate root columns from included-entity columns;
+- tests for repeated joins, self-joins, `tenant`, `soft_delete`, and row ordering.
+
 ## Limits
 
-- No navigation properties.
+- Navigation properties currently provide metadata only; they do not load related rows.
 - No lazy loading or automatic eager loading.
 - No automatic join inference from `ForeignKeyMetadata`.
 - No table aliases in the AST; SQL Server rejects repeated table references without aliases.

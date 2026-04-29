@@ -1,0 +1,5 @@
+error: belongs_to requiere un campo Navigation<User>
+  --> tests/ui/entity_navigation_wrong_wrapper.rs:20:16
+   |
+20 |     pub owner: Collection<User>,
+   |                ^^^^^^^^^^^^^^^^

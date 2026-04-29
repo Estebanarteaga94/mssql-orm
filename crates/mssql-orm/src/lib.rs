@@ -40,7 +40,7 @@ pub use context::{
     connect_shared_with_config, connect_shared_with_options,
 };
 pub use dbset_query::DbSetQuery;
-pub use mssql_orm_core::EntityMetadata;
+pub use mssql_orm_core::{EntityMetadata, NavigationKind, NavigationMetadata};
 pub use mssql_orm_tiberius::{
     MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery, MssqlOperationalOptions,
     MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions,
@@ -114,6 +114,61 @@ pub trait TenantScopedEntity: core::Entity {
     fn tenant_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+/// Marker value for a single related entity navigation.
+///
+/// Navigation fields are not persisted as columns. They exist so
+/// `#[derive(Entity)]` can attach navigation metadata to the entity while
+/// future loading APIs decide explicitly when related rows are fetched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Navigation<T> {
+    value: Option<T>,
+}
+
+impl<T> Navigation<T> {
+    /// Creates an empty navigation value.
+    pub const fn empty() -> Self {
+        Self { value: None }
+    }
+
+    /// Returns the loaded related entity when one has been attached.
+    pub fn as_ref(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
+}
+
+impl<T> Default for Navigation<T> {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+/// Marker value for a collection navigation.
+///
+/// Collection navigation fields are ignored by column metadata and start empty
+/// when an entity is materialized without an explicit include/load operation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Collection<T> {
+    values: Vec<T>,
+}
+
+impl<T> Collection<T> {
+    /// Creates an empty collection navigation.
+    pub const fn empty() -> Self {
+        Self { values: Vec::new() }
+    }
+
+    /// Returns the loaded related entities.
+    pub fn as_slice(&self) -> &[T] {
+        &self.values
+    }
+}
+
+impl<T> Default for Collection<T> {
+    fn default() -> Self {
+        Self { values: Vec::new() }
+    }
+}
+
 /// Builds a model snapshot from a context type that exposes entity metadata.
 ///
 /// This is the helper used by consumer snapshot-export binaries.
@@ -134,16 +189,16 @@ pub mod prelude {
     #[cfg(feature = "pool-bb8")]
     pub use crate::connect_shared_from_pool;
     pub use crate::{
-        ActiveRecord, ActiveTenant, AuditEntity, DbContext, DbContextEntitySet, DbSet, DbSetQuery,
-        EntityColumnOrderExt, EntityColumnPredicateExt, EntityState, MigrationModelSource,
-        MssqlConnectionConfig, MssqlHealthCheckOptions, MssqlHealthCheckQuery,
-        MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend, MssqlPoolOptions,
-        MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions, MssqlTracingOptions,
-        PageRequest, PredicateCompositionExt, QueryHint, RawCommand, RawParam, RawParams, RawQuery,
-        SelectProjections, SharedConnection, SoftDeleteContext, SoftDeleteEntity,
-        SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues, SoftDeleteValues,
-        TenantContext, TenantScopedEntity, Tracked, model_snapshot_from_source,
-        model_snapshot_json_from_source,
+        ActiveRecord, ActiveTenant, AuditEntity, Collection, DbContext, DbContextEntitySet, DbSet,
+        DbSetQuery, EntityColumnOrderExt, EntityColumnPredicateExt, EntityState,
+        MigrationModelSource, MssqlConnectionConfig, MssqlHealthCheckOptions,
+        MssqlHealthCheckQuery, MssqlOperationalOptions, MssqlParameterLogMode, MssqlPoolBackend,
+        MssqlPoolOptions, MssqlRetryOptions, MssqlSlowQueryOptions, MssqlTimeoutOptions,
+        MssqlTracingOptions, Navigation, PageRequest, PredicateCompositionExt, QueryHint,
+        RawCommand, RawParam, RawParams, RawQuery, SelectProjections, SharedConnection,
+        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
+        SoftDeleteRequestValues, SoftDeleteValues, TenantContext, TenantScopedEntity, Tracked,
+        model_snapshot_from_source, model_snapshot_json_from_source,
     };
     pub use crate::{
         AuditContext, AuditOperation, AuditProvider, AuditRequestValues, AuditValues,
@@ -154,8 +209,8 @@ pub mod prelude {
     pub use mssql_orm_core::{
         Changeset, ColumnMetadata, ColumnValue, Entity, EntityColumn, EntityMetadata, EntityPolicy,
         EntityPolicyMetadata, ForeignKeyMetadata, FromRow, IdentityMetadata, IndexColumnMetadata,
-        IndexMetadata, Insertable, OrmError, PrimaryKeyMetadata, ReferentialAction, Row,
-        SqlServerType, SqlTypeMapping, SqlValue,
+        IndexMetadata, Insertable, NavigationKind, NavigationMetadata, OrmError,
+        PrimaryKeyMetadata, ReferentialAction, Row, SqlServerType, SqlTypeMapping, SqlValue,
     };
     pub use mssql_orm_macros::{
         AuditFields, Changeset, DbContext, Entity, FromRow, Insertable, SoftDeleteFields,
@@ -172,11 +227,11 @@ mod tests {
         DbContextEntitySet, DbSet, Entity, EntityColumn, EntityColumnOrderExt,
         EntityColumnPredicateExt, EntityMetadata, EntityPolicy, EntityPolicyMetadata, EntityState,
         IdentityMetadata, Insertable, MssqlConnectionConfig, MssqlOperationalOptions,
-        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, OrmError,
-        PageRequest, PredicateCompositionExt, PrimaryKeyMetadata, QueryHint, RawCommand, RawParam,
-        RawParams, RawQuery, SelectProjection, SelectProjections, SharedConnection,
-        SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping, SqlValue, TenantContext,
-        TenantScopedEntity, Tracked,
+        MssqlPoolBackend, MssqlPoolOptions, MssqlRetryOptions, MssqlTimeoutOptions, NavigationKind,
+        NavigationMetadata, OrmError, PageRequest, PredicateCompositionExt, PrimaryKeyMetadata,
+        QueryHint, RawCommand, RawParam, RawParams, RawQuery, SelectProjection, SelectProjections,
+        SharedConnection, SoftDeleteEntity, SoftDeleteFields, SqlServerType, SqlTypeMapping,
+        SqlValue, TenantContext, TenantScopedEntity, Tracked,
     };
     use mssql_orm_query::{Expr, OrderBy, Predicate, SortDirection, TableRef};
     use std::time::Duration;
@@ -195,6 +250,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     impl Entity for PublicEntity {
@@ -285,6 +341,25 @@ mod tests {
     #[test]
     fn exposes_entity_contract_in_prelude() {
         assert_eq!(PublicEntity::metadata().table, "public_entities");
+    }
+
+    #[test]
+    fn exposes_navigation_metadata_contract_in_prelude() {
+        let navigation = NavigationMetadata::new(
+            "owner",
+            NavigationKind::BelongsTo,
+            "User",
+            "auth",
+            "users",
+            &["owner_id"],
+            &["id"],
+            Some("fk_posts_owner_id_users"),
+        );
+
+        assert_eq!(navigation.rust_field, "owner");
+        assert_eq!(navigation.kind, NavigationKind::BelongsTo);
+        assert!(navigation.targets_table("auth", "users"));
+        assert!(navigation.uses_foreign_key("fk_posts_owner_id_users"));
     }
 
     #[test]

@@ -76,6 +76,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     impl Entity for TestEntity {

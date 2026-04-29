@@ -279,6 +279,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(None, &["id"]),
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static TEST_AUDIT_COLUMNS: [ColumnMetadata; 3] = [

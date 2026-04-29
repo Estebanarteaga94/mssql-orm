@@ -4,7 +4,7 @@ use quote::quote;
 use std::collections::BTreeMap;
 use syn::{
     Data, DeriveInput, Error, Expr, ExprLit, Field, Fields, Ident, Lit, LitStr, Path, Result,
-    Token, Type, parse_macro_input, punctuated::Punctuated,
+    Token, Type, parse_macro_input, punctuated::Punctuated, spanned::Spanned,
 };
 
 #[proc_macro_derive(Entity, attributes(orm))]
@@ -449,6 +449,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut from_row_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
+    let mut field_foreign_keys = BTreeMap::<String, FieldForeignKeyInfo>::new();
+    let mut navigations = Vec::new();
     let mut field_columns = BTreeMap::<String, LitStr>::new();
     let mut entity_column_names = Vec::new();
 
@@ -461,6 +463,40 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             .ok_or_else(|| Error::new_spanned(field, "Entity requiere campos nombrados"))?;
         let config = parse_field_config(field)?;
         let rust_field = LitStr::new(&field_ident.to_string(), field_ident.span());
+
+        if let Some(navigation) = config.navigation {
+            validate_navigation_field_type(&field.ty, &navigation)?;
+            let target = navigation.target.clone();
+            let target_rust_name = LitStr::new(
+                &path_last_ident(&target)
+                    .map(|ident| ident.to_string())
+                    .unwrap_or_else(|| quote! { #target }.to_string()),
+                target.span(),
+            );
+            let kind = navigation_kind_tokens(navigation.kind);
+            let foreign_key_field = navigation.foreign_key.clone();
+            let foreign_key_field_name = foreign_key_field.to_string();
+
+            from_row_fields.push(quote! {
+                #field_ident: ::core::default::Default::default()
+            });
+            sync_fields.push(quote! {
+                self.#field_ident = persisted.#field_ident;
+            });
+
+            navigations.push(PendingNavigation {
+                rust_field,
+                kind: navigation.kind,
+                kind_tokens: kind,
+                target,
+                target_rust_name,
+                foreign_key_field,
+                foreign_key_field_name,
+            });
+
+            continue;
+        }
+
         let column_name = config
             .column
             .unwrap_or_else(|| LitStr::new(&field_ident.to_string(), field_ident.span()));
@@ -703,8 +739,86 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     ::mssql_orm::core::ReferentialAction::NoAction,
                 )
             });
+
+            field_foreign_keys.insert(
+                field_ident.to_string(),
+                FieldForeignKeyInfo {
+                    name: foreign_key_name,
+                    local_column: column_name.clone(),
+                    referenced_column,
+                },
+            );
         }
     }
+
+    let navigation_metadata = navigations
+        .iter()
+        .map(|navigation| {
+            let rust_field = &navigation.rust_field;
+            let kind_tokens = &navigation.kind_tokens;
+            let target = &navigation.target;
+            let target_rust_name = &navigation.target_rust_name;
+            let target_schema = quote! { #target::__MSSQL_ORM_ENTITY_SCHEMA };
+            let target_table = quote! { #target::__MSSQL_ORM_ENTITY_TABLE };
+
+            match navigation.kind {
+                NavigationKindConfig::BelongsTo => {
+                    let foreign_key = field_foreign_keys
+                        .get(&navigation.foreign_key_field_name)
+                        .ok_or_else(|| {
+                            Error::new(
+                                navigation.foreign_key_field.span(),
+                                "belongs_to requiere foreign_key = campo_con_foreign_key existente",
+                            )
+                        })?;
+                    let local_column = &foreign_key.local_column;
+                    let referenced_column = &foreign_key.referenced_column;
+                    let foreign_key_name = &foreign_key.name;
+
+                    Ok(quote! {
+                        ::mssql_orm::core::NavigationMetadata::new(
+                            #rust_field,
+                            #kind_tokens,
+                            #target_rust_name,
+                            #target_schema,
+                            #target_table,
+                            {
+                                const LOCAL_COLUMNS: &[&'static str] = &[#local_column];
+                                LOCAL_COLUMNS
+                            },
+                            {
+                                const TARGET_COLUMNS: &[&'static str] = &[#referenced_column];
+                                TARGET_COLUMNS
+                            },
+                            Some(#foreign_key_name),
+                        )
+                    })
+                }
+                NavigationKindConfig::HasOne | NavigationKindConfig::HasMany => {
+                    let foreign_key_field = &navigation.foreign_key_field;
+                    Ok(quote! {
+                        ::mssql_orm::core::NavigationMetadata::new(
+                            #rust_field,
+                            #kind_tokens,
+                            #target_rust_name,
+                            #target_schema,
+                            #target_table,
+                            {
+                                const LOCAL_COLUMNS: &[&'static str] = &[#(#primary_key_columns),*];
+                                LOCAL_COLUMNS
+                            },
+                            {
+                                const TARGET_COLUMNS: &[&'static str] =
+                                    &[#target::#foreign_key_field.column_name()];
+                                TARGET_COLUMNS
+                            },
+                            None,
+                        )
+                    })
+                }
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     for index in entity_indexes {
         let resolved_columns = index
@@ -950,6 +1064,13 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             FOREIGN_KEYS
         }
     };
+    let navigations_metadata = quote! {
+        {
+            const NAVIGATIONS: &[::mssql_orm::core::NavigationMetadata] =
+                &[#(#navigation_metadata),*];
+            NAVIGATIONS
+        }
+    };
 
     let has_generated_policies =
         entity_audit.is_some() || entity_soft_delete.is_some() || entity_tenant.is_some();
@@ -1060,6 +1181,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                         primary_key: #primary_key_metadata,
                         indexes: #indexes_metadata,
                         foreign_keys: #foreign_keys_metadata,
+                        navigations: #navigations_metadata,
                     }
                 })
             },
@@ -1077,6 +1199,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                         primary_key: #primary_key_metadata,
                         indexes: #indexes_metadata,
                         foreign_keys: #foreign_keys_metadata,
+                        navigations: #navigations_metadata,
                     };
             },
             quote! {
@@ -1922,6 +2045,19 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
                 config.rowversion = true;
             } else if meta.path.is_ident("foreign_key") {
                 config.foreign_key = Some(parse_foreign_key_config(meta)?);
+            } else if meta.path.is_ident("belongs_to") {
+                config.navigation = Some(parse_navigation_config(
+                    meta,
+                    NavigationKindConfig::BelongsTo,
+                )?);
+            } else if meta.path.is_ident("has_one") {
+                config.navigation =
+                    Some(parse_navigation_config(meta, NavigationKindConfig::HasOne)?);
+            } else if meta.path.is_ident("has_many") {
+                config.navigation = Some(parse_navigation_config(
+                    meta,
+                    NavigationKindConfig::HasMany,
+                )?);
             } else if meta.path.is_ident("on_delete") {
                 config.on_delete = Some(parse_referential_action_expr(meta.value()?.parse()?)?);
             } else {
@@ -1930,6 +2066,29 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
 
             Ok(())
         })?;
+    }
+
+    if config.navigation.is_some()
+        && (config.column.is_some()
+            || config.primary_key
+            || config.identity
+            || config.nullable
+            || config.length.is_some()
+            || config.default_sql.is_some()
+            || config.renamed_from.is_some()
+            || config.computed_sql.is_some()
+            || config.rowversion
+            || config.sql_type.is_some()
+            || config.precision.is_some()
+            || config.scale.is_some()
+            || !config.indexes.is_empty()
+            || config.foreign_key.is_some()
+            || config.on_delete.is_some())
+    {
+        return Err(Error::new_spanned(
+            field,
+            "los campos de navegación solo soportan belongs_to, has_one o has_many; no se generan columnas para ellos",
+        ));
     }
 
     Ok(config)
@@ -2080,6 +2239,55 @@ fn parse_foreign_key_config(meta: syn::meta::ParseNestedMeta<'_>) -> Result<Fore
         name,
         generated_referenced_table_name: generated_table_name,
         target: ForeignKeyTarget::Structured { entity, column },
+    })
+}
+
+fn parse_navigation_config(
+    meta: syn::meta::ParseNestedMeta<'_>,
+    kind: NavigationKindConfig,
+) -> Result<NavigationConfig> {
+    let content;
+    syn::parenthesized!(content in meta.input);
+
+    let target: Path = content.parse()?;
+    let mut foreign_key = None;
+
+    while !content.is_empty() {
+        content.parse::<Token![,]>()?;
+        if content.is_empty() {
+            break;
+        }
+
+        let key: Ident = content.parse()?;
+        content.parse::<Token![=]>()?;
+
+        if key == "foreign_key" {
+            if foreign_key.is_some() {
+                return Err(Error::new(
+                    key.span(),
+                    format!("{} no permite foreign_key duplicado", kind.attribute_name()),
+                ));
+            }
+            foreign_key = Some(content.parse()?);
+        } else {
+            return Err(Error::new(
+                key.span(),
+                format!("{} solo soporta foreign_key", kind.attribute_name()),
+            ));
+        }
+    }
+
+    let foreign_key = foreign_key.ok_or_else(|| {
+        meta.error(format!(
+            "{} requiere foreign_key = campo",
+            kind.attribute_name()
+        ))
+    })?;
+
+    Ok(NavigationConfig {
+        kind,
+        target,
+        foreign_key,
     })
 }
 
@@ -2241,6 +2449,85 @@ fn referential_action_tokens(action: ReferentialActionConfig) -> TokenStream2 {
             quote! { ::mssql_orm::core::ReferentialAction::SetNull }
         }
     }
+}
+
+fn navigation_kind_tokens(kind: NavigationKindConfig) -> TokenStream2 {
+    match kind {
+        NavigationKindConfig::BelongsTo => quote! { ::mssql_orm::core::NavigationKind::BelongsTo },
+        NavigationKindConfig::HasOne => quote! { ::mssql_orm::core::NavigationKind::HasOne },
+        NavigationKindConfig::HasMany => quote! { ::mssql_orm::core::NavigationKind::HasMany },
+    }
+}
+
+fn validate_navigation_field_type(ty: &Type, navigation: &NavigationConfig) -> Result<()> {
+    let expected_wrapper = match navigation.kind {
+        NavigationKindConfig::BelongsTo | NavigationKindConfig::HasOne => "Navigation",
+        NavigationKindConfig::HasMany => "Collection",
+    };
+
+    let actual_target =
+        generic_wrapper_inner_last_ident(ty, expected_wrapper).ok_or_else(|| {
+            Error::new_spanned(
+                ty,
+                format!(
+                    "{} requiere un campo {}<{}>",
+                    navigation.kind.attribute_name(),
+                    expected_wrapper,
+                    path_last_ident(&navigation.target)
+                        .map(|ident| ident.to_string())
+                        .unwrap_or_else(|| "Entidad".to_string()),
+                ),
+            )
+        })?;
+
+    let Some(expected_target) = path_last_ident(&navigation.target) else {
+        return Err(Error::new_spanned(
+            &navigation.target,
+            format!(
+                "{} requiere una ruta de entidad válida",
+                navigation.kind.attribute_name()
+            ),
+        ));
+    };
+
+    if actual_target != expected_target {
+        return Err(Error::new_spanned(
+            ty,
+            format!(
+                "{} apunta a {}, pero el campo usa {}",
+                navigation.kind.attribute_name(),
+                expected_target,
+                actual_target,
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn generic_wrapper_inner_last_ident<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Ident> {
+    let Type::Path(type_path) = ty else {
+        return None;
+    };
+
+    let segment = type_path.path.segments.last()?;
+    if segment.ident != wrapper {
+        return None;
+    }
+
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return None;
+    };
+
+    let syn::GenericArgument::Type(Type::Path(inner)) = arguments.args.first()? else {
+        return None;
+    };
+
+    path_last_ident(&inner.path)
+}
+
+fn path_last_ident(path: &Path) -> Option<&Ident> {
+    path.segments.last().map(|segment| &segment.ident)
 }
 
 fn infer_sql_type(type_info: &TypeInfo, rowversion: bool, ty: &Type) -> Result<TokenStream2> {
@@ -2569,6 +2856,7 @@ struct FieldConfig {
     indexes: Vec<IndexConfig>,
     foreign_key: Option<ForeignKeyConfig>,
     on_delete: Option<ReferentialActionConfig>,
+    navigation: Option<NavigationConfig>,
 }
 
 #[derive(Default)]
@@ -2581,6 +2869,45 @@ struct ForeignKeyConfig {
     name: Option<LitStr>,
     generated_referenced_table_name: String,
     target: ForeignKeyTarget,
+}
+
+struct FieldForeignKeyInfo {
+    name: LitStr,
+    local_column: LitStr,
+    referenced_column: TokenStream2,
+}
+
+struct PendingNavigation {
+    rust_field: LitStr,
+    kind: NavigationKindConfig,
+    kind_tokens: TokenStream2,
+    target: Path,
+    target_rust_name: LitStr,
+    foreign_key_field: Ident,
+    foreign_key_field_name: String,
+}
+
+struct NavigationConfig {
+    kind: NavigationKindConfig,
+    target: Path,
+    foreign_key: Ident,
+}
+
+#[derive(Clone, Copy)]
+enum NavigationKindConfig {
+    BelongsTo,
+    HasOne,
+    HasMany,
+}
+
+impl NavigationKindConfig {
+    fn attribute_name(self) -> &'static str {
+        match self {
+            Self::BelongsTo => "belongs_to",
+            Self::HasOne => "has_one",
+            Self::HasMany => "has_many",
+        }
+    }
 }
 
 impl ForeignKeyConfig {

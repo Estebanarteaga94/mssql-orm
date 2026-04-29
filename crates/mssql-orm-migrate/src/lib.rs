@@ -119,6 +119,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(Some("pk_customers"), &CUSTOMER_PK_COLUMNS),
         indexes: &CUSTOMER_INDEXES,
         foreign_keys: &[],
+        navigations: &[],
     };
 
     const TENANT_COLUMNS: [ColumnMetadata; 2] = [
@@ -168,6 +169,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(None, &TENANT_PK_COLUMNS),
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     const COMPOSITE_ORDER_COLUMNS: [ColumnMetadata; 3] = [
@@ -242,6 +244,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &COMPOSITE_ORDER_PK_COLUMNS),
         indexes: &COMPOSITE_ORDER_INDEXES,
         foreign_keys: &[],
+        navigations: &[],
     };
 
     const ORDER_COLUMNS: [ColumnMetadata; 2] = [
@@ -300,6 +303,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(Some("pk_orders"), &ORDER_PK_COLUMNS),
         indexes: &[],
         foreign_keys: &ORDER_FOREIGN_KEYS,
+        navigations: &[],
     };
 
     const ORDER_ALLOCATION_COLUMNS: [ColumnMetadata; 3] = [
@@ -377,6 +381,7 @@ mod tests {
         ),
         indexes: &[],
         foreign_keys: &ORDER_ALLOCATION_FOREIGN_KEYS,
+        navigations: &[],
     };
 
     #[test]

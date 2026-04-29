@@ -4,6 +4,33 @@ All relevant `mssql-orm` changes are documented in this file.
 
 The project follows an incremental release strategy. This changelog describes the API surface available in the initial `0.1.0` workspace release and its explicit exclusions.
 
+## [0.2.0] - Planned
+
+Planned follow-up release focused on navigation properties and stabilizing existing experimental or blocked surfaces. These items are tracked in `docs/tasks.md` and are not part of the available `0.1.0` surface yet.
+
+### Planned Navigation Work
+
+- Design public navigation APIs for `belongs_to`, `has_one`, `has_many`, explicit many-to-many through a join entity, `include(...)`, explicit loading, and lazy loading as opt-in only.
+- Add navigation metadata without coupling `core` to execution and without creating a second migration pipeline.
+- Add table aliases to the query AST and SQL Server compiler before implementing inferred joins, repeated joins, self-joins, and `include(...)`.
+- Materialize included entity graphs while preserving explicit query behavior, typed projections, raw SQL boundaries, and mandatory `tenant` / `soft_delete` filters for included entities.
+
+### Planned Stabilization Work
+
+- Audit public surfaces marked as experimental, pending verification, or deferred.
+- Define stability criteria for `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes()`.
+- Replace the current experimental tracking assumptions with stable unit-of-work guarantees, identity handling, deterministic operation ordering, transaction behavior, policy integration, and public tests.
+- Stabilize transactions for contexts created from pools by pinning one physical connection for the full transaction closure.
+- Add a safe `mssql-orm-cli database downgrade` workflow using existing `down.sql`, migration history and checksums, with explicit targets and clear errors for non-reversible migrations.
+- Revalidate `examples/todo-app` against a real SQL Server before removing any `Pending verification` documentation.
+
+### Planned Aggregation Work
+
+- Add typed aggregation APIs for `exists` / `any`, `sum`, `avg`, `min`, and `max`.
+- Add grouped aggregate queries with `group_by`, explicit aliases, DTO materialization through `FromRow`, and SQL Server `GROUP BY` / basic `HAVING` support.
+- Preserve current query boundaries: aggregation structure belongs in `mssql-orm-query`, SQL generation belongs in `mssql-orm-sqlserver`, and execution remains in `mssql-orm-tiberius`.
+- Validate aggregation behavior with SQL snapshots, public `trybuild` fixtures, optional real SQL Server tests, and documentation updates.
+
 ## [0.1.0] - Unreleased
 
 Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius.
@@ -96,13 +123,13 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 
 - SQL Server is the only supported backend.
 - Multi-database support is not available.
-- Navigation properties are not available.
-- Lazy loading and automatic eager loading are not available.
-- Table aliases in joins are not available.
-- High-level typed aggregations and automatic aliases for self-joins are not available.
+- Navigation properties are not available in `0.1.0`; they are tracked as planned Stage 20 work.
+- Lazy loading and automatic eager loading are not available in `0.1.0`; explicit loading and opt-in lazy loading require Stage 20 design first.
+- Table aliases in joins are not available in `0.1.0`; alias support is planned as a prerequisite for navigation, repeated joins, and self-joins.
+- High-level typed aggregations, `group_by`, and automatic aliases for self-joins are not available in `0.1.0`; aggregation APIs are planned for `0.2.0`.
 - `count()` does not preserve joins in this release.
 - Public CRUD, Active Record, and tracking are still oriented around simple primary keys.
-- `save_changes()` and `Tracked<T>` are experimental.
+- `save_changes()` and `Tracked<T>` remain experimental in `0.1.0`; stabilization is tracked as planned Stage 21 work.
 - Savepoints are not available.
 - `db.transaction(...)` must not be treated as supported on contexts created from `from_pool(...)` until a physical connection can be pinned for the full closure.
 - `AuditProvider` has a public runtime contract, audit-owned column metadata, typed `with_audit_values(Audit { ... })`, `DbContext`/`SharedConnection` transport, and insert/update auto-fill through the main `DbSet`, Active Record, and `save_changes()` paths.

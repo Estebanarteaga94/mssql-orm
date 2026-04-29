@@ -419,6 +419,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     impl Entity for TestEntity {
@@ -445,6 +446,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     impl Entity for JoinedEntity {
@@ -520,6 +522,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static BOOL_SOFT_DELETE_ENTITY_METADATA: EntityMetadata = EntityMetadata {
@@ -534,6 +537,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static TENANT_POLICY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
@@ -566,6 +570,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     impl Entity for SoftDeleteEntityUnderTest {

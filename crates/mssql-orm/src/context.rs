@@ -1498,6 +1498,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static COMPOSITE_KEY_ENTITY_COLUMNS: [ColumnMetadata; 2] = [
@@ -1549,6 +1550,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static VERSIONED_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
@@ -1617,6 +1619,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static TENANT_WRITE_ENTITY_COLUMNS: [ColumnMetadata; 5] = [
@@ -1719,6 +1722,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static SOFT_DELETE_ENTITY_COLUMNS: [ColumnMetadata; 3] = [
@@ -1787,6 +1791,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static SOFT_DELETE_VERSIONED_ENTITY_COLUMNS: [ColumnMetadata; 4] = [
@@ -1872,6 +1877,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static SOFT_DELETE_POLICY_COLUMNS: [ColumnMetadata; 1] = [ColumnMetadata {
@@ -1958,6 +1964,7 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static AUDITED_WRITE_POLICY_COLUMNS: [ColumnMetadata; 1] = [AUDITED_WRITE_ENTITY_COLUMNS[2]];

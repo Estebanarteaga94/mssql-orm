@@ -261,6 +261,7 @@ mod tests {
         primary_key: PrimaryKeyMetadata::new(None, &["id"]),
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
     };
 
     static TEST_SOFT_DELETE_COLUMNS: [ColumnMetadata; 2] = [
