@@ -1,0 +1,5 @@
+error: belongs_to requiere que foreign_key apunte a una foreign key estructurada: #[orm(foreign_key(entity = Target, column = id))]
+  --> tests/ui/entity_navigation_belongs_to_legacy_foreign_key.rs:19:42
+   |
+19 |     #[orm(belongs_to(User, foreign_key = owner_id))]
+   |                                          ^^^^^^^^

@@ -746,6 +746,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     name: foreign_key_name,
                     local_column: column_name.clone(),
                     referenced_column,
+                    structured_target: foreign_key.structured_target_key(),
                 },
             );
         }
@@ -774,6 +775,21 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     let local_column = &foreign_key.local_column;
                     let referenced_column = &foreign_key.referenced_column;
                     let foreign_key_name = &foreign_key.name;
+                    let navigation_target = path_key(&navigation.target);
+
+                    let foreign_key_target = foreign_key.structured_target.as_ref().ok_or_else(|| {
+                        Error::new(
+                            navigation.foreign_key_field.span(),
+                            "belongs_to requiere que foreign_key apunte a una foreign key estructurada: #[orm(foreign_key(entity = Target, column = id))]",
+                        )
+                    })?;
+
+                    if foreign_key_target != &navigation_target {
+                        return Err(Error::new(
+                            navigation.foreign_key_field.span(),
+                            "belongs_to requiere que el target coincida con la entidad declarada en foreign_key(entity = ...)",
+                        ));
+                    }
 
                     Ok(quote! {
                         ::mssql_orm::core::NavigationMetadata::new(
@@ -2530,6 +2546,10 @@ fn path_last_ident(path: &Path) -> Option<&Ident> {
     path.segments.last().map(|segment| &segment.ident)
 }
 
+fn path_key(path: &Path) -> String {
+    quote! { #path }.to_string()
+}
+
 fn infer_sql_type(type_info: &TypeInfo, rowversion: bool, ty: &Type) -> Result<TokenStream2> {
     if rowversion {
         return Ok(quote! { ::mssql_orm::core::SqlServerType::RowVersion });
@@ -2875,6 +2895,7 @@ struct FieldForeignKeyInfo {
     name: LitStr,
     local_column: LitStr,
     referenced_column: TokenStream2,
+    structured_target: Option<String>,
 }
 
 struct PendingNavigation {
@@ -2911,6 +2932,13 @@ impl NavigationKindConfig {
 }
 
 impl ForeignKeyConfig {
+    fn structured_target_key(&self) -> Option<String> {
+        match &self.target {
+            ForeignKeyTarget::Structured { entity, .. } => Some(path_key(entity)),
+            ForeignKeyTarget::Legacy { .. } => None,
+        }
+    }
+
     fn referenced_schema_tokens(&self) -> TokenStream2 {
         match &self.target {
             ForeignKeyTarget::Legacy {

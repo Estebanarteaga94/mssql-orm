@@ -1,0 +1,5 @@
+error: belongs_to requiere que el target coincida con la entidad declarada en foreign_key(entity = ...)
+  --> tests/ui/entity_navigation_belongs_to_target_mismatch.rs:26:42
+   |
+26 |     #[orm(belongs_to(User, foreign_key = owner_id))]
+   |                                          ^^^^^^^^

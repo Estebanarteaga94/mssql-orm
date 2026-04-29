@@ -53,6 +53,33 @@ struct OrderNote {
     reviewer_id: Option<i64>,
 }
 
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "projects", schema = "sales")]
+struct Project {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    name: String,
+}
+
+#[allow(dead_code)]
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "project_tasks", schema = "sales")]
+struct ProjectTask {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    id: i64,
+
+    #[orm(column = "project_ref")]
+    #[orm(foreign_key(entity = Project, column = id, name = "fk_tasks_project_ref"))]
+    project_id: i64,
+
+    #[orm(belongs_to(Project, foreign_key = project_id))]
+    project: Navigation<Project>,
+}
+
 #[test]
 fn derives_relationship_metadata_for_multiple_foreign_keys() {
     let metadata = Order::metadata();
@@ -139,4 +166,36 @@ fn derives_delete_behavior_metadata_for_foreign_keys() {
     assert_eq!(reviewer_fk.columns, &["reviewer_id"]);
     assert_eq!(reviewer_fk.referenced_schema, "dbo");
     assert_eq!(reviewer_fk.referenced_table, "users");
+}
+
+#[test]
+fn belongs_to_navigation_metadata_uses_structured_foreign_key_columns() {
+    let metadata = ProjectTask::metadata();
+
+    assert_eq!(metadata.columns.len(), 2);
+    assert!(metadata.field("project").is_none());
+
+    let foreign_key = metadata
+        .foreign_key("fk_tasks_project_ref")
+        .expect("structured project foreign key");
+    assert_eq!(foreign_key.columns, &["project_ref"]);
+    assert_eq!(foreign_key.referenced_schema, "sales");
+    assert_eq!(foreign_key.referenced_table, "projects");
+    assert_eq!(foreign_key.referenced_columns, &["id"]);
+
+    let navigation = metadata
+        .navigation("project")
+        .expect("belongs_to project navigation");
+    assert_eq!(navigation.kind, NavigationKind::BelongsTo);
+    assert_eq!(navigation.target_rust_name, "Project");
+    assert_eq!(navigation.target_schema, "sales");
+    assert_eq!(navigation.target_table, "projects");
+    assert_eq!(navigation.local_columns, &["project_ref"]);
+    assert_eq!(navigation.target_columns, &["id"]);
+    assert_eq!(navigation.foreign_key_name, Some("fk_tasks_project_ref"));
+    assert!(navigation.uses_foreign_key("fk_tasks_project_ref"));
+
+    let by_foreign_key = metadata.navigations_for_foreign_key("fk_tasks_project_ref");
+    assert_eq!(by_foreign_key.len(), 1);
+    assert_eq!(by_foreign_key[0].rust_field, "project");
 }
