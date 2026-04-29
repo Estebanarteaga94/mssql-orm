@@ -20,6 +20,10 @@
 //! - removing a tracked `Added` entity cancels the pending insert locally
 //! - successful tracked deletes unregister the wrapper from the internal registry
 //! - rowversion conflicts are still surfaced as `OrmError::ConcurrencyConflict`
+//! - navigation includes and explicit navigation loads attach values to the
+//!   root entity only; related entities are not automatically registered in the
+//!   experimental tracker and relationship changes are not persisted as graph
+//!   updates
 
 use core::ops::{Deref, DerefMut};
 use mssql_orm_core::Entity;

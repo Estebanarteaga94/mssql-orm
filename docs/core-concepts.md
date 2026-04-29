@@ -123,6 +123,13 @@ The derived context provides connection helpers such as `connect(...)`, `connect
 
 The public CRUD and tracking routes are currently centered on simple primary keys. Composite primary key metadata exists, but complete public persistence workflows for composite keys are not implemented.
 
+Navigation loading does not turn the experimental tracker into a graph tracker.
+Includes materialize ordinary entity values, and explicit tracked collection
+loading attaches related values to the tracked root without registering those
+related entities. Mutating a navigation wrapper can still mark the root wrapper
+as `Modified` through normal `Tracked<T>` mutable access, but `save_changes()`
+does not persist relationship graph changes yet.
+
 ## Query AST
 
 The public query builder produces `mssql-orm-query` structures such as:

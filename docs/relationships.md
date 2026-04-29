@@ -287,6 +287,27 @@ The tracked variant attaches the collection without marking the entity as
 `has_many` local column is that primary key. It is an explicit async call; no
 field access performs I/O.
 
+### Change Tracking Boundary
+
+Navigation loading and experimental `Tracked<T>` are intentionally connected
+only at the root entity for this cut:
+
+- `include(...)` and `include_many(...)` materialize ordinary entity values;
+  they do not automatically register the root or included entities in the
+  tracking registry.
+- `load_collection_tracked(...)` attaches a collection to the current tracked
+  root without changing its state from `Unchanged` to `Modified`.
+- Related entities loaded into `Navigation<T>`, `Collection<T>`,
+  `LazyNavigation<T>` or `LazyCollection<T>` are not automatically tracked.
+- Mutating a navigation field through `tracked.current_mut()` still follows the
+  generic tracking rule and marks the root as `Modified`, but `save_changes()`
+  does not persist relationship graph changes as inserts, deletes, FK updates
+  or many-to-many updates.
+
+The stable identity-map behavior belongs to the future tracking stabilization
+work. Until then, navigation loading avoids pretending that graph identity or
+relationship persistence is already solved.
+
 ### Opt-In Lazy Loading
 
 Lazy loading is not a default behavior. The first executable cut is limited to

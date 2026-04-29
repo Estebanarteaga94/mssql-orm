@@ -82,6 +82,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
   - `entity.delete(&db)`
 - Optimistic concurrency with `rowversion` and `OrmError::ConcurrencyConflict`.
 - Experimental change tracking with `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes`.
+- Navigation loading is intentionally not a graph-tracking feature yet: included or explicitly loaded related entities are not registered automatically, and relationship changes are not persisted by `save_changes()`.
 - Code-first migrations:
   - `ModelSnapshot`
   - JSON serialization/deserialization

@@ -214,6 +214,12 @@ entity has a single-column primary key and the navigation local column is that
 primary key. The tracked variant attaches the collection without marking the
 tracked entity as modified.
 
+Navigation graph tracking remains intentionally narrow. Includes return
+ordinary entity values and do not register included graphs automatically.
+`load_collection_tracked(...)` mutates only the tracked root wrapper without
+tracking related entities. Relationship changes inside navigation wrappers are
+not persisted by `save_changes()` in this experimental cut.
+
 Navigation includes are not projection builders. After `include(...)` or
 `include_many(...)`, the returned builder does not expose `select(...)`,
 `all_as::<T>()` or `first_as::<T>()`; use plain `DbSetQuery` with explicit

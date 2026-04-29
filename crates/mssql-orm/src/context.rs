@@ -2727,6 +2727,28 @@ mod tests {
         drop(dbset);
     }
 
+    #[test]
+    fn tracked_navigation_assignment_does_not_register_related_graph() {
+        let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(ExplicitLoadRoot {
+            id: 7,
+            children_loaded: 0,
+        });
+        tracked.attach_registry(registry.clone());
+
+        tracked
+            .current_mut_without_state_change()
+            .set_included_collection("children", vec![ExplicitLoadChild])
+            .unwrap();
+
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(tracked.current().children_loaded, 1);
+        assert_eq!(registry.tracked_for::<ExplicitLoadRoot>().len(), 1);
+        assert_eq!(registry.tracked_for::<ExplicitLoadChild>().len(), 0);
+        assert_eq!(registry.entry_count(), 1);
+    }
+
     #[tokio::test]
     async fn dbset_find_tracked_reuses_find_connection_path() {
         let dbset = DbSet::<TestEntity>::disconnected();
