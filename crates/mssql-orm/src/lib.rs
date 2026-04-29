@@ -1,4 +1,9 @@
-//! Public API surface for the workspace.
+//! Public API surface for the SQL Server code-first ORM.
+//!
+//! Most applications should import [`prelude`] and define entities with the
+//! derive macros re-exported there. The crate root also exposes advanced
+//! modules for users who need direct access to metadata, query ASTs,
+//! migrations, SQL Server compilation, or the Tiberius adapter.
 
 extern crate self as mssql_orm;
 
@@ -57,32 +62,69 @@ pub use tracking::{EntityState, Tracked};
 #[doc(hidden)]
 pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
 
+/// Provides entity metadata for code-first migration snapshot generation.
+///
+/// `#[derive(DbContext)]` implements this trait for application contexts by
+/// returning the metadata for every `DbSet<T>` declared on the context.
 pub trait MigrationModelSource {
+    /// Returns the static metadata for all entities owned by the context.
     fn entity_metadata() -> &'static [&'static EntityMetadata];
 }
 
+/// Runtime metadata hook for entities that declare `#[orm(audit = Audit)]`.
+///
+/// The derive macro implements this for every entity. Entities without audit
+/// policy return `None`; audited entities return the audit-owned columns as an
+/// `EntityPolicyMetadata` view without changing the normal entity metadata
+/// shape used by snapshots, diffs, and DDL.
 pub trait AuditEntity: core::Entity {
+    /// Returns audit-owned columns for this entity when audit is enabled.
     fn audit_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+/// Runtime metadata hook for entities that declare
+/// `#[orm(soft_delete = SoftDelete)]`.
+///
+/// The public delete/read behavior lives in the `mssql-orm` crate. Lower
+/// layers still see ordinary columns and ordinary query/update AST nodes.
 pub trait SoftDeleteEntity: core::Entity {
+    /// Returns soft-delete-owned columns for this entity when enabled.
     fn soft_delete_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+/// Runtime value shape for the active tenant configured on a context.
+///
+/// `#[derive(TenantContext)]` implements this trait for user-defined structs
+/// with exactly one field. The field defines both the tenant column name and
+/// the SQL value used by tenant-scoped reads and writes.
 pub trait TenantContext: core::EntityPolicy {
+    /// Physical column name used by tenant-scoped entities.
     const COLUMN_NAME: &'static str;
 
+    /// Converts the active tenant value into the SQL value compared in queries.
     fn tenant_value(&self) -> core::SqlValue;
 }
 
+/// Runtime metadata hook for entities that opt into tenant scoping.
+///
+/// Entities without `#[orm(tenant = CurrentTenant)]` return `None` and remain
+/// cross-tenant even when a context has an active tenant configured.
 pub trait TenantScopedEntity: core::Entity {
+    /// Returns tenant-owned column metadata for tenant-scoped entities.
     fn tenant_policy() -> Option<core::EntityPolicyMetadata>;
 }
 
+/// Builds a model snapshot from a context type that exposes entity metadata.
+///
+/// This is the helper used by consumer snapshot-export binaries.
 pub fn model_snapshot_from_source<S: MigrationModelSource>() -> migrate::ModelSnapshot {
     migrate::ModelSnapshot::from_entities(S::entity_metadata())
 }
 
+/// Serializes the current model snapshot for a context as pretty JSON.
+///
+/// Consumer projects can print this from a small binary and pass it to the CLI
+/// through `migration add --snapshot-bin`.
 pub fn model_snapshot_json_from_source<S: MigrationModelSource>() -> Result<String, core::OrmError>
 {
     model_snapshot_from_source::<S>().to_json_pretty()

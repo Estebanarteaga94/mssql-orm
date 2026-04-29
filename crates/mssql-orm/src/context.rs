@@ -27,19 +27,34 @@ use mssql_orm_tiberius::{
 #[cfg(feature = "pool-bb8")]
 use mssql_orm_tiberius::{MssqlPool, MssqlPooledConnection};
 
+/// Shared database access handle used by contexts, `DbSet`s, raw SQL, and
+/// transactions.
+///
+/// A `SharedConnection` can wrap either one direct SQL Server connection or,
+/// behind the `pool-bb8` feature, a pool. Runtime values such as audit values,
+/// soft-delete values, and the active tenant are stored alongside the physical
+/// connection handle and are preserved when derived contexts clone the handle.
 #[derive(Clone)]
 pub struct SharedConnection {
     inner: Arc<SharedConnectionInner>,
     runtime: Arc<SharedConnectionRuntime>,
 }
 
+/// Active tenant value currently attached to a shared connection.
+///
+/// Tenant-scoped entities compare their tenant policy column with this value
+/// before compiling reads and writes. A column mismatch or missing tenant fails
+/// closed for tenant-scoped entities.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActiveTenant {
+    /// Physical tenant column name expected by tenant-scoped entities.
     pub column_name: &'static str,
+    /// SQL value compared against the tenant column.
     pub value: SqlValue,
 }
 
 impl ActiveTenant {
+    /// Normalizes a user-defined tenant context into the runtime tenant value.
     pub fn from_context<T: TenantContext>(tenant: &T) -> Self {
         Self {
             column_name: T::COLUMN_NAME,
@@ -71,12 +86,16 @@ enum SharedConnectionKind {
 }
 
 pub enum SharedConnectionGuard<'a> {
+    /// Guard for a direct connection held through an async mutex.
     Direct(tokio::sync::MutexGuard<'a, MssqlConnection<TokioConnectionStream>>),
     #[cfg(feature = "pool-bb8")]
+    /// Guard for one connection acquired from a pool.
     Pool(Box<MssqlPooledConnection<'a>>),
 }
 
 impl SharedConnection {
+    /// Creates a shared handle from an already-open direct SQL Server
+    /// connection.
     pub fn from_connection(connection: MssqlConnection<TokioConnectionStream>) -> Self {
         Self {
             inner: Arc::new(SharedConnectionInner::Direct(Box::new(
@@ -87,6 +106,10 @@ impl SharedConnection {
     }
 
     #[cfg(feature = "pool-bb8")]
+    /// Creates a shared handle backed by an `MssqlPool`.
+    ///
+    /// Each operation acquires a pooled connection as needed. Runtime context
+    /// values still live on the `SharedConnection` wrapper, not inside the pool.
     pub fn from_pool(pool: MssqlPool) -> Self {
         Self {
             inner: Arc::new(SharedConnectionInner::Pool(Box::new(pool))),
@@ -94,6 +117,11 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with an audit provider configured.
+    ///
+    /// The provider is consulted by insert/update paths for entities declaring
+    /// `#[orm(audit = Audit)]` after explicit mutation values and request
+    /// values have had priority.
     pub fn with_audit_provider(&self, provider: Arc<dyn AuditProvider>) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -107,6 +135,10 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with low-level audit request values.
+    ///
+    /// Prefer `with_audit_values(...)` when using a struct derived with
+    /// `#[derive(AuditFields)]`.
     pub fn with_audit_request_values(&self, request_values: AuditRequestValues) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -120,10 +152,16 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with typed audit request values.
+    ///
+    /// The same struct used for `#[derive(AuditFields)]` can be passed here as
+    /// runtime values. Values are converted to `AuditRequestValues` and keep
+    /// the existing precedence rules.
     pub fn with_audit_values<V: AuditValues>(&self, values: V) -> Self {
         self.with_audit_request_values(AuditRequestValues::new(values.audit_values()))
     }
 
+    /// Returns a clone of this handle with audit request values cleared.
     pub fn clear_audit_request_values(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -137,6 +175,10 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with a soft-delete provider configured.
+    ///
+    /// The provider is used by delete paths for entities declaring
+    /// `#[orm(soft_delete = SoftDelete)]`.
     pub fn with_soft_delete_provider(&self, provider: Arc<dyn SoftDeleteProvider>) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -150,6 +192,11 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with low-level soft-delete request
+    /// values.
+    ///
+    /// Prefer `with_soft_delete_values(...)` when using a struct derived with
+    /// `#[derive(SoftDeleteFields)]`.
     pub fn with_soft_delete_request_values(&self, request_values: SoftDeleteRequestValues) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -163,12 +210,17 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with typed soft-delete request values.
+    ///
+    /// The same struct used for `#[derive(SoftDeleteFields)]` can be passed
+    /// here as runtime delete values.
     pub fn with_soft_delete_values<V: SoftDeleteValues>(&self, values: V) -> Self {
         self.with_soft_delete_request_values(SoftDeleteRequestValues::new(
             values.soft_delete_values(),
         ))
     }
 
+    /// Returns a clone of this handle with soft-delete request values cleared.
     pub fn clear_soft_delete_request_values(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -182,6 +234,11 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle with an active tenant configured.
+    ///
+    /// Tenant-scoped reads and writes fail closed if this tenant is absent,
+    /// has a different column name, or has a value incompatible with the tenant
+    /// column.
     pub fn with_tenant<T: TenantContext>(&self, tenant: T) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -195,6 +252,7 @@ impl SharedConnection {
         }
     }
 
+    /// Returns a clone of this handle without an active tenant.
     pub fn clear_tenant(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -208,6 +266,10 @@ impl SharedConnection {
         }
     }
 
+    /// Acquires the underlying SQL Server connection for one operation.
+    ///
+    /// Direct connections lock the shared mutex. Pooled connections acquire a
+    /// connection from the pool for the lifetime of the returned guard.
     pub async fn lock(&self) -> Result<SharedConnectionGuard<'_>, OrmError> {
         match self.inner.as_ref() {
             SharedConnectionInner::Direct(connection) => {
@@ -247,6 +309,7 @@ impl SharedConnection {
     }
 
     #[doc(hidden)]
+    /// Returns the active tenant attached to this handle, if any.
     pub fn active_tenant(&self) -> Option<ActiveTenant> {
         self.runtime.active_tenant.clone()
     }
@@ -284,12 +347,22 @@ impl core::ops::DerefMut for SharedConnectionGuard<'_> {
     }
 }
 
+/// Application database context contract.
+///
+/// `#[derive(DbContext)]` implements this trait for structs whose fields are
+/// `DbSet<T>`. The trait centralizes connection access, health checks, raw SQL,
+/// transactions, and experimental `save_changes()` support while keeping SQL
+/// generation in `mssql-orm-sqlserver` and execution in `mssql-orm-tiberius`.
 pub trait DbContext: Sized {
+    /// Builds a context from an existing shared connection handle.
     fn from_shared_connection(connection: SharedConnection) -> Self;
+    /// Returns the shared connection handle used by this context.
     fn shared_connection(&self) -> SharedConnection;
     #[doc(hidden)]
     fn tracking_registry(&self) -> TrackingRegistryHandle;
 
+    /// Executes the configured SQL Server health check through the current
+    /// connection handle.
     fn health_check(&self) -> impl Future<Output = Result<(), OrmError>> + Send {
         let shared_connection = self.shared_connection();
 
@@ -299,6 +372,10 @@ pub trait DbContext: Sized {
         }
     }
 
+    /// Creates a typed raw SQL query.
+    ///
+    /// Raw SQL is executed exactly as written after ORM parameter handling; it
+    /// does not automatically apply tenant or soft-delete filters.
     fn raw<T>(&self, sql: impl Into<String>) -> RawQuery<T>
     where
         T: FromRow + Send,
@@ -306,10 +383,18 @@ pub trait DbContext: Sized {
         RawQuery::new(self.shared_connection(), sql)
     }
 
+    /// Creates a raw SQL command for statements that do not materialize rows.
     fn raw_exec(&self, sql: impl Into<String>) -> RawCommand {
         RawCommand::new(self.shared_connection(), sql)
     }
 
+    /// Executes an operation inside a transaction on a direct shared
+    /// connection.
+    ///
+    /// The closure receives a context bound to the same shared connection and
+    /// runtime values. Returning `Ok` commits; returning `Err` rolls back.
+    /// Contexts backed by a pool currently return an error because pooled
+    /// transactions must pin one physical connection for the full closure.
     fn transaction<F, Fut, T>(
         &self,
         operation: F,
@@ -347,10 +432,20 @@ pub trait DbContext: Sized {
     }
 }
 
+/// Gives generic code access to the `DbSet<E>` declared on a context.
+///
+/// `#[derive(DbContext)]` implements this for each entity set field.
 pub trait DbContextEntitySet<E: Entity>: DbContext {
+    /// Returns the typed set for entity `E`.
     fn db_set(&self) -> &DbSet<E>;
 }
 
+/// Typed entry point for querying and persisting one entity type.
+///
+/// `DbSet<E>` is normally declared as a field on a derived `DbContext`. It
+/// builds query ASTs, applies runtime policies such as tenant and soft-delete
+/// visibility, compiles through the SQL Server crate, and executes through the
+/// shared Tiberius connection handle.
 #[derive(Clone)]
 pub struct DbSet<E: Entity> {
     connection: Option<SharedConnection>,
@@ -359,6 +454,7 @@ pub struct DbSet<E: Entity> {
 }
 
 impl<E: Entity> DbSet<E> {
+    /// Creates a set backed by the given shared connection.
     pub fn new(connection: SharedConnection) -> Self {
         Self::with_tracking_registry(connection, Arc::new(TrackingRegistry::default()))
     }
@@ -384,10 +480,16 @@ impl<E: Entity> DbSet<E> {
         }
     }
 
+    /// Returns the static metadata generated for entity `E`.
     pub fn entity_metadata(&self) -> &'static EntityMetadata {
         E::metadata()
     }
 
+    /// Starts a query for the full entity.
+    ///
+    /// Tenant and soft-delete visibility are materialized when the query is
+    /// compiled or executed, so callers cannot bypass those policies through
+    /// the public query surface.
     pub fn query(&self) -> DbSetQuery<E> {
         DbSetQuery::new(
             self.connection.as_ref().cloned(),
@@ -395,6 +497,11 @@ impl<E: Entity> DbSet<E> {
         )
     }
 
+    /// Starts a query from a caller-provided `SelectQuery`.
+    ///
+    /// This is useful for advanced composition while still routing execution
+    /// through `DbSetQuery`, so mandatory tenant and soft-delete behavior can
+    /// be applied before SQL compilation.
     pub fn query_with(&self, select_query: SelectQuery) -> DbSetQuery<E> {
         DbSetQuery::new(self.connection.as_ref().cloned(), select_query)
     }
@@ -403,6 +510,10 @@ impl<E: Entity> DbSet<E> {
         DbSetQuery::new(self.connection.as_ref().cloned(), select_query).with_deleted()
     }
 
+    /// Finds one entity by its single-column primary key.
+    ///
+    /// Composite primary keys are rejected in this stage. Tenant and
+    /// soft-delete policies are applied through the normal query path.
     pub async fn find<K>(&self, key: K) -> Result<Option<E>, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -553,6 +664,10 @@ impl<E: Entity> DbSet<E> {
         Ok(saved)
     }
 
+    /// Inserts a new row and materializes the inserted entity.
+    ///
+    /// The insert path applies tenant insert fill/validation and audit runtime
+    /// values for entities that opt into those policies.
     pub async fn insert<I>(&self, insertable: I) -> Result<E, OrmError>
     where
         E: AuditEntity + FromRow + Send + TenantScopedEntity,
@@ -566,6 +681,12 @@ impl<E: Entity> DbSet<E> {
         inserted.ok_or_else(|| OrmError::new("insert query did not return a row"))
     }
 
+    /// Updates one row by single-column primary key and materializes the
+    /// updated entity when a row matched.
+    ///
+    /// Rowversion mismatches are surfaced as `OrmError::ConcurrencyConflict`
+    /// when the entity still exists. Tenant and audit policies are applied by
+    /// the shared update pipeline.
     pub async fn update<K, C>(&self, key: K, changeset: C) -> Result<Option<E>, OrmError>
     where
         E: AuditEntity + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -594,6 +715,11 @@ impl<E: Entity> DbSet<E> {
         Ok(updated)
     }
 
+    /// Deletes one row by single-column primary key.
+    ///
+    /// Entities with `soft_delete` emit an `UPDATE` through the soft-delete
+    /// pipeline; other entities emit a physical `DELETE`. The return value is
+    /// `true` when a row was affected.
     pub async fn delete<K>(&self, key: K) -> Result<bool, OrmError>
     where
         E: FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -724,6 +850,7 @@ impl<E: Entity> DbSet<E> {
             .await
     }
 
+    /// Returns the shared connection handle backing this set.
     pub fn shared_connection(&self) -> SharedConnection {
         self.connection
             .as_ref()
@@ -1221,11 +1348,16 @@ impl<E: Entity> Changeset<E> for RawChangeset {
     }
 }
 
+/// Opens a direct SQL Server connection and wraps it in a `SharedConnection`.
+///
+/// Derived contexts use this helper behind their generated `connect(...)`
+/// constructors.
 pub async fn connect_shared(connection_string: &str) -> Result<SharedConnection, OrmError> {
     let connection = MssqlConnection::connect(connection_string).await?;
     Ok(SharedConnection::from_connection(connection))
 }
 
+/// Opens a direct SQL Server connection with explicit operational options.
 pub async fn connect_shared_with_options(
     connection_string: &str,
     options: MssqlOperationalOptions,
@@ -1235,6 +1367,7 @@ pub async fn connect_shared_with_options(
     connect_shared_with_config(config).await
 }
 
+/// Opens a direct SQL Server connection from a fully parsed configuration.
 pub async fn connect_shared_with_config(
     config: MssqlConnectionConfig,
 ) -> Result<SharedConnection, OrmError> {
@@ -1243,6 +1376,7 @@ pub async fn connect_shared_with_config(
 }
 
 #[cfg(feature = "pool-bb8")]
+/// Wraps an existing SQL Server pool in a `SharedConnection`.
 pub fn connect_shared_from_pool(pool: MssqlPool) -> SharedConnection {
     SharedConnection::from_pool(pool)
 }
