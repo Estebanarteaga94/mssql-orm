@@ -82,11 +82,11 @@ pub struct TodoItem {
     #[orm(on_delete = "cascade")]
     pub list_id: i64,
 
-    #[orm(foreign_key(entity = User, column = id))]
+    #[orm(foreign_key(entity = User, column = id, name = "fk_todo_items_created_by_user"))]
     pub created_by_user_id: i64,
 
     #[orm(nullable)]
-    #[orm(foreign_key(entity = User, column = id))]
+    #[orm(foreign_key(entity = User, column = id, name = "fk_todo_items_completed_by_user"))]
     pub completed_by_user_id: Option<i64>,
 
     #[orm(length = 200)]

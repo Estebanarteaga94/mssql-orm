@@ -699,6 +699,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
 
         if let Some(foreign_key) = config.foreign_key {
+            let foreign_key_has_explicit_name = foreign_key.name.is_some();
             let foreign_key_name = foreign_key.name.clone().unwrap_or_else(|| {
                 generated_foreign_key_name(
                     table.value().as_str(),
@@ -757,11 +758,15 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     name: foreign_key_name,
                     local_column: column_name.clone(),
                     referenced_column,
+                    field_span: field_ident.span(),
+                    has_explicit_name: foreign_key_has_explicit_name,
                     structured_target: foreign_key.structured_target_key(),
                 },
             );
         }
     }
+
+    validate_repeated_structured_foreign_keys(&field_foreign_keys)?;
 
     let navigation_metadata = navigations
         .iter()
@@ -2091,14 +2096,29 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
             } else if meta.path.is_ident("foreign_key") {
                 config.foreign_key = Some(parse_foreign_key_config(meta)?);
             } else if meta.path.is_ident("belongs_to") {
+                if config.navigation.is_some() {
+                    return Err(meta.error(
+                        "un campo solo puede declarar una navegación: belongs_to, has_one o has_many",
+                    ));
+                }
                 config.navigation = Some(parse_navigation_config(
                     meta,
                     NavigationKindConfig::BelongsTo,
                 )?);
             } else if meta.path.is_ident("has_one") {
+                if config.navigation.is_some() {
+                    return Err(meta.error(
+                        "un campo solo puede declarar una navegación: belongs_to, has_one o has_many",
+                    ));
+                }
                 config.navigation =
                     Some(parse_navigation_config(meta, NavigationKindConfig::HasOne)?);
             } else if meta.path.is_ident("has_many") {
+                if config.navigation.is_some() {
+                    return Err(meta.error(
+                        "un campo solo puede declarar una navegación: belongs_to, has_one o has_many",
+                    ));
+                }
                 config.navigation = Some(parse_navigation_config(
                     meta,
                     NavigationKindConfig::HasMany,
@@ -2133,6 +2153,13 @@ fn parse_field_config(field: &Field) -> Result<FieldConfig> {
         return Err(Error::new_spanned(
             field,
             "los campos de navegación solo soportan belongs_to, has_one o has_many; no se generan columnas para ellos",
+        ));
+    }
+
+    if config.navigation.is_none() && is_navigation_wrapper_type(&field.ty) {
+        return Err(Error::new_spanned(
+            field,
+            "los campos Navigation<T> y Collection<T> requieren #[orm(belongs_to(...))], #[orm(has_one(...))] o #[orm(has_many(...))]",
         ));
     }
 
@@ -2334,6 +2361,37 @@ fn parse_navigation_config(
         target,
         foreign_key,
     })
+}
+
+fn validate_repeated_structured_foreign_keys(
+    foreign_keys: &BTreeMap<String, FieldForeignKeyInfo>,
+) -> Result<()> {
+    let mut targets = BTreeMap::<&str, Vec<&FieldForeignKeyInfo>>::new();
+
+    for foreign_key in foreign_keys.values() {
+        let Some(target) = foreign_key.structured_target.as_deref() else {
+            continue;
+        };
+        targets.entry(target).or_default().push(foreign_key);
+    }
+
+    for foreign_keys_for_target in targets.values() {
+        if foreign_keys_for_target.len() < 2 {
+            continue;
+        }
+
+        if let Some(unnamed_foreign_key) = foreign_keys_for_target
+            .iter()
+            .find(|foreign_key| !foreign_key.has_explicit_name)
+        {
+            return Err(Error::new(
+                unnamed_foreign_key.field_span,
+                "múltiples foreign keys estructuradas al mismo target requieren name explícito para desambiguar navegaciones",
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_foreign_key_string_config(expr: Expr) -> Result<ForeignKeyConfig> {
@@ -2569,6 +2627,18 @@ fn generic_wrapper_inner_last_ident<'a>(ty: &'a Type, wrapper: &str) -> Option<&
     };
 
     path_last_ident(&inner.path)
+}
+
+fn is_navigation_wrapper_type(ty: &Type) -> bool {
+    let Type::Path(type_path) = ty else {
+        return false;
+    };
+
+    type_path
+        .path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "Navigation" || segment.ident == "Collection")
 }
 
 fn path_last_ident(path: &Path) -> Option<&Ident> {
@@ -2924,6 +2994,8 @@ struct FieldForeignKeyInfo {
     name: LitStr,
     local_column: LitStr,
     referenced_column: TokenStream2,
+    field_span: Span,
+    has_explicit_name: bool,
     structured_target: Option<String>,
 }
 

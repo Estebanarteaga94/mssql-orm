@@ -1,0 +1,5 @@
+error: los campos Navigation<T> y Collection<T> requieren #[orm(belongs_to(...))], #[orm(has_one(...))] o #[orm(has_many(...))]
+  --> tests/ui/entity_navigation_unannotated_wrapper.rs:16:5
+   |
+16 |     pub owner: Navigation<User>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^

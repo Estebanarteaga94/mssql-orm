@@ -1,0 +1,5 @@
+error: múltiples foreign keys estructuradas al mismo target requieren name explícito para desambiguar navegaciones
+  --> tests/ui/entity_foreign_key_same_target_requires_name.rs:21:9
+   |
+21 |     pub completed_by_user_id: Option<i64>,
+   |         ^^^^^^^^^^^^^^^^^^^^
