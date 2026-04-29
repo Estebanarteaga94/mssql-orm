@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::quote;
+use quote::{format_ident, quote};
 use std::collections::BTreeMap;
 use syn::{
     Data, DeriveInput, Error, Expr, ExprLit, Field, Fields, Ident, Lit, LitStr, Path, Result,
@@ -449,6 +449,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
     let mut from_row_fields = Vec::new();
     let mut indexes = Vec::new();
     let mut foreign_keys = Vec::new();
+    let mut foreign_key_accessors = Vec::new();
     let mut field_foreign_keys = BTreeMap::<String, FieldForeignKeyInfo>::new();
     let mut navigations = Vec::new();
     let mut field_columns = BTreeMap::<String, LitStr>::new();
@@ -740,6 +741,16 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 )
             });
 
+            let foreign_key_accessor = format_ident!("__mssql_orm_fk_{}", field_ident);
+            foreign_key_accessors.push(quote! {
+                #[doc(hidden)]
+                pub fn #foreign_key_accessor() -> &'static ::mssql_orm::core::ForeignKeyMetadata {
+                    <Self as ::mssql_orm::core::Entity>::metadata()
+                        .foreign_key(#foreign_key_name)
+                        .expect("generated foreign key accessor must reference existing metadata")
+                }
+            });
+
             field_foreign_keys.insert(
                 field_ident.to_string(),
                 FieldForeignKeyInfo {
@@ -812,24 +823,31 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                 }
                 NavigationKindConfig::HasOne | NavigationKindConfig::HasMany => {
                     let foreign_key_field = &navigation.foreign_key_field;
+                    let foreign_key_accessor =
+                        format_ident!("__mssql_orm_fk_{}", foreign_key_field);
                     Ok(quote! {
-                        ::mssql_orm::core::NavigationMetadata::new(
+                        {
+                            let foreign_key = #target::#foreign_key_accessor();
+                            assert!(
+                                foreign_key.references_table(#schema, #table),
+                                "has_one/has_many requiere que foreign_key apunte a la entidad local",
+                            );
+
+                            ::mssql_orm::core::NavigationMetadata::new(
                             #rust_field,
                             #kind_tokens,
                             #target_rust_name,
                             #target_schema,
                             #target_table,
                             {
-                                const LOCAL_COLUMNS: &[&'static str] = &[#(#primary_key_columns),*];
-                                LOCAL_COLUMNS
+                                foreign_key.referenced_columns
                             },
                             {
-                                const TARGET_COLUMNS: &[&'static str] =
-                                    &[#target::#foreign_key_field.column_name()];
-                                TARGET_COLUMNS
+                                foreign_key.columns
                             },
-                            None,
-                        )
+                            Some(foreign_key.name),
+                            )
+                        }
                     })
                 }
             }
@@ -1088,6 +1106,12 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         }
     };
 
+    let has_inverse_navigation_metadata = navigations.iter().any(|navigation| {
+        matches!(
+            navigation.kind,
+            NavigationKindConfig::HasOne | NavigationKindConfig::HasMany
+        )
+    });
     let has_generated_policies =
         entity_audit.is_some() || entity_soft_delete.is_some() || entity_tenant.is_some();
     let audit_columns_extend = entity_audit.as_ref().map(|audit| {
@@ -1172,7 +1196,9 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
         },
     );
 
-    let (metadata_static, metadata_expr) = if has_generated_policies {
+    let (metadata_static, metadata_expr) = if has_generated_policies
+        || has_inverse_navigation_metadata
+    {
         (
             quote! {
                 static #metadata_ident: ::std::sync::OnceLock<::mssql_orm::core::EntityMetadata> =
@@ -1187,6 +1213,8 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                     #tenant_columns_extend
                     let columns: &'static [::mssql_orm::core::ColumnMetadata] =
                         ::std::boxed::Box::leak(columns.into_boxed_slice());
+                    let navigations: &'static [::mssql_orm::core::NavigationMetadata] =
+                        ::std::boxed::Box::leak(::std::vec![#(#navigation_metadata),*].into_boxed_slice());
 
                     ::mssql_orm::core::EntityMetadata {
                         rust_name: #rust_name,
@@ -1197,7 +1225,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
                         primary_key: #primary_key_metadata,
                         indexes: #indexes_metadata,
                         foreign_keys: #foreign_keys_metadata,
-                        navigations: #navigations_metadata,
+                        navigations,
                     }
                 })
             },
@@ -1243,6 +1271,7 @@ fn derive_entity_impl(input: DeriveInput) -> Result<TokenStream2> {
             pub const __MSSQL_ORM_ENTITY_TABLE: &'static str = #table;
 
             #(#column_symbols)*
+            #(#foreign_key_accessors)*
         }
 
         impl ::mssql_orm::core::Entity for #ident {

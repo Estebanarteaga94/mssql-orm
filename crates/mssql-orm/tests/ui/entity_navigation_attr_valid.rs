@@ -7,8 +7,22 @@ pub struct User {
     #[orm(identity)]
     pub id: i64,
 
+    #[orm(has_one(UserProfile, foreign_key = user_id))]
+    pub profile: Navigation<UserProfile>,
+
     #[orm(has_many(TodoList, foreign_key = owner_id))]
     pub lists: Collection<TodoList>,
+}
+
+#[derive(Entity, Debug, Clone)]
+#[orm(table = "user_profiles", schema = "todo")]
+pub struct UserProfile {
+    #[orm(primary_key)]
+    #[orm(identity)]
+    pub id: i64,
+
+    #[orm(foreign_key(entity = User, column = id))]
+    pub user_id: i64,
 }
 
 #[derive(Entity, Debug, Clone)]
@@ -48,8 +62,23 @@ fn main() {
 
     assert_eq!(user_metadata.columns.len(), 1);
     assert!(user_metadata.field("lists").is_none());
+    assert!(user_metadata.field("profile").is_none());
+
+    let profile = user_metadata
+        .navigation("profile")
+        .expect("has_one navigation metadata");
+    assert_eq!(profile.kind, NavigationKind::HasOne);
+    assert_eq!(profile.target_rust_name, "UserProfile");
+    assert_eq!(profile.local_columns, &["id"]);
+    assert_eq!(profile.target_columns, &["user_id"]);
+    assert_eq!(
+        profile.foreign_key_name,
+        Some("fk_user_profiles_user_id_users")
+    );
+
     assert_eq!(lists.kind, NavigationKind::HasMany);
     assert_eq!(lists.target_rust_name, "TodoList");
     assert_eq!(lists.local_columns, &["id"]);
     assert_eq!(lists.target_columns, &["owner_id"]);
+    assert_eq!(lists.foreign_key_name, Some("fk_todo_lists_owner_id_users"));
 }

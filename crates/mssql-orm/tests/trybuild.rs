@@ -40,6 +40,7 @@ fn entity_derive_ui() {
     tests.compile_fail("tests/ui/entity_navigation_missing_foreign_key.rs");
     tests.compile_fail("tests/ui/entity_navigation_belongs_to_legacy_foreign_key.rs");
     tests.compile_fail("tests/ui/entity_navigation_belongs_to_target_mismatch.rs");
+    tests.compile_fail("tests/ui/entity_navigation_inverse_missing_foreign_key.rs");
     tests.compile_fail("tests/ui/entity_rowversion_invalid_type.rs");
     tests.compile_fail("tests/ui/insertable_missing_entity.rs");
     tests.compile_fail("tests/ui/changeset_field_not_option.rs");

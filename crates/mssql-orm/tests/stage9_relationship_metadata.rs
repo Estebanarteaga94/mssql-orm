@@ -62,6 +62,9 @@ struct Project {
     id: i64,
 
     name: String,
+
+    #[orm(has_many(ProjectTask, foreign_key = project_id))]
+    tasks: Collection<ProjectTask>,
 }
 
 #[allow(dead_code)]
@@ -198,4 +201,27 @@ fn belongs_to_navigation_metadata_uses_structured_foreign_key_columns() {
     let by_foreign_key = metadata.navigations_for_foreign_key("fk_tasks_project_ref");
     assert_eq!(by_foreign_key.len(), 1);
     assert_eq!(by_foreign_key[0].rust_field, "project");
+}
+
+#[test]
+fn inverse_navigation_metadata_reuses_target_foreign_key_metadata() {
+    let metadata = Project::metadata();
+
+    assert_eq!(metadata.columns.len(), 2);
+    assert!(metadata.field("tasks").is_none());
+
+    let navigation = metadata
+        .navigation("tasks")
+        .expect("has_many project tasks navigation");
+    assert_eq!(navigation.kind, NavigationKind::HasMany);
+    assert_eq!(navigation.target_rust_name, "ProjectTask");
+    assert_eq!(navigation.target_schema, "sales");
+    assert_eq!(navigation.target_table, "project_tasks");
+    assert_eq!(navigation.local_columns, &["id"]);
+    assert_eq!(navigation.target_columns, &["project_ref"]);
+    assert_eq!(navigation.foreign_key_name, Some("fk_tasks_project_ref"));
+
+    let by_foreign_key = metadata.navigations_for_foreign_key("fk_tasks_project_ref");
+    assert_eq!(by_foreign_key.len(), 1);
+    assert_eq!(by_foreign_key[0].rust_field, "tasks");
 }
