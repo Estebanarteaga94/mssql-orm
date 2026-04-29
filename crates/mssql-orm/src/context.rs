@@ -49,9 +49,9 @@ impl ActiveTenant {
 }
 
 enum SharedConnectionInner {
-    Direct(tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>),
+    Direct(Box<tokio::sync::Mutex<MssqlConnection<TokioConnectionStream>>>),
     #[cfg(feature = "pool-bb8")]
-    Pool(MssqlPool),
+    Pool(Box<MssqlPool>),
 }
 
 #[derive(Clone, Default)]
@@ -73,14 +73,14 @@ enum SharedConnectionKind {
 pub enum SharedConnectionGuard<'a> {
     Direct(tokio::sync::MutexGuard<'a, MssqlConnection<TokioConnectionStream>>),
     #[cfg(feature = "pool-bb8")]
-    Pool(MssqlPooledConnection<'a>),
+    Pool(Box<MssqlPooledConnection<'a>>),
 }
 
 impl SharedConnection {
     pub fn from_connection(connection: MssqlConnection<TokioConnectionStream>) -> Self {
         Self {
-            inner: Arc::new(SharedConnectionInner::Direct(tokio::sync::Mutex::new(
-                connection,
+            inner: Arc::new(SharedConnectionInner::Direct(Box::new(
+                tokio::sync::Mutex::new(connection),
             ))),
             runtime: Arc::new(SharedConnectionRuntime::default()),
         }
@@ -89,7 +89,7 @@ impl SharedConnection {
     #[cfg(feature = "pool-bb8")]
     pub fn from_pool(pool: MssqlPool) -> Self {
         Self {
-            inner: Arc::new(SharedConnectionInner::Pool(pool)),
+            inner: Arc::new(SharedConnectionInner::Pool(Box::new(pool))),
             runtime: Arc::new(SharedConnectionRuntime::default()),
         }
     }
@@ -215,7 +215,7 @@ impl SharedConnection {
             }
             #[cfg(feature = "pool-bb8")]
             SharedConnectionInner::Pool(pool) => {
-                Ok(SharedConnectionGuard::Pool(pool.acquire().await?))
+                Ok(SharedConnectionGuard::Pool(Box::new(pool.acquire().await?)))
             }
         }
     }
