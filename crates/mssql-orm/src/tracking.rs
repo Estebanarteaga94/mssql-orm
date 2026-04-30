@@ -1,5 +1,11 @@
 //! Experimental change tracking surface.
 //!
+//! Stability audit status, 2026-04-30: this is the only root-crate public
+//! surface still explicitly marked experimental. It remains implemented but
+//! not stable until the unit-of-work, identity, operation ordering,
+//! transaction, policy and public-test guarantees tracked in Etapa 21 are
+//! defined and validated.
+//!
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs

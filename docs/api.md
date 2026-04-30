@@ -170,6 +170,9 @@ Relevant limits:
 - `save_changes()` and `Tracked<T>` are experimental.
 - `db.transaction(...)` is blocked for contexts created from pools until one physical connection can be pinned for the full closure.
 
+The current inventory of experimental, pending verification, deferred, and
+blocked public surfaces is tracked in [Stability audit](stability-audit.md).
+
 ## Query Builder
 
 The public query extensions include:

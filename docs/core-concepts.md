@@ -372,6 +372,10 @@ Important limits:
 
 These are intentional limits of the current implementation:
 
+For the current audited inventory of experimental, pending verification,
+deferred, and blocked public surfaces, see
+[Stability audit](stability-audit.md).
+
 - SQL Server is the only supported database target.
 - Public persistence workflows are centered on simple primary keys.
 - `Tracked<T>` and `save_changes()` are experimental.

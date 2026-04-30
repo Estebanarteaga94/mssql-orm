@@ -113,6 +113,7 @@ let active_users = db
 - [Transactions](docs/transactions.md): runtime transaction behavior and pool limits.
 - [Migrations](docs/migrations.md): snapshots, diff, `migration add`, and `database update`.
 - [Entity Policies](docs/entity-policies.md): audit metadata and runtime values, soft delete, tenant scoping, and policy limits.
+- [Stability audit](docs/stability-audit.md): experimental, pending verification, deferred, and blocked public surfaces.
 - [Use without manual download](docs/use-without-downloading.md): Git dependency usage from another project.
 
 ## Examples
@@ -123,6 +124,8 @@ let active_users = db
 Pending verification: historical validation of `todo-app` against real SQL Server is recorded in [docs/worklog.md](docs/worklog.md), but it should be rerun with a real connection string in the current environment before using it as fresh evidence.
 
 ## Current Limits
+
+See [Stability audit](docs/stability-audit.md) for the latest inventory of experimental, pending verification, deferred, and blocked surfaces.
 
 - SQL Server only.
 - Navigation properties currently support metadata, explicit join inference, `belongs_to` / `has_one` includes, join-based `has_many` includes, and explicit `has_many` collection loading.

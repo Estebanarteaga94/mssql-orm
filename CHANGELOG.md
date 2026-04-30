@@ -24,7 +24,7 @@ blocked surfaces and adding typed aggregations. These items are tracked in
 
 ### Planned Stabilization Work
 
-- Audit public surfaces marked as experimental, pending verification, or deferred.
+- Audit public surfaces marked as experimental, pending verification, or deferred. Initial inventory is recorded in `docs/stability-audit.md`.
 - Define stability criteria for `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes()`.
 - Replace the current experimental tracking assumptions with stable unit-of-work guarantees, identity handling, deterministic operation ordering, transaction behavior, policy integration, and public tests.
 - Design a context-owned identity map for navigation loading so root queries, includes and explicit loads can reuse one canonical tracked entity per primary key.
