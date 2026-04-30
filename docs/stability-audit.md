@@ -80,3 +80,6 @@ The audited documents are consistent with the current implementation:
 This audit does not graduate any API to stable status. The next executable
 task is to define explicit stability criteria for `Tracked<T>` and
 `save_changes()` before changing behavior.
+
+The stability criteria for that next step are now recorded in
+[Tracking stability criteria](tracking-stability.md).

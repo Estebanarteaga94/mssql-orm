@@ -114,6 +114,7 @@ let active_users = db
 - [Migrations](docs/migrations.md): snapshots, diff, `migration add`, and `database update`.
 - [Entity Policies](docs/entity-policies.md): audit metadata and runtime values, soft delete, tenant scoping, and policy limits.
 - [Stability audit](docs/stability-audit.md): experimental, pending verification, deferred, and blocked public surfaces.
+- [Tracking stability criteria](docs/tracking-stability.md): requirements before `Tracked<T>` and `save_changes()` can become stable.
 - [Use without manual download](docs/use-without-downloading.md): Git dependency usage from another project.
 
 ## Examples

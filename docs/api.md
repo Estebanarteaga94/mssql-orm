@@ -172,6 +172,8 @@ Relevant limits:
 
 The current inventory of experimental, pending verification, deferred, and
 blocked public surfaces is tracked in [Stability audit](stability-audit.md).
+The acceptance criteria for removing the experimental label from tracking are
+tracked in [Tracking stability criteria](tracking-stability.md).
 
 ## Query Builder
 
