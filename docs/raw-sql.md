@@ -139,7 +139,7 @@ map it into a DTO with `FromRow` and explicit column aliases.
 
 ## Transactions
 
-Raw SQL can run inside `db.transaction(...)` when using the transaction context passed to the closure. The same transaction limits documented in [docs/transactions.md](transactions.md) apply.
+Raw SQL can run inside `db.transaction(...)` when using the transaction context passed to the closure. The same transaction limits documented in [transactions.md](transactions.md) apply.
 
 ## Limits
 

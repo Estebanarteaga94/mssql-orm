@@ -315,7 +315,10 @@ Current limit: automatic tenant filtering applies to the root entity only. Filte
 
 ## Runtime Audit Provider Design
 
-Runtime audit auto-fill is being added in Etapa 19 by write path. Inserts and semantic updates are wired through the main persistence paths. Soft-delete deletes compile as `UPDATE` internally, but they remain delete semantics and do not consume the audit update path in this cut.
+Runtime audit auto-fill is implemented for audited inserts and semantic
+updates through the main persistence paths. Soft-delete deletes compile as
+`UPDATE` internally, but they remain delete semantics and do not consume the
+audit update path in this cut.
 
 ## Ergonomic Audit Values
 

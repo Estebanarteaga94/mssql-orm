@@ -274,7 +274,7 @@ Projection DTOs can use `#[derive(FromRow)]`; fields read aliases by field name 
 
 ## Related
 
-- Navigation properties: [docs/navigation.md](navigation.md)
-- Projections: [docs/projections.md](projections.md)
-- Raw SQL escape hatch: [docs/raw-sql.md](raw-sql.md)
+- Navigation properties: [navigation.md](navigation.md)
+- Projections: [projections.md](projections.md)
+- Raw SQL escape hatch: [raw-sql.md](raw-sql.md)
 - Real example queries: [examples/todo-app/src/queries.rs](../examples/todo-app/src/queries.rs)

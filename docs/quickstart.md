@@ -144,8 +144,8 @@ The public query builder produces an AST. SQL Server SQL is generated only by `m
 
 ## 8. Next Reading
 
-- Public API inventory: [docs/api.md](api.md)
-- Code-first guide: [docs/code-first.md](code-first.md)
-- Query builder guide: [docs/query-builder.md](query-builder.md)
-- Migrations guide: [docs/migrations.md](migrations.md)
-- Raw SQL guide: [docs/raw-sql.md](raw-sql.md)
+- Public API inventory: [api.md](api.md)
+- Code-first guide: [code-first.md](code-first.md)
+- Query builder guide: [query-builder.md](query-builder.md)
+- Migrations guide: [migrations.md](migrations.md)
+- Raw SQL guide: [raw-sql.md](raw-sql.md)

@@ -120,13 +120,15 @@ let rows = db
 
 ## Joins and Aliases
 
-Initial projections can select columns from explicitly joined tables when the query does not require table aliases.
+Projections can select columns from explicitly joined tables. Use
+`column.aliased("alias")` together with aliased joins when a query references
+the same table more than once, uses a self-join, or needs stable DTO aliases.
 
 Current limits:
 
-- no self-joins;
-- no repeated table in one query;
-- if two projected columns share the same `column_name`, assign an explicit alias to one of them.
+- aliases are explicit; the query builder does not assign table aliases automatically;
+- if two projected columns share the same `column_name`, assign an explicit
+  projection alias to one of them with `SelectProjection::expr_as(...)`.
 
 This avoids ambiguous DTOs for common names such as `id`, `created_at`, or `name`.
 

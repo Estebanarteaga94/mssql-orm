@@ -90,7 +90,7 @@ The derive generates:
 
 - connection constructors;
 - typed `DbSet<T>` fields;
-- public helpers for runtime state such as tenant and soft-delete values;
+- public helpers for runtime state such as audit, tenant and soft-delete values;
 - `MigrationModelSource` for snapshot export.
 
 ## Entity Policies
@@ -123,7 +123,10 @@ pub struct Todo {
 }
 ```
 
-Audit columns are metadata/schema columns. They do not become visible Rust fields on `Todo`, do not generate `Todo::created_at`, and are not auto-filled at runtime in the current release.
+Audit columns are metadata/schema columns. They do not become visible Rust
+fields on `Todo` and do not generate `Todo::created_at`. Audited write paths
+can fill missing audit-owned values at runtime through `AuditProvider`,
+`AuditRequestValues` or typed `with_audit_values(...)` values.
 
 ### Soft Delete
 
@@ -141,6 +144,8 @@ Audit columns are metadata/schema columns. They do not become visible Rust field
 
 - SQL Server is the only backend.
 - Public CRUD and Active Record are oriented around simple primary keys.
-- Audit runtime auto-fill is deferred.
-- Audit policy columns are not Rust fields.
+- Audit policy columns are not Rust fields and do not generate entity column symbols.
+- Audit runtime auto-fill covers the main `DbSet`, Active Record and
+  `save_changes()` insert/update paths when audited entities have missing
+  audit-owned values.
 - `migration.rs` is outside the current MVP.
