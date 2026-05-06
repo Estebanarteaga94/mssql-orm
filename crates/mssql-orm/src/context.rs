@@ -676,6 +676,11 @@ impl<E: Entity> DbSet<E> {
                 continue;
             }
 
+            if !tracked.has_persisted_changes() {
+                tracked.accept_current();
+                continue;
+            }
+
             let current: E = tracked.current_clone();
             let key = current.primary_key_value()?;
             let persisted = self
@@ -1538,9 +1543,9 @@ mod tests {
     use super::ensure_transactions_supported;
     use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
     use crate::{
-        AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPrimaryKey,
-        IncludeCollection, SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation,
-        SoftDeleteProvider, TenantScopedEntity, Tracked,
+        AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPersist,
+        EntityPersistMode, EntityPrimaryKey, IncludeCollection, SoftDeleteContext,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata,
@@ -2453,6 +2458,55 @@ mod tests {
         }
     }
 
+    impl EntityPersist for ExplicitLoadRoot {
+        fn persist_mode(&self) -> Result<EntityPersistMode, OrmError> {
+            Ok(EntityPersistMode::Update(SqlValue::I64(self.id)))
+        }
+
+        fn insert_values(&self) -> Vec<ColumnValue> {
+            Vec::new()
+        }
+
+        fn update_changes(&self) -> Vec<ColumnValue> {
+            Vec::new()
+        }
+
+        fn concurrency_token(&self) -> Result<Option<SqlValue>, OrmError> {
+            Ok(None)
+        }
+
+        fn sync_persisted(&mut self, persisted: Self) {
+            *self = persisted;
+        }
+    }
+
+    impl FromRow for ExplicitLoadRoot {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self {
+                id: 7,
+                children_loaded: 0,
+            })
+        }
+    }
+
+    impl AuditEntity for ExplicitLoadRoot {
+        fn audit_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl SoftDeleteEntity for ExplicitLoadRoot {
+        fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
+    impl TenantScopedEntity for ExplicitLoadRoot {
+        fn tenant_policy() -> Option<EntityPolicyMetadata> {
+            None
+        }
+    }
+
     impl IncludeCollection<ExplicitLoadChild> for ExplicitLoadRoot {
         fn set_included_collection(
             &mut self,
@@ -2843,6 +2897,28 @@ mod tests {
 
         assert_eq!(tracked.state(), crate::EntityState::Modified);
         assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn save_tracked_modified_skips_update_when_persisted_snapshot_is_unchanged() {
+        let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(ExplicitLoadRoot {
+            id: 7,
+            children_loaded: 0,
+        });
+        tracked
+            .attach_registry_loaded(registry.clone(), SqlValue::I64(7))
+            .unwrap();
+
+        tracked.current_mut().children_loaded = 1;
+
+        let saved = dbset.save_tracked_modified().await.unwrap();
+
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(tracked.original().children_loaded, 1);
+        assert_eq!(registry.entry_count(), 1);
     }
 
     #[test]

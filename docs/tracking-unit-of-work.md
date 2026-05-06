@@ -18,7 +18,9 @@ As of 2026-05-06, the first registry slice is implemented:
 - successful tracked inserts update the registry identity to the persisted
   primary key returned by SQL Server,
 - `DbSet::detach_tracked(...)` removes one wrapper from the current tracker,
-- `DbContext::clear_tracker()` removes all current tracker entries.
+- `DbContext::clear_tracker()` removes all current tracker entries,
+- `save_changes()` skips `Modified` entries when their original/current
+  snapshots produce the same `EntityPersist::update_changes()` payload.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -208,6 +210,14 @@ identity, computed, rowversion and non-updatable columns.
 Generated comparison belongs in `mssql-orm-macros` and public traits in
 `mssql-orm`. It must not be placed in `mssql-orm-query`,
 `mssql-orm-sqlserver` or `mssql-orm-tiberius`.
+
+The current implementation uses `EntityPersist::has_persisted_changes(...)`,
+whose default compares `original.update_changes()` with
+`current.update_changes()`. That gives structural change detection over the
+same generated updatable-column payload used by updates. It therefore ignores
+navigation wrappers, primary keys, identity columns, rowversion columns,
+computed columns and non-updatable columns, because those values are not part
+of `update_changes()`.
 
 ## Save Pipeline
 

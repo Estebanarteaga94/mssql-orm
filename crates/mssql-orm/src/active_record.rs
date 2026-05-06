@@ -21,6 +21,11 @@ pub trait EntityPersist: Entity {
     fn update_changes(&self) -> Vec<ColumnValue>;
     fn concurrency_token(&self) -> Result<Option<SqlValue>, OrmError>;
     fn sync_persisted(&mut self, persisted: Self);
+
+    #[doc(hidden)]
+    fn has_persisted_changes(original: &Self, current: &Self) -> bool {
+        original.update_changes() != current.update_changes()
+    }
 }
 
 /// Convenience Active Record style API for entities.

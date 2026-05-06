@@ -42,6 +42,7 @@
 //!   experimental tracker and relationship changes are not persisted as graph
 //!   updates
 
+use crate::EntityPersist;
 use core::ops::{Deref, DerefMut};
 use mssql_orm_core::{Entity, OrmError, SqlValue};
 use std::any::TypeId;
@@ -414,12 +415,29 @@ impl<E: Clone> RegisteredTracked<E> {
         }
     }
 
+    pub(crate) fn accept_current(&self) {
+        unsafe {
+            let inner = self.inner_address as *mut TrackedInner<E>;
+            (*inner).original = (*inner).current.clone();
+            (*inner).state = EntityState::Unchanged;
+        }
+    }
+
     pub(crate) fn sync_persisted(&self, persisted: E) {
         unsafe {
             let inner = self.inner_address as *mut TrackedInner<E>;
             (*inner).original = persisted.clone();
             (*inner).current = persisted;
             (*inner).state = EntityState::Unchanged;
+        }
+    }
+}
+
+impl<E: EntityPersist> RegisteredTracked<E> {
+    pub(crate) fn has_persisted_changes(&self) -> bool {
+        unsafe {
+            let inner = &*(self.inner_address as *const TrackedInner<E>);
+            E::has_persisted_changes(&inner.original, &inner.current)
         }
     }
 }
