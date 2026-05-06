@@ -44,7 +44,7 @@
 
 use crate::EntityPersist;
 use core::ops::{Deref, DerefMut};
-use mssql_orm_core::{Entity, OrmError, SqlValue};
+use mssql_orm_core::{Entity, EntityMetadata, OrmError, SqlValue};
 use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -88,6 +88,14 @@ pub struct TrackingRegistry {
 
 #[doc(hidden)]
 pub type TrackingRegistryHandle = Arc<TrackingRegistry>;
+
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveChangesOperationPlan {
+    added_order: Vec<usize>,
+    modified_order: Vec<usize>,
+    deleted_order: Vec<usize>,
+}
 
 struct TrackedInner<T> {
     original: T,
@@ -365,6 +373,90 @@ impl TrackingRegistry {
     }
 }
 
+#[doc(hidden)]
+pub fn save_changes_operation_plan(
+    entities: &[&'static EntityMetadata],
+) -> Result<SaveChangesOperationPlan, OrmError> {
+    let insert_order = topological_entity_order(entities)?;
+    let mut delete_order = insert_order.clone();
+    delete_order.reverse();
+
+    Ok(SaveChangesOperationPlan {
+        added_order: insert_order.clone(),
+        modified_order: insert_order,
+        deleted_order: delete_order,
+    })
+}
+
+impl SaveChangesOperationPlan {
+    pub fn added_order(&self) -> &[usize] {
+        &self.added_order
+    }
+
+    pub fn modified_order(&self) -> &[usize] {
+        &self.modified_order
+    }
+
+    pub fn deleted_order(&self) -> &[usize] {
+        &self.deleted_order
+    }
+}
+
+fn topological_entity_order(entities: &[&'static EntityMetadata]) -> Result<Vec<usize>, OrmError> {
+    let mut outgoing_edges = vec![Vec::<usize>::new(); entities.len()];
+    let mut incoming_edge_count = vec![0usize; entities.len()];
+
+    for (child_index, child) in entities.iter().enumerate() {
+        for foreign_key in child.foreign_keys {
+            if foreign_key.columns.len() != 1 || foreign_key.referenced_columns.len() != 1 {
+                continue;
+            }
+
+            let Some(parent_index) = entities.iter().position(|candidate| {
+                candidate.schema == foreign_key.referenced_schema
+                    && candidate.table == foreign_key.referenced_table
+            }) else {
+                continue;
+            };
+
+            if parent_index == child_index || outgoing_edges[parent_index].contains(&child_index) {
+                continue;
+            }
+
+            outgoing_edges[parent_index].push(child_index);
+            incoming_edge_count[child_index] += 1;
+        }
+    }
+
+    let mut order = Vec::with_capacity(entities.len());
+    let mut ready: Vec<usize> = incoming_edge_count
+        .iter()
+        .enumerate()
+        .filter_map(|(index, count)| (*count == 0).then_some(index))
+        .collect();
+
+    while !ready.is_empty() {
+        ready.sort_unstable();
+        let entity_index = ready.remove(0);
+        order.push(entity_index);
+
+        for child_index in &outgoing_edges[entity_index] {
+            incoming_edge_count[*child_index] -= 1;
+            if incoming_edge_count[*child_index] == 0 {
+                ready.push(*child_index);
+            }
+        }
+    }
+
+    if order.len() != entities.len() {
+        return Err(OrmError::new(
+            "save_changes cannot determine a deterministic order for tracked operations because the context contains a foreign-key cycle",
+        ));
+    }
+
+    Ok(order)
+}
+
 impl TrackingRegistryState {
     fn push_registration<E: Entity>(
         &mut self,
@@ -492,8 +584,13 @@ impl<T> Drop for Tracked<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::{EntityState, Tracked, TrackedEntityRegistration, TrackingRegistry};
-    use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata, SqlValue};
+    use super::{
+        EntityState, Tracked, TrackedEntityRegistration, TrackingRegistry,
+        save_changes_operation_plan,
+    };
+    use mssql_orm_core::{
+        Entity, EntityMetadata, ForeignKeyMetadata, PrimaryKeyMetadata, ReferentialAction, SqlValue,
+    };
     use std::sync::Arc;
 
     #[derive(Clone)]
@@ -511,6 +608,96 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &[],
+        navigations: &[],
+    };
+
+    static ORDER_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "Order",
+        schema: "sales",
+        table: "orders",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &[],
+    };
+
+    static ORDER_ITEM_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_order_items_orders",
+        &["order_id"],
+        "sales",
+        "orders",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
+
+    static ORDER_ITEM_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "OrderItem",
+        schema: "sales",
+        table: "order_items",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &ORDER_ITEM_FOREIGN_KEYS,
+        navigations: &[],
+    };
+
+    static CYCLE_A_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_cycle_a_cycle_b",
+        &["cycle_b_id"],
+        "dbo",
+        "cycle_b",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
+
+    static CYCLE_B_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_cycle_b_cycle_a",
+        &["cycle_a_id"],
+        "dbo",
+        "cycle_a",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
+
+    static CYCLE_A_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "CycleA",
+        schema: "dbo",
+        table: "cycle_a",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &CYCLE_A_FOREIGN_KEYS,
+        navigations: &[],
+    };
+
+    static CYCLE_B_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "CycleB",
+        schema: "dbo",
+        table: "cycle_b",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &CYCLE_B_FOREIGN_KEYS,
         navigations: &[],
     };
 
@@ -713,5 +900,38 @@ mod tests {
         }
 
         assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[test]
+    fn save_changes_plan_orders_added_parents_before_children() {
+        let plan = save_changes_operation_plan(&[
+            &ORDER_ITEM_METADATA,
+            &DUMMY_ENTITY_METADATA,
+            &ORDER_METADATA,
+        ])
+        .unwrap();
+
+        assert_eq!(plan.added_order(), &[1, 2, 0]);
+        assert_eq!(plan.modified_order(), &[1, 2, 0]);
+    }
+
+    #[test]
+    fn save_changes_plan_orders_deleted_children_before_parents() {
+        let plan = save_changes_operation_plan(&[
+            &ORDER_ITEM_METADATA,
+            &DUMMY_ENTITY_METADATA,
+            &ORDER_METADATA,
+        ])
+        .unwrap();
+
+        assert_eq!(plan.deleted_order(), &[0, 2, 1]);
+    }
+
+    #[test]
+    fn save_changes_plan_rejects_foreign_key_cycles() {
+        let error =
+            save_changes_operation_plan(&[&CYCLE_A_METADATA, &CYCLE_B_METADATA]).unwrap_err();
+
+        assert!(error.message().contains("foreign-key cycle"));
     }
 }

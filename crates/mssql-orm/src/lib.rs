@@ -64,7 +64,10 @@ pub use soft_delete_runtime::{
 };
 pub use tracking::{EntityState, Tracked};
 #[doc(hidden)]
-pub use tracking::{TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle};
+pub use tracking::{
+    SaveChangesOperationPlan, TrackedEntityRegistration, TrackingRegistry, TrackingRegistryHandle,
+    save_changes_operation_plan,
+};
 
 /// Provides entity metadata for code-first migration snapshot generation.
 ///

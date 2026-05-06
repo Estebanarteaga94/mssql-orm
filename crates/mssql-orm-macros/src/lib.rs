@@ -1414,41 +1414,66 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let save_added_steps = fields
+    let save_plan_entity_metadata = fields
         .iter()
         .map(|field| {
+            let entity_type = dbset_entity_type(&field.ty).ok_or_else(|| {
+                Error::new_spanned(
+                    &field.ty,
+                    "DbContext requiere campos con tipo DbSet<Entidad>",
+                )
+            })?;
+
+            Ok(quote! {
+                <#entity_type as ::mssql_orm::core::Entity>::metadata()
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let save_added_steps = fields
+        .iter()
+        .enumerate()
+        .map(|(field_index, field)| {
             let field_ident = field
                 .ident
                 .as_ref()
                 .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
             Ok(quote! {
-                saved += self.#field_ident.save_tracked_added().await?;
+                #field_index => {
+                    saved += self.#field_ident.save_tracked_added().await?;
+                }
             })
         })
         .collect::<Result<Vec<_>>>()?;
 
     let save_modified_steps = fields
         .iter()
-        .map(|field| {
+        .enumerate()
+        .map(|(field_index, field)| {
             let field_ident = field
                 .ident
                 .as_ref()
                 .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
             Ok(quote! {
-                saved += self.#field_ident.save_tracked_modified().await?;
+                #field_index => {
+                    saved += self.#field_ident.save_tracked_modified().await?;
+                }
             })
         })
         .collect::<Result<Vec<_>>>()?;
 
     let save_deleted_steps = fields
         .iter()
-        .map(|field| {
+        .enumerate()
+        .map(|(field_index, field)| {
             let field_ident = field
                 .ident
                 .as_ref()
                 .ok_or_else(|| Error::new_spanned(field, "DbContext requiere campos nombrados"))?;
             Ok(quote! {
-                saved += self.#field_ident.save_tracked_deleted().await?;
+                #field_index => {
+                    saved += self.#field_ident.save_tracked_deleted().await?;
+                }
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -1703,9 +1728,31 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 #(#save_changes_bounds,)*
             {
                 let mut saved = 0usize;
-                #(#save_added_steps)*
-                #(#save_modified_steps)*
-                #(#save_deleted_steps)*
+                let save_plan = ::mssql_orm::save_changes_operation_plan(&[
+                    #(#save_plan_entity_metadata),*
+                ])?;
+
+                for entity_index in save_plan.added_order() {
+                    match *entity_index {
+                        #(#save_added_steps)*
+                        _ => {}
+                    }
+                }
+
+                for entity_index in save_plan.modified_order() {
+                    match *entity_index {
+                        #(#save_modified_steps)*
+                        _ => {}
+                    }
+                }
+
+                for entity_index in save_plan.deleted_order() {
+                    match *entity_index {
+                        #(#save_deleted_steps)*
+                        _ => {}
+                    }
+                }
+
                 Ok(saved)
             }
         }

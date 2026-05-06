@@ -20,7 +20,11 @@ As of 2026-05-06, the first registry slice is implemented:
 - `DbSet::detach_tracked(...)` removes one wrapper from the current tracker,
 - `DbContext::clear_tracker()` removes all current tracker entries,
 - `save_changes()` skips `Modified` entries when their original/current
-  snapshots produce the same `EntityPersist::update_changes()` payload.
+  snapshots produce the same `EntityPersist::update_changes()` payload,
+- `save_changes()` plans tracked operations deterministically from context
+  entity metadata: `Added` and `Modified` run parent tables before child tables
+  for simple foreign keys present in the context, and `Deleted` runs the same
+  order in reverse so child tables are deleted before parent tables.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -233,10 +237,14 @@ Per entity type:
 5. sync successful entries back into the registry,
 6. detach entries deleted successfully.
 
-The first stable implementation can keep the current coarse order
-`Added -> Modified -> Deleted` by context field order. The later operation
-ordering task must replace this with FK-aware deterministic ordering before the
-experimental label is removed.
+The current implementation keeps the phase order `Added -> Modified ->
+Deleted`, but no longer relies on raw context field order inside each phase.
+`#[derive(DbContext)]` asks `mssql-orm` for a metadata-based operation plan.
+For simple foreign keys between entities present in the same context, inserts
+and updates run parent tables before child tables and deletes run child tables
+before parent tables. Ties are resolved by the original context field order.
+Foreign-key cycles are rejected with `OrmError`. Composite foreign keys and
+self-references remain outside this ordering guarantee in the current slice.
 
 ## Transaction Boundary
 
