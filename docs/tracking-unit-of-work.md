@@ -7,6 +7,21 @@ context-owned tracker.
 The current implementation still depends on live `Tracked<T>` wrappers. This
 document does not claim that the runtime has already been stabilized.
 
+## Implementation Status
+
+As of 2026-05-06, the first registry slice is implemented:
+
+- loaded tracked entities are registered with identity derived from entity
+  type, schema, table and single-column primary key value,
+- duplicate loaded identities in one context are rejected with `OrmError`,
+- added entities use temporary local identities,
+- successful tracked inserts update the registry identity to the persisted
+  primary key returned by SQL Server.
+
+The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
+and state. Removing the wrapper-lifetime dependency remains assigned to the
+next ownership/state transition tasks.
+
 ## Goal
 
 `save_changes()` must persist changes owned by the `DbContext`, not by the

@@ -23,6 +23,12 @@
 //! Observable limits in the current stage:
 //! - only wrappers still alive participate in `save_changes()`
 //! - mutable access marks `Unchanged` entities as `Modified` immediately
+//! - loaded entities are registered with a deterministic identity made from
+//!   entity type, schema, table and single-column primary key value
+//! - registering the same loaded entity identity twice in one context returns
+//!   an `OrmError` instead of keeping silent duplicates
+//! - added entities use temporary local identities until a successful insert
+//!   returns their persisted primary key
 //! - removing a tracked `Added` entity cancels the pending insert locally
 //! - successful tracked deletes unregister the wrapper from the internal registry
 //! - rowversion conflicts are still surfaced as `OrmError::ConcurrencyConflict`
@@ -32,7 +38,7 @@
 //!   updates
 
 use core::ops::{Deref, DerefMut};
-use mssql_orm_core::Entity;
+use mssql_orm_core::{Entity, OrmError, SqlValue};
 use std::any::TypeId;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -86,16 +92,33 @@ struct TrackedInner<T> {
 #[derive(Debug, Default)]
 struct TrackingRegistryState {
     next_registration_id: usize,
+    next_temporary_identity: u64,
     entries: Vec<TrackingRegistration>,
 }
 
 #[derive(Debug)]
 struct TrackingRegistration {
     registration_id: usize,
+    identity: TrackedIdentity,
     entity_type_id: TypeId,
     entity_rust_name: &'static str,
     inner_address: usize,
     state_reader: unsafe fn(*const ()) -> EntityState,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TrackedIdentity {
+    entity_type_id: TypeId,
+    entity_rust_name: &'static str,
+    schema: &'static str,
+    table: &'static str,
+    primary_key: TrackedPrimaryKeyIdentity,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum TrackedPrimaryKeyIdentity {
+    Simple(SqlValue),
+    Temporary(u64),
 }
 
 #[derive(Clone, Copy)]
@@ -187,10 +210,26 @@ impl<T: Clone> Tracked<T> {
 }
 
 impl<T: Entity> Tracked<T> {
-    pub(crate) fn attach_registry(&mut self, registry: TrackingRegistryHandle) {
-        let registration_id = registry.register(self);
+    pub(crate) fn attach_registry_loaded(
+        &mut self,
+        registry: TrackingRegistryHandle,
+        key: SqlValue,
+    ) -> Result<(), OrmError> {
+        let registration_id = registry.register_loaded(self, key)?;
         self.registration_id = Some(registration_id);
         self.tracking_registry = Some(registry);
+        Ok(())
+    }
+
+    pub(crate) fn attach_registry_added(&mut self, registry: TrackingRegistryHandle) {
+        let registration_id = registry.register_added(self);
+        self.registration_id = Some(registration_id);
+        self.tracking_registry = Some(registry);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn attach_registry(&mut self, registry: TrackingRegistryHandle) {
+        self.attach_registry_added(registry);
     }
 }
 
@@ -209,18 +248,33 @@ impl<T> DerefMut for Tracked<T> {
 }
 
 impl TrackingRegistry {
-    pub(crate) fn register<E: Entity>(&self, tracked: &Tracked<E>) -> usize {
+    pub(crate) fn register_loaded<E: Entity>(
+        &self,
+        tracked: &Tracked<E>,
+        key: SqlValue,
+    ) -> Result<usize, OrmError> {
+        let identity =
+            TrackedIdentity::for_entity::<E>(TrackedPrimaryKeyIdentity::Simple(key.clone()));
         let mut state = self.state.lock().expect("tracking registry mutex poisoned");
-        let registration_id = state.next_registration_id;
-        state.next_registration_id += 1;
-        state.entries.push(TrackingRegistration {
-            registration_id,
-            entity_type_id: TypeId::of::<E>(),
-            entity_rust_name: E::metadata().rust_name,
-            inner_address: tracked.inner.as_ref() as *const TrackedInner<E> as usize,
-            state_reader: state_reader::<E>,
-        });
-        registration_id
+        if state.entries.iter().any(|entry| entry.identity == identity) {
+            return Err(OrmError::new(format!(
+                "entity `{}` with primary key value `{:?}` is already tracked in this context",
+                E::metadata().rust_name,
+                key
+            )));
+        }
+
+        Ok(state.push_registration(tracked, identity))
+    }
+
+    pub(crate) fn register_added<E: Entity>(&self, tracked: &Tracked<E>) -> usize {
+        let mut state = self.state.lock().expect("tracking registry mutex poisoned");
+        let temporary_identity = state.next_temporary_identity;
+        state.next_temporary_identity += 1;
+        let identity = TrackedIdentity::for_entity::<E>(TrackedPrimaryKeyIdentity::Temporary(
+            temporary_identity,
+        ));
+        state.push_registration(tracked, identity)
     }
 
     pub(crate) fn unregister(&self, registration_id: usize) {
@@ -245,6 +299,36 @@ impl TrackingRegistry {
             .collect()
     }
 
+    pub(crate) fn update_persisted_identity<E: Entity>(
+        &self,
+        registration_id: usize,
+        key: SqlValue,
+    ) -> Result<(), OrmError> {
+        let identity =
+            TrackedIdentity::for_entity::<E>(TrackedPrimaryKeyIdentity::Simple(key.clone()));
+        let mut state = self.state.lock().expect("tracking registry mutex poisoned");
+
+        if state
+            .entries
+            .iter()
+            .any(|entry| entry.registration_id != registration_id && entry.identity == identity)
+        {
+            return Err(OrmError::new(format!(
+                "entity `{}` with primary key value `{:?}` is already tracked in this context",
+                E::metadata().rust_name,
+                key
+            )));
+        }
+
+        let entry = state
+            .entries
+            .iter_mut()
+            .find(|entry| entry.registration_id == registration_id)
+            .ok_or_else(|| OrmError::new("tracked entity registration was not found"))?;
+        entry.identity = identity;
+        Ok(())
+    }
+
     pub fn entry_count(&self) -> usize {
         self.state
             .lock()
@@ -264,6 +348,39 @@ impl TrackingRegistry {
                 state: unsafe { (entry.state_reader)(entry.inner_address as *const ()) },
             })
             .collect()
+    }
+}
+
+impl TrackingRegistryState {
+    fn push_registration<E: Entity>(
+        &mut self,
+        tracked: &Tracked<E>,
+        identity: TrackedIdentity,
+    ) -> usize {
+        let registration_id = self.next_registration_id;
+        self.next_registration_id += 1;
+        self.entries.push(TrackingRegistration {
+            registration_id,
+            identity,
+            entity_type_id: TypeId::of::<E>(),
+            entity_rust_name: E::metadata().rust_name,
+            inner_address: tracked.inner.as_ref() as *const TrackedInner<E> as usize,
+            state_reader: state_reader::<E>,
+        });
+        registration_id
+    }
+}
+
+impl TrackedIdentity {
+    fn for_entity<E: Entity>(primary_key: TrackedPrimaryKeyIdentity) -> Self {
+        let metadata = E::metadata();
+        Self {
+            entity_type_id: TypeId::of::<E>(),
+            entity_rust_name: metadata.rust_name,
+            schema: metadata.schema,
+            table: metadata.table,
+            primary_key,
+        }
     }
 }
 
@@ -345,7 +462,7 @@ impl<T> Drop for Tracked<T> {
 #[cfg(test)]
 mod tests {
     use super::{EntityState, Tracked, TrackedEntityRegistration, TrackingRegistry};
-    use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata};
+    use mssql_orm_core::{Entity, EntityMetadata, PrimaryKeyMetadata, SqlValue};
     use std::sync::Arc;
 
     #[derive(Clone)]
@@ -447,7 +564,9 @@ mod tests {
         let registry = Arc::new(TrackingRegistry::default());
         let mut tracked = Tracked::from_loaded(DummyEntity);
 
-        tracked.attach_registry(Arc::clone(&registry));
+        tracked
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(7))
+            .unwrap();
 
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(
@@ -474,6 +593,56 @@ mod tests {
                 state: EntityState::Added,
             }]
         );
+    }
+
+    #[test]
+    fn tracking_registry_rejects_duplicate_loaded_identity() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut first = Tracked::from_loaded(DummyEntity);
+        let mut second = Tracked::from_loaded(DummyEntity);
+
+        first
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(7))
+            .unwrap();
+        let error = second
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(7))
+            .unwrap_err();
+
+        assert_eq!(registry.entry_count(), 1);
+        assert!(error.message().contains("already tracked"));
+    }
+
+    #[test]
+    fn tracking_registry_allows_multiple_added_entities_with_temporary_identities() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut first = Tracked::from_added(DummyEntity);
+        let mut second = Tracked::from_added(DummyEntity);
+
+        first.attach_registry_added(Arc::clone(&registry));
+        second.attach_registry_added(Arc::clone(&registry));
+
+        assert_eq!(registry.entry_count(), 2);
+    }
+
+    #[test]
+    fn tracking_registry_updates_temporary_identity_to_persisted_identity() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_added(DummyEntity);
+        tracked.attach_registry_added(Arc::clone(&registry));
+
+        registry
+            .update_persisted_identity::<DummyEntity>(
+                tracked.registration_id.expect("registered"),
+                SqlValue::I64(11),
+            )
+            .unwrap();
+
+        let mut duplicate = Tracked::from_loaded(DummyEntity);
+        let error = duplicate
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(11))
+            .unwrap_err();
+
+        assert!(error.message().contains("already tracked"));
     }
 
     #[test]

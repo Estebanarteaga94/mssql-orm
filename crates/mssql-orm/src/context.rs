@@ -530,13 +530,15 @@ impl<E: Entity> DbSet<E> {
         E: Clone + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
     {
+        let key = key.to_sql_value();
         let mut tracked = self
-            .find(key)
+            .query_with(self.find_select_query_sql_value(key.clone())?)
+            .first()
             .await
             .map(|entity| entity.map(Tracked::from_loaded))?;
 
         if let Some(entity) = tracked.as_mut() {
-            entity.attach_registry(Arc::clone(&self.tracking_registry));
+            entity.attach_registry_loaded(Arc::clone(&self.tracking_registry), key)?;
         }
 
         Ok(tracked)
@@ -549,7 +551,7 @@ impl<E: Entity> DbSet<E> {
         E: Clone,
     {
         let mut tracked = Tracked::from_added(entity);
-        tracked.attach_registry(Arc::clone(&self.tracking_registry));
+        tracked.attach_registry_added(Arc::clone(&self.tracking_registry));
         tracked
     }
 
@@ -569,7 +571,13 @@ impl<E: Entity> DbSet<E> {
     #[doc(hidden)]
     pub async fn save_tracked_added(&self) -> Result<usize, OrmError>
     where
-        E: AuditEntity + Clone + EntityPersist + FromRow + Send + TenantScopedEntity,
+        E: AuditEntity
+            + Clone
+            + EntityPersist
+            + EntityPrimaryKey
+            + FromRow
+            + Send
+            + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
         let mut saved = 0;
@@ -581,8 +589,11 @@ impl<E: Entity> DbSet<E> {
 
             let current: E = tracked.current_clone();
             let persisted = self.insert_entity(&current).await?;
+            let persisted_key = persisted.primary_key_value()?;
 
             tracked.sync_persisted(persisted);
+            self.tracking_registry
+                .update_persisted_identity::<E>(tracked.registration_id(), persisted_key)?;
             saved += 1;
         }
 
