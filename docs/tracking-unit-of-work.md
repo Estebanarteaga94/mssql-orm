@@ -24,7 +24,10 @@ As of 2026-05-06, the first registry slice is implemented:
 - `save_changes()` plans tracked operations deterministically from context
   entity metadata: `Added` and `Modified` run parent tables before child tables
   for simple foreign keys present in the context, and `Deleted` runs the same
-  order in reverse so child tables are deleted before parent tables.
+  order in reverse so child tables are deleted before parent tables,
+- `save_changes()` opens an internal transaction when the shared connection is
+  not already inside `db.transaction(...)`, and reuses the outer transaction
+  when one is active.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -251,15 +254,25 @@ self-references remain outside this ordering guarantee in the current slice.
 The unit of work must be compatible with both direct connections and
 transaction contexts.
 
-Until the transaction task in Etapa 21 is implemented, this document chooses the
-minimal design rule:
+The transaction slice of Etapa 21 is implemented for direct shared
+connections:
 
 - registry state is shared across context clones created by policy helpers and
   `db.transaction(...)`,
 - save execution must keep using each `DbSet`'s existing `SharedConnection`,
-- no SQL execution is introduced inside `TrackingRegistry`.
+- no SQL execution is introduced inside `TrackingRegistry`,
+- `SharedConnection` tracks active transaction depth in runtime state shared by
+  policy-derived connection handles,
+- generated `save_changes()` starts `db.transaction(...)` internally when no
+  transaction is active,
+- generated `save_changes()` executes its persistence body directly when an
+  outer `db.transaction(...)` is already active, avoiding nested `BEGIN
+  TRANSACTION` calls.
 
-Atomicity is finalized by the later transaction task.
+This guarantees atomicity for the current pointer-backed `save_changes()`
+execution on direct connections. Contexts backed by pools remain blocked for
+transactions until Etapa 22 pins one physical pooled connection for the entire
+transaction closure.
 
 ## Public API Surface
 

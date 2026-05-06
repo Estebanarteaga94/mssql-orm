@@ -11,7 +11,10 @@ use crate::{
 };
 use core::future::Future;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use crate::{EntityPersist, EntityPrimaryKey};
 use mssql_orm_core::{
@@ -77,6 +80,7 @@ struct SharedConnectionRuntime {
     soft_delete_provider: Option<Arc<dyn SoftDeleteProvider>>,
     soft_delete_request_values: Option<Arc<SoftDeleteRequestValues>>,
     active_tenant: Option<ActiveTenant>,
+    transaction_depth: Arc<AtomicUsize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,6 +136,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -149,6 +154,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -172,6 +178,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -189,6 +196,7 @@ impl SharedConnection {
                 soft_delete_provider: Some(provider),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -207,6 +215,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: Some(Arc::new(request_values)),
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -231,6 +240,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: None,
                 active_tenant: self.runtime.active_tenant.clone(),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -249,6 +259,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: Some(ActiveTenant::from_context(&tenant)),
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -263,6 +274,7 @@ impl SharedConnection {
                 soft_delete_provider: self.runtime.soft_delete_provider.clone(),
                 soft_delete_request_values: self.runtime.soft_delete_request_values.clone(),
                 active_tenant: None,
+                transaction_depth: Arc::clone(&self.runtime.transaction_depth),
             }),
         }
     }
@@ -289,6 +301,25 @@ impl SharedConnection {
             #[cfg(feature = "pool-bb8")]
             SharedConnectionInner::Pool(_) => SharedConnectionKind::Pool,
         }
+    }
+
+    #[doc(hidden)]
+    pub fn is_transaction_active(&self) -> bool {
+        self.runtime.transaction_depth.load(Ordering::SeqCst) > 0
+    }
+
+    fn enter_transaction_scope(&self) {
+        self.runtime
+            .transaction_depth
+            .fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn exit_transaction_scope(&self) {
+        let _ = self.runtime.transaction_depth.fetch_update(
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+            |depth| Some(depth.saturating_sub(1)),
+        );
     }
 
     #[allow(dead_code)]
@@ -422,6 +453,7 @@ pub trait DbContext: Sized {
                 let mut connection = shared_connection.lock().await?;
                 connection.begin_transaction_scope().await?;
             }
+            shared_connection.enter_transaction_scope();
 
             let transaction_context = Self::from_shared_connection(shared_connection.clone());
             let result = operation(transaction_context).await;
@@ -429,12 +461,16 @@ pub trait DbContext: Sized {
             match result {
                 Ok(value) => {
                     let mut connection = shared_connection.lock().await?;
-                    connection.commit_transaction().await?;
+                    let commit_result = connection.commit_transaction().await;
+                    shared_connection.exit_transaction_scope();
+                    commit_result?;
                     Ok(value)
                 }
                 Err(error) => {
                     let mut connection = shared_connection.lock().await?;
-                    connection.rollback_transaction().await?;
+                    let rollback_result = connection.rollback_transaction().await;
+                    shared_connection.exit_transaction_scope();
+                    rollback_result?;
                     Err(error)
                 }
             }
@@ -1541,7 +1577,10 @@ pub fn connect_shared_from_pool(pool: MssqlPool) -> SharedConnection {
 mod tests {
     #[cfg(feature = "pool-bb8")]
     use super::ensure_transactions_supported;
-    use super::{ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind};
+    use super::{
+        ActiveTenant, DbContext, DbContextEntitySet, DbSet, SharedConnectionKind,
+        SharedConnectionRuntime,
+    };
     use crate::{
         AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPersist,
         EntityPersistMode, EntityPrimaryKey, IncludeCollection, SoftDeleteContext,
@@ -2644,6 +2683,23 @@ mod tests {
         assert_eq!(
             super::ensure_transactions_supported(SharedConnectionKind::Direct),
             Ok(())
+        );
+    }
+
+    #[test]
+    fn transaction_depth_is_shared_across_runtime_clones() {
+        let runtime = SharedConnectionRuntime::default();
+        let cloned_runtime = runtime.clone();
+
+        runtime
+            .transaction_depth
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        assert_eq!(
+            cloned_runtime
+                .transaction_depth
+                .load(std::sync::atomic::Ordering::SeqCst),
+            1
         );
     }
 

@@ -1723,7 +1723,7 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::clear_tracker(self)
             }
 
-            pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
+            async fn __mssql_orm_save_changes_without_transaction(&self) -> Result<usize, ::mssql_orm::core::OrmError>
             where
                 #(#save_changes_bounds,)*
             {
@@ -1754,6 +1754,22 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 }
 
                 Ok(saved)
+            }
+
+            pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
+            where
+                #(#save_changes_bounds,)*
+            {
+                let shared_connection =
+                    <Self as ::mssql_orm::DbContext>::shared_connection(self);
+
+                if shared_connection.is_transaction_active() {
+                    self.__mssql_orm_save_changes_without_transaction().await
+                } else {
+                    self.transaction(|tx| async move {
+                        tx.__mssql_orm_save_changes_without_transaction().await
+                    }).await
+                }
             }
         }
 
