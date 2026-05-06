@@ -26,7 +26,7 @@ blocked surfaces and adding typed aggregations. These items are tracked in
 
 - Audit public surfaces marked as experimental, pending verification, or deferred. Initial inventory is recorded in `docs/stability-audit.md`.
 - Define stability criteria for `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes()`. The criteria are recorded in `docs/tracking-stability.md`.
-- Replace the current experimental tracking assumptions with stable unit-of-work guarantees, identity handling, deterministic operation ordering, transaction behavior, policy integration, and public tests.
+- Replace the current experimental tracking assumptions with stable unit-of-work guarantees, transaction behavior, policy integration, and public tests. First stabilization slices are already implemented for deterministic identity registration, explicit detach/clear behavior, structural no-op detection for `Modified` entities, and deterministic `save_changes()` operation ordering for simple foreign keys.
 - Design a context-owned identity map for navigation loading so root queries, includes and explicit loads can reuse one canonical tracked entity per primary key.
 - Stabilize transactions for contexts created from pools by pinning one physical connection for the full transaction closure.
 - Add a safe `mssql-orm-cli database downgrade` workflow using existing `down.sql`, migration history and checksums, with explicit targets and clear errors for non-reversible migrations.
@@ -104,7 +104,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
   - `entity.save(&db)`
   - `entity.delete(&db)`
 - Optimistic concurrency with `rowversion` and `OrmError::ConcurrencyConflict`.
-- Experimental change tracking with `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes`.
+- Experimental change tracking with `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes`. The current implementation rejects duplicate tracked identities for loaded rows, supports explicit detach/clear, skips no-op `Modified` updates based on persisted update payloads, and orders `save_changes()` phases deterministically for simple foreign keys.
 - Navigation loading is intentionally not a graph-tracking feature yet: included or explicitly loaded related entities are not registered automatically, and relationship changes are not persisted by `save_changes()`.
 - Code-first migrations:
   - `ModelSnapshot`
@@ -162,7 +162,7 @@ Initial code-first ORM release for Rust and SQL Server, built on top of Tiberius
 - High-level typed aggregations and `group_by` are not available in `0.1.0`; aggregation APIs are planned for `0.2.0`.
 - `count()` does not preserve joins in this release.
 - Public CRUD, Active Record, and tracking are still oriented around simple primary keys.
-- `save_changes()` and `Tracked<T>` remain experimental in `0.1.0`; stabilization is tracked as planned Stage 21 work.
+- `save_changes()` and `Tracked<T>` remain experimental in `0.1.0`; Stage 21 has first stabilization slices implemented, but stable ownership, transaction semantics, full policy validation, primary-key limits, public test coverage, and final documentation are still required before removing the experimental label.
 - Savepoints are not available.
 - `db.transaction(...)` must not be treated as supported on contexts created from `from_pool(...)` until a physical connection can be pinned for the full closure.
 - `AuditProvider` has a public runtime contract, audit-owned column metadata, typed `with_audit_values(Audit { ... })`, `DbContext`/`SharedConnection` transport, and insert/update auto-fill through the main `DbSet`, Active Record, and `save_changes()` paths.
