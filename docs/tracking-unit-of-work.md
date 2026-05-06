@@ -16,11 +16,38 @@ As of 2026-05-06, the first registry slice is implemented:
 - duplicate loaded identities in one context are rejected with `OrmError`,
 - added entities use temporary local identities,
 - successful tracked inserts update the registry identity to the persisted
-  primary key returned by SQL Server.
+  primary key returned by SQL Server,
+- `DbSet::detach_tracked(...)` removes one wrapper from the current tracker,
+- `DbContext::clear_tracker()` removes all current tracker entries.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
 next ownership/state transition tasks.
+
+## Current Detach And State Policy
+
+The current experimental policy is explicit:
+
+- `Unchanged`: `save_changes()` ignores the entry. `detach_tracked(...)`,
+  `clear_tracker()` or dropping the wrapper removes it with no SQL.
+- `Modified`: `save_changes()` persists through the normal update pipeline.
+  `detach_tracked(...)`, `clear_tracker()` or dropping the wrapper discards the
+  pending update from the tracker; the wrapper keeps its `Modified` state.
+- `Added`: `save_changes()` persists through the normal insert pipeline and
+  syncs the registry identity to the persisted key. `remove_tracked(...)`
+  cancels the pending insert by marking the wrapper `Deleted` and detaching it.
+  `detach_tracked(...)`, `clear_tracker()` or dropping the wrapper discards the
+  pending insert without SQL.
+- `Deleted`: `save_changes()` persists through the normal delete pipeline,
+  using soft-delete when the entity declares that policy, and unregisters the
+  entry after success. `detach_tracked(...)`, `clear_tracker()` or dropping the
+  wrapper discards the pending delete from the tracker; the wrapper keeps its
+  `Deleted` state.
+
+Because the registry is still pointer-backed, dropping a wrapper remains
+equivalent to detach in this slice. This behavior is documented for the current
+experimental implementation only. The stable target remains registry-owned
+snapshots where dropping a handle does not discard pending work.
 
 ## Goal
 

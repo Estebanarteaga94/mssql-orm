@@ -1694,6 +1694,10 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::health_check(self).await
             }
 
+            pub fn clear_tracker(&self) {
+                <Self as ::mssql_orm::DbContext>::clear_tracker(self)
+            }
+
             pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
             where
                 #(#save_changes_bounds,)*

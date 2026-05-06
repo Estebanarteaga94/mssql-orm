@@ -362,6 +362,15 @@ pub trait DbContext: Sized {
     #[doc(hidden)]
     fn tracking_registry(&self) -> TrackingRegistryHandle;
 
+    /// Clears every experimental tracking entry currently registered on this
+    /// context.
+    ///
+    /// This does not execute SQL. Pending inserts, updates and deletes are
+    /// discarded from the unit of work represented by the current tracker.
+    fn clear_tracker(&self) {
+        self.tracking_registry().clear();
+    }
+
     /// Executes the configured SQL Server health check through the current
     /// connection handle.
     fn health_check(&self) -> impl Future<Output = Result<(), OrmError>> + Send {
@@ -566,6 +575,15 @@ impl<E: Entity> DbSet<E> {
         if was_added {
             tracked.detach_registry();
         }
+    }
+
+    /// Detaches a tracked wrapper from this context's experimental tracker.
+    ///
+    /// Detach does not execute SQL and does not reset the wrapper state. It
+    /// only removes the entry from the context unit of work so later
+    /// `save_changes()` calls ignore it.
+    pub fn detach_tracked(&self, tracked: &mut Tracked<E>) {
+        tracked.detach_registry();
     }
 
     #[doc(hidden)]
@@ -2810,6 +2828,20 @@ mod tests {
         dbset.remove_tracked(&mut tracked);
 
         assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[test]
+    fn dbset_detach_tracked_discards_pending_modified_entry() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(TestEntity);
+        tracked.attach_registry(registry.clone());
+        tracked.current_mut();
+
+        dbset.detach_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), crate::EntityState::Modified);
         assert_eq!(registry.entry_count(), 0);
     }
 

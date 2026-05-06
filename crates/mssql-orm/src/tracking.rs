@@ -29,6 +29,11 @@
 //!   an `OrmError` instead of keeping silent duplicates
 //! - added entities use temporary local identities until a successful insert
 //!   returns their persisted primary key
+//! - explicit detach removes an entry from the registry without touching the
+//!   database
+//! - clearing the tracker removes every current registry entry
+//! - dropping a wrapper is still equivalent to detach in this experimental
+//!   pointer-backed slice
 //! - removing a tracked `Added` entity cancels the pending insert locally
 //! - successful tracked deletes unregister the wrapper from the internal registry
 //! - rowversion conflicts are still surfaced as `OrmError::ConcurrencyConflict`
@@ -282,6 +287,14 @@ impl TrackingRegistry {
         state
             .entries
             .retain(|entry| entry.registration_id != registration_id);
+    }
+
+    pub fn clear(&self) {
+        self.state
+            .lock()
+            .expect("tracking registry mutex poisoned")
+            .entries
+            .clear();
     }
 
     pub(crate) fn tracked_for<E: Entity>(&self) -> Vec<RegisteredTracked<E>> {
@@ -643,6 +656,20 @@ mod tests {
             .unwrap_err();
 
         assert!(error.message().contains("already tracked"));
+    }
+
+    #[test]
+    fn tracking_registry_clear_removes_all_entries() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut first = Tracked::from_added(DummyEntity);
+        let mut second = Tracked::from_added(DummyEntity);
+        first.attach_registry_added(Arc::clone(&registry));
+        second.attach_registry_added(Arc::clone(&registry));
+
+        registry.clear();
+
+        assert_eq!(registry.entry_count(), 0);
+        assert!(registry.registrations().is_empty());
     }
 
     #[test]
