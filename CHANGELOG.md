@@ -10,7 +10,7 @@ Planned follow-up release focused on stabilizing existing experimental or
 blocked surfaces and adding typed aggregations. These items are tracked in
 `docs/tasks.md`.
 
-### Navigation Properties
+### Etapa 20: Navigation Properties
 
 - Navigation properties are developed for the `0.2.0` surface, not for
   `0.1.0`, even though the implementation already exists in the repository.
@@ -52,17 +52,32 @@ blocked surfaces and adding typed aggregations. These items are tracked in
 - Keep lazy loading as opt-in state only unless a future explicit async loader
   with a context-bearing value is designed and validated.
 
-### Planned Stabilization Work
+### Etapa 21: Tracking Stabilization
 
 - Audit public surfaces marked as experimental, pending verification, or deferred. Initial inventory is recorded in `docs/stability-audit.md`.
 - Define stability criteria for `Tracked<T>`, `EntityState`, `find_tracked`, `add_tracked`, `remove_tracked`, and `save_changes()`. The criteria are recorded in `docs/tracking-stability.md`.
 - Replace the current experimental tracking assumptions with stable unit-of-work guarantees, transaction behavior, policy integration, and public tests. First stabilization slices are already implemented for deterministic identity registration, explicit detach/clear behavior, structural no-op detection for `Modified` entities, and deterministic `save_changes()` operation ordering for simple foreign keys.
 - Design a context-owned identity map for navigation loading so root queries, includes and explicit loads can reuse one canonical tracked entity per primary key.
-- Stabilize transactions for contexts created from pools by pinning one physical connection for the full transaction closure.
-- Add a safe `mssql-orm-cli database downgrade` workflow using existing `down.sql`, migration history and checksums, with explicit targets and clear errors for non-reversible migrations.
+- Integrate stable `save_changes()` with transaction semantics, optimistic concurrency, `soft_delete`, `tenant`, audit providers, Active Record, explicit state APIs, primary-key limits, public tests, rustdoc, and final documentation.
 - Revalidate `examples/todo-app` against a real SQL Server before removing any `Pending verification` documentation.
 
-### Planned Aggregation Work
+### Etapa 22: Transactions From Pool
+
+- Stabilize transactions for contexts created from pools by pinning one physical connection for the full transaction closure.
+- Preserve the current `db.transaction(...)` API for direct connections while adding support for `SharedConnection::Pool`.
+- Ensure timeouts, tracing, disabled retry inside transactions, audit, tenant, `soft_delete`, and tracking all use the pinned transactional connection.
+- Validate commit, rollback, and error behavior with focused unit coverage and optional real SQL Server integration tests.
+- Update transactions documentation and release notes only after the pooled transaction path is validated.
+
+### Etapa 23: Migration Downgrade
+
+- Add a safe `mssql-orm-cli database downgrade` workflow using existing `down.sql`, migration history and checksums, with explicit targets and clear errors for non-reversible migrations.
+- Require an explicit target, validate checksums, run downgrade scripts in reverse migration order, and execute inside transactions.
+- Support script generation first and optional `database downgrade --execute` through the Tiberius adapter.
+- Fail clearly when `down.sql` is missing, checksum validation fails, migrations are missing, or a migration has no reversible payload.
+- Cover filesystem/CLI behavior with unit tests and optional real SQL Server downgrade validation.
+
+### Etapa 24: Typed Aggregations
 
 - Add typed aggregation APIs for `exists` / `any`, `sum`, `avg`, `min`, and `max`.
 - Add grouped aggregate queries with `group_by`, explicit aliases, DTO materialization through `FromRow`, and SQL Server `GROUP BY` / basic `HAVING` support.
