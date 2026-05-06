@@ -7,6 +7,9 @@ and `save_changes()` can stop being documented as experimental.
 It does not stabilize the current implementation. It is the acceptance
 contract for the remaining Etapa 21 work.
 
+The concrete unit-of-work design for the next implementation slices is defined
+in [`tracking-unit-of-work.md`](tracking-unit-of-work.md).
+
 ## Current Experimental Baseline
 
 The current implementation is useful but intentionally narrow:
