@@ -750,6 +750,9 @@ mod tests {
     #[derive(Clone)]
     struct DummyEntity;
 
+    #[derive(Clone)]
+    struct DummyEntityAlias;
+
     static DUMMY_ENTITY_METADATA: EntityMetadata = EntityMetadata {
         rust_name: "DummyEntity",
         schema: "dbo",
@@ -881,6 +884,12 @@ mod tests {
     };
 
     impl Entity for DummyEntity {
+        fn metadata() -> &'static EntityMetadata {
+            &DUMMY_ENTITY_METADATA
+        }
+    }
+
+    impl Entity for DummyEntityAlias {
         fn metadata() -> &'static EntityMetadata {
             &DUMMY_ENTITY_METADATA
         }
@@ -1103,6 +1112,22 @@ mod tests {
 
         assert_eq!(registry.entry_count(), 1);
         assert!(error.message().contains("already tracked"));
+    }
+
+    #[test]
+    fn tracking_registry_scopes_loaded_identity_by_rust_type() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut first = Tracked::from_loaded(DummyEntity);
+        let mut second = Tracked::from_loaded(DummyEntityAlias);
+
+        first
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(7))
+            .unwrap();
+        second
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(7))
+            .unwrap();
+
+        assert_eq!(registry.entry_count(), 2);
     }
 
     #[test]

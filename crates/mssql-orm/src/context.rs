@@ -1685,6 +1685,9 @@ mod tests {
     struct DummyContext {
         entities: DbSet<TestEntity>,
     }
+    struct CompositeDummyContext {
+        entities: DbSet<CompositeKeyEntity>,
+    }
     struct NewTestEntity {
         name: String,
         active: bool,
@@ -2748,6 +2751,26 @@ mod tests {
         }
     }
 
+    impl DbContext for CompositeDummyContext {
+        fn from_shared_connection(_connection: super::SharedConnection) -> Self {
+            unreachable!("CompositeDummyContext is only used in disconnected unit tests")
+        }
+
+        fn shared_connection(&self) -> super::SharedConnection {
+            panic!("CompositeDummyContext is only used in disconnected unit tests")
+        }
+
+        fn tracking_registry(&self) -> crate::TrackingRegistryHandle {
+            self.entities.tracking_registry()
+        }
+    }
+
+    impl DbContextEntitySet<CompositeKeyEntity> for CompositeDummyContext {
+        fn db_set(&self) -> &DbSet<CompositeKeyEntity> {
+            &self.entities
+        }
+    }
+
     impl mssql_orm_core::Insertable<TestEntity> for NewTestEntity {
         fn values(&self) -> Vec<ColumnValue> {
             vec![
@@ -3244,6 +3267,22 @@ mod tests {
         assert_eq!(registry.entry_count(), 0);
     }
 
+    #[tokio::test]
+    async fn detach_tracked_deleted_entry_prevents_later_delete_without_resetting_state() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(CompositeKeyEntity);
+        tracked.attach_registry(registry.clone());
+
+        dbset.remove_tracked(&mut tracked);
+        dbset.detach_tracked(&mut tracked);
+        let saved = dbset.save_tracked_deleted().await.unwrap();
+
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
     #[test]
     fn dbcontext_clear_tracker_removes_entries_without_resetting_wrappers() {
         let context = DummyContext {
@@ -3262,6 +3301,31 @@ mod tests {
         assert_eq!(registry.entry_count(), 0);
         assert_eq!(added.state(), crate::EntityState::Added);
         assert_eq!(modified.state(), crate::EntityState::Modified);
+    }
+
+    #[tokio::test]
+    async fn clear_tracker_discards_added_and_deleted_entries_before_save_phase_validation() {
+        let context = CompositeDummyContext {
+            entities: DbSet::<CompositeKeyEntity>::disconnected(),
+        };
+        let registry = <CompositeDummyContext as DbContext>::tracking_registry(&context);
+        let added = context.entities.add_tracked(CompositeKeyEntity);
+        let mut deleted = Tracked::from_loaded(CompositeKeyEntity);
+        deleted.attach_registry(registry.clone());
+        context.entities.remove_tracked(&mut deleted);
+
+        assert_eq!(registry.entry_count(), 2);
+
+        <CompositeDummyContext as DbContext>::clear_tracker(&context);
+
+        let added_saved = context.entities.save_tracked_added().await.unwrap();
+        let deleted_saved = context.entities.save_tracked_deleted().await.unwrap();
+
+        assert_eq!(added_saved, 0);
+        assert_eq!(deleted_saved, 0);
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(added.state(), crate::EntityState::Added);
+        assert_eq!(deleted.state(), crate::EntityState::Deleted);
     }
 
     #[tokio::test]

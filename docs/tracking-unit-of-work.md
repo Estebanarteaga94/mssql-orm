@@ -76,6 +76,15 @@ As of 2026-05-07, the first registry slice is implemented:
   `remove_tracked(...)` is idempotent after cancelling an `Added` entry, and
   `detach_tracked(...)` on an `Added` entry prevents later insertion while
   preserving the wrapper's visible `Added` state.
+- detach/clear edge cases now also cover pending deletes and mixed pending
+  states: `detach_tracked(...)` on a `Deleted` entry prevents a later delete
+  phase while preserving visible `Deleted` state, and `clear_tracker()` can
+  discard `Added` plus `Deleted` entries before unsupported-primary-key
+  validation or SQL execution.
+- loaded identity comparison is covered as scoped by Rust entity type in
+  addition to schema/table/primary-key value; two different Rust entity types
+  may share the same physical table/key without being treated as duplicate
+  tracked identities.
 - public `trybuild` coverage now includes `Tracked<T>::save(&db)` and
   `Tracked<T>::delete(&db)` from `mssql_orm::prelude`, context-level
   `find_tracked(...)`, `remove_tracked(...)`, `save_changes()` and ownership
