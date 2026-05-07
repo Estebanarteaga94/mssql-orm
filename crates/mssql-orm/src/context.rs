@@ -3122,6 +3122,20 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn save_tracked_added_returns_zero_without_pending_added_entries() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(CompositeKeyEntity);
+        tracked.attach_registry(registry.clone());
+
+        let saved = dbset.save_tracked_added().await.unwrap();
+
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(registry.entry_count(), 1);
+    }
+
     #[test]
     fn dbset_remove_tracked_marks_loaded_entity_as_deleted() {
         let dbset = DbSet::<TestEntity>::disconnected();
@@ -3165,6 +3179,20 @@ mod tests {
 
         dbset.remove_tracked(&mut tracked);
 
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn save_tracked_deleted_returns_zero_after_added_entry_was_cancelled() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = dbset.add_tracked(CompositeKeyEntity);
+
+        dbset.remove_tracked(&mut tracked);
+        let saved = dbset.save_tracked_deleted().await.unwrap();
+
+        assert_eq!(saved, 0);
         assert_eq!(tracked.state(), crate::EntityState::Deleted);
         assert_eq!(registry.entry_count(), 0);
     }
@@ -3241,6 +3269,19 @@ mod tests {
             error.message(),
             "change tracking currently supports only entities with a single primary key column"
         );
+    }
+
+    #[tokio::test]
+    async fn save_tracked_modified_returns_zero_without_pending_modified_entries() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let tracked = dbset.add_tracked(CompositeKeyEntity);
+
+        let saved = dbset.save_tracked_modified().await.unwrap();
+
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), crate::EntityState::Added);
+        assert_eq!(registry.entry_count(), 1);
     }
 
     #[test]

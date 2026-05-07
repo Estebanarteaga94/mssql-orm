@@ -43,6 +43,11 @@ As of 2026-05-07, the first registry slice is implemented:
   `find_tracked(...)` and pending `save_changes()` routes return
   `OrmError` before SQL execution when the entity primary key is not a single
   column,
+- no-op phase helpers short-circuit before SQL and before unsupported-primary-key
+  validation: `save_tracked_added()` returns `0` when there are no `Added`
+  entries, `save_tracked_modified()` returns `0` when there are no `Modified`
+  entries, and `save_tracked_deleted()` returns `0` after an `Added` entry was
+  cancelled and detached,
 - Active Record interop has explicit wrapper semantics: `tracked.save(&db)`
   syncs the wrapper snapshot after immediate persistence, and
   `tracked.delete(&db)` detaches after immediate delete so `save_changes()`
