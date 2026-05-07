@@ -41,7 +41,11 @@ As of 2026-05-07, the first registry slice is implemented:
 - Active Record interop has explicit wrapper semantics: `tracked.save(&db)`
   syncs the wrapper snapshot after immediate persistence, and
   `tracked.delete(&db)` detaches after immediate delete so `save_changes()`
-  does not persist the same wrapper a second time.
+  does not persist the same wrapper a second time,
+- navigation interop is intentionally non-graph-aware in this slice: includes
+  and explicit loads do not register related entities, assignment of single or
+  collection navigations to a tracked root does not mark the root `Modified`,
+  and `save_changes()` does not persist relationship wrapper mutations.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -108,6 +112,30 @@ Because the registry is still pointer-backed, dropping a wrapper remains
 equivalent to detach in this slice. This behavior is documented for the current
 experimental implementation only. The stable target remains registry-owned
 snapshots where dropping a handle does not discard pending work.
+
+## Navigation Interop
+
+Navigation loading remains explicit and outside graph persistence in the first
+stable cut.
+
+Current rules:
+
+- `include(...)` and `include_many(...)` materialize ordinary entity values;
+  they do not automatically register roots or related rows in the tracker.
+- `load_collection_tracked(...)` attaches a collection to an already tracked
+  root without changing the root state to `Modified`.
+- The same no-modification rule applies to single navigation assignment through
+  the generated `IncludeNavigation<T>` contract.
+- Related entities assigned into `Navigation<T>`, `LazyNavigation<T>`,
+  `Collection<T>` or `LazyCollection<T>` are not tracked automatically.
+- Mutating navigation wrappers is ignored by `save_changes()`; it does not
+  insert dependents, delete dependents, update foreign keys or persist direct
+  many-to-many changes.
+
+The future identity map must be context-owned and shared by tracked roots,
+included entities and explicit loads, but implementing that before the registry
+owns snapshots would preserve the current wrapper-lifetime problem. That work
+remains a separate Etapa 21 task.
 
 ## Goal
 

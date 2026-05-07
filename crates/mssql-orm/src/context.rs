@@ -1629,9 +1629,9 @@ mod tests {
     };
     use crate::{
         AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPersist,
-        EntityPersistMode, EntityPrimaryKey, IncludeCollection, SoftDeleteContext,
-        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
-        TenantScopedEntity, Tracked,
+        EntityPersistMode, EntityPrimaryKey, IncludeCollection, IncludeNavigation,
+        SoftDeleteContext, SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider,
+        SoftDeleteRequestValues, TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata,
@@ -1661,6 +1661,12 @@ mod tests {
         children_loaded: usize,
     }
     struct ExplicitLoadChild;
+    #[derive(Debug, Clone)]
+    struct SingleNavigationRoot {
+        navigation_loaded: bool,
+    }
+    #[derive(Debug, Clone)]
+    struct SingleNavigationTarget;
     struct DummyContext {
         entities: DbSet<TestEntity>,
     }
@@ -1855,6 +1861,36 @@ mod tests {
         },
         indexes: &[],
         foreign_keys: &EXPLICIT_LOAD_CHILD_FOREIGN_KEYS,
+        navigations: &[],
+    };
+
+    static SINGLE_NAVIGATION_ROOT_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "SingleNavigationRoot",
+        schema: "dbo",
+        table: "single_navigation_roots",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
+        navigations: &[],
+    };
+
+    static SINGLE_NAVIGATION_TARGET_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "SingleNavigationTarget",
+        schema: "dbo",
+        table: "single_navigation_targets",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &[],
         navigations: &[],
     };
 
@@ -2380,6 +2416,18 @@ mod tests {
         }
     }
 
+    impl Entity for SingleNavigationRoot {
+        fn metadata() -> &'static EntityMetadata {
+            &SINGLE_NAVIGATION_ROOT_METADATA
+        }
+    }
+
+    impl Entity for SingleNavigationTarget {
+        fn metadata() -> &'static EntityMetadata {
+            &SINGLE_NAVIGATION_TARGET_METADATA
+        }
+    }
+
     impl SoftDeleteEntity for TestEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
@@ -2646,6 +2694,21 @@ mod tests {
             }
 
             self.children_loaded = values.len();
+            Ok(())
+        }
+    }
+
+    impl IncludeNavigation<SingleNavigationTarget> for SingleNavigationRoot {
+        fn set_included_navigation(
+            &mut self,
+            navigation: &str,
+            value: Option<SingleNavigationTarget>,
+        ) -> Result<(), OrmError> {
+            if navigation != "target" {
+                return Err(OrmError::new("unexpected navigation"));
+            }
+
+            self.navigation_loaded = value.is_some();
             Ok(())
         }
     }
@@ -2974,6 +3037,27 @@ mod tests {
         assert_eq!(tracked.current().children_loaded, 1);
         assert_eq!(registry.tracked_for::<ExplicitLoadRoot>().len(), 1);
         assert_eq!(registry.tracked_for::<ExplicitLoadChild>().len(), 0);
+        assert_eq!(registry.entry_count(), 1);
+    }
+
+    #[test]
+    fn tracked_single_navigation_assignment_does_not_register_related_graph() {
+        let dbset = DbSet::<SingleNavigationRoot>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(SingleNavigationRoot {
+            navigation_loaded: false,
+        });
+        tracked.attach_registry(registry.clone());
+
+        tracked
+            .current_mut_without_state_change()
+            .set_included_navigation("target", Some(SingleNavigationTarget))
+            .unwrap();
+
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert!(tracked.current().navigation_loaded);
+        assert_eq!(registry.tracked_for::<SingleNavigationRoot>().len(), 1);
+        assert_eq!(registry.tracked_for::<SingleNavigationTarget>().len(), 0);
         assert_eq!(registry.entry_count(), 1);
     }
 

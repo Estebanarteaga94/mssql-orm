@@ -449,14 +449,18 @@ Current rules:
 - `include(...)` and `include_many(...)` return ordinary entity values.
 - included roots and related entities are not automatically registered in the
   tracking registry.
+- single navigation values assigned through the include contract on a
+  `Tracked<T>` root do not mark the root as `Modified` and do not register the
+  related entity.
 - `load_collection_tracked(...)` attaches a collection to the tracked root
   without changing the root state to `Modified`.
 - related entities loaded into wrappers are not automatically tracked.
 - mutating navigation wrappers does not cause `save_changes()` to insert,
   delete or update relationship rows.
 
-The planned stable direction is a context-owned identity map, but that belongs
-to the future tracking stabilization work.
+The planned stable direction is a context-owned identity map shared by roots,
+includes and explicit loads. That remains future tracking stabilization work
+because the current registry still depends on live `Tracked<T>` wrappers.
 
 ## Validation
 
