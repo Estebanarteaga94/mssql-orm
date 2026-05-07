@@ -3189,6 +3189,19 @@ mod tests {
         assert_eq!(registry.entry_count(), 0);
     }
 
+    #[test]
+    fn dbset_remove_tracked_is_idempotent_after_added_entry_was_cancelled() {
+        let dbset = DbSet::<TestEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = dbset.add_tracked(TestEntity);
+
+        dbset.remove_tracked(&mut tracked);
+        dbset.remove_tracked(&mut tracked);
+
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
     #[tokio::test]
     async fn save_tracked_deleted_returns_zero_after_added_entry_was_cancelled() {
         let dbset = DbSet::<CompositeKeyEntity>::disconnected();
@@ -3200,6 +3213,20 @@ mod tests {
 
         assert_eq!(saved, 0);
         assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn detach_tracked_added_entry_prevents_later_insert_without_resetting_state() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = dbset.add_tracked(CompositeKeyEntity);
+
+        dbset.detach_tracked(&mut tracked);
+        let saved = dbset.save_tracked_added().await.unwrap();
+
+        assert_eq!(saved, 0);
+        assert_eq!(tracked.state(), crate::EntityState::Added);
         assert_eq!(registry.entry_count(), 0);
     }
 

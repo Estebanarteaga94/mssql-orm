@@ -70,7 +70,12 @@ As of 2026-05-07, the first registry slice is implemented:
   wrapper state.
 - explicit `mark_unchanged()` restoration is covered for `Deleted` wrappers:
   it accepts the current value as the new original snapshot and returns the
-  wrapper to `Unchanged` without database I/O.
+  wrapper to `Unchanged` without database I/O. Registered wrappers expose that
+  transition through the registry state reader as well.
+- cancellation and detach no-ops are covered for additional edge cases:
+  `remove_tracked(...)` is idempotent after cancelling an `Added` entry, and
+  `detach_tracked(...)` on an `Added` entry prevents later insertion while
+  preserving the wrapper's visible `Added` state.
 - public `trybuild` coverage now includes `Tracked<T>::save(&db)` and
   `Tracked<T>::delete(&db)` from `mssql_orm::prelude`, context-level
   `find_tracked(...)`, `remove_tracked(...)`, `save_changes()` and ownership

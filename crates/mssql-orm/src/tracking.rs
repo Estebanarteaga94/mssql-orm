@@ -1016,6 +1016,20 @@ mod tests {
     }
 
     #[test]
+    fn explicit_mark_unchanged_on_registered_wrapper_updates_registry_state() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+        tracked.mark_deleted();
+
+        tracked.mark_unchanged();
+
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, EntityState::Unchanged);
+    }
+
+    #[test]
     fn mark_deleted_transitions_any_registered_entity_to_deleted() {
         let registry = Arc::new(TrackingRegistry::default());
         let mut tracked = Tracked::from_loaded(DummyEntity);
