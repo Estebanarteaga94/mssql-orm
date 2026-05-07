@@ -570,11 +570,16 @@ impl<E: Entity> DbSet<E> {
 
     /// Loads an entity by its single-column primary key and wraps it in the
     /// experimental snapshot-based tracking container.
+    ///
+    /// Composite primary keys are rejected with a stable tracking error in the
+    /// first stable cut.
     pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
     where
         E: Clone + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
         K: SqlTypeMapping,
     {
+        self.ensure_tracking_primary_key_scope()?;
+
         let key = key.to_sql_value();
         let mut tracked = self
             .query_with(self.find_select_query_sql_value(key.clone())?)
@@ -591,6 +596,10 @@ impl<E: Entity> DbSet<E> {
 
     /// Registers a new in-memory entity as experimentally tracked in `Added`
     /// state so a later `save_changes()` can persist it via `insert`.
+    ///
+    /// `Added` entries use a temporary identity until persistence. Entities
+    /// with composite primary keys can be held in memory, but `save_changes()`
+    /// rejects them before executing SQL in the first stable cut.
     pub fn add_tracked(&self, entity: E) -> Tracked<E>
     where
         E: Clone,
@@ -634,6 +643,15 @@ impl<E: Entity> DbSet<E> {
             + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let has_pending_added = tracked_entities
+            .iter()
+            .any(|tracked| tracked.state() == crate::EntityState::Added);
+        if !has_pending_added {
+            return Ok(0);
+        }
+
+        self.ensure_tracking_primary_key_scope()?;
+
         let mut saved = 0;
 
         for tracked in tracked_entities {
@@ -666,6 +684,15 @@ impl<E: Entity> DbSet<E> {
             + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let has_pending_deleted = tracked_entities
+            .iter()
+            .any(|tracked| tracked.state() == crate::EntityState::Deleted);
+        if !has_pending_deleted {
+            return Ok(0);
+        }
+
+        self.ensure_tracking_primary_key_scope()?;
+
         let mut saved = 0;
 
         for tracked in tracked_entities {
@@ -705,6 +732,15 @@ impl<E: Entity> DbSet<E> {
             + TenantScopedEntity,
     {
         let tracked_entities = self.tracking_registry.tracked_for::<E>();
+        let has_pending_modified = tracked_entities
+            .iter()
+            .any(|tracked| tracked.state() == crate::EntityState::Modified);
+        if !has_pending_modified {
+            return Ok(0);
+        }
+
+        self.ensure_tracking_primary_key_scope()?;
+
         let mut saved = 0;
 
         for tracked in tracked_entities {
@@ -1507,6 +1543,16 @@ impl<E: Entity> DbSet<E> {
         ))
     }
 
+    fn ensure_tracking_primary_key_scope(&self) -> Result<(), OrmError> {
+        if E::metadata().primary_key_columns().len() == 1 {
+            return Ok(());
+        }
+
+        Err(OrmError::new(
+            "change tracking currently supports only entities with a single primary key column",
+        ))
+    }
+
     fn rowversion_predicate_value(&self, token: SqlValue) -> Result<Predicate, OrmError> {
         let metadata = E::metadata();
         let column = metadata.rowversion_column().ok_or_else(|| {
@@ -1607,6 +1653,7 @@ mod tests {
     struct AuditedWriteEntity;
     struct SoftDeleteEntityUnderTest;
     struct SoftDeleteVersionedEntity;
+    #[derive(Debug, Clone)]
     struct CompositeKeyEntity;
     #[derive(Debug, Clone)]
     struct ExplicitLoadRoot {
@@ -2357,6 +2404,41 @@ mod tests {
         }
     }
 
+    impl EntityPrimaryKey for CompositeKeyEntity {
+        fn primary_key_value(&self) -> Result<SqlValue, OrmError> {
+            Err(OrmError::new(
+                "change tracking currently supports only entities with a single primary key column",
+            ))
+        }
+    }
+
+    impl EntityPersist for CompositeKeyEntity {
+        fn persist_mode(&self) -> Result<EntityPersistMode, OrmError> {
+            Err(OrmError::new(
+                "change tracking currently supports only entities with a single primary key column",
+            ))
+        }
+
+        fn insert_values(&self) -> Vec<ColumnValue> {
+            Vec::new()
+        }
+
+        fn update_changes(&self) -> Vec<ColumnValue> {
+            vec![ColumnValue::new(
+                "name",
+                SqlValue::String("changed".to_string()),
+            )]
+        }
+
+        fn concurrency_token(&self) -> Result<Option<SqlValue>, OrmError> {
+            Ok(None)
+        }
+
+        fn sync_persisted(&mut self, persisted: Self) {
+            *self = persisted;
+        }
+    }
+
     impl SoftDeleteEntity for VersionedEntity {
         fn soft_delete_policy() -> Option<EntityPolicyMetadata> {
             None
@@ -2481,6 +2563,12 @@ mod tests {
     }
 
     impl FromRow for TestEntity {
+        fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
+            Ok(Self)
+        }
+    }
+
+    impl FromRow for CompositeKeyEntity {
         fn from_row<R: Row>(_row: &R) -> Result<Self, OrmError> {
             Ok(Self)
         }
@@ -2901,6 +2989,18 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn dbset_find_tracked_rejects_composite_primary_keys_with_stable_error() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+
+        let error = dbset.find_tracked(7_i64).await.unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "change tracking currently supports only entities with a single primary key column"
+        );
+    }
+
     #[test]
     fn dbset_add_tracked_registers_added_entity_in_registry() {
         let dbset = DbSet::<TestEntity>::disconnected();
@@ -2911,6 +3011,22 @@ mod tests {
         assert_eq!(tracked.state(), crate::EntityState::Added);
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(registry.registrations()[0].state, crate::EntityState::Added);
+    }
+
+    #[tokio::test]
+    async fn save_tracked_added_rejects_composite_primary_keys_before_sql() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let tracked = dbset.add_tracked(CompositeKeyEntity);
+
+        let error = dbset.save_tracked_added().await.unwrap_err();
+
+        assert_eq!(tracked.state(), crate::EntityState::Added);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            error.message(),
+            "change tracking currently supports only entities with a single primary key column"
+        );
     }
 
     #[test]
@@ -2927,6 +3043,24 @@ mod tests {
         assert_eq!(
             registry.registrations()[0].state,
             crate::EntityState::Deleted
+        );
+    }
+
+    #[tokio::test]
+    async fn save_tracked_deleted_rejects_composite_primary_keys_before_sql() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(CompositeKeyEntity);
+        tracked.attach_registry(registry.clone());
+
+        dbset.remove_tracked(&mut tracked);
+        let error = dbset.save_tracked_deleted().await.unwrap_err();
+
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            error.message(),
+            "change tracking currently supports only entities with a single primary key column"
         );
     }
 
@@ -2976,6 +3110,24 @@ mod tests {
         assert_eq!(tracked.state(), crate::EntityState::Unchanged);
         assert_eq!(tracked.original().children_loaded, 1);
         assert_eq!(registry.entry_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn save_tracked_modified_rejects_composite_primary_keys_before_sql() {
+        let dbset = DbSet::<CompositeKeyEntity>::disconnected();
+        let registry = dbset.tracking_registry();
+        let mut tracked = Tracked::from_loaded(CompositeKeyEntity);
+        tracked.attach_registry(registry.clone());
+        tracked.current_mut();
+
+        let error = dbset.save_tracked_modified().await.unwrap_err();
+
+        assert_eq!(tracked.state(), crate::EntityState::Modified);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            error.message(),
+            "change tracking currently supports only entities with a single primary key column"
+        );
     }
 
     #[test]

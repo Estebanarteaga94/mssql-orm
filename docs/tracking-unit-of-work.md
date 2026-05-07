@@ -31,7 +31,11 @@ As of 2026-05-07, the first registry slice is implemented:
 - the `Added`, `Modified` and `Deleted` routes used by `save_changes()` have
   focused coverage proving they continue through the existing insert, update
   and delete pipelines for tenant predicates, rowversion predicates, audit
-  provider/request values and soft-delete provider/request values.
+  provider/request values and soft-delete provider/request values,
+- composite primary keys are an explicit first-stable-cut limit for tracking:
+  `find_tracked(...)` and pending `save_changes()` routes return
+  `OrmError` before SQL execution when the entity primary key is not a single
+  column.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -148,8 +152,14 @@ enum PrimaryKeyIdentity {
 ```
 
 The first stable cut keeps composite primary keys out of scope. Entities with a
-composite primary key must fail with a stable error when used with
-`find_tracked(...)`, `remove_tracked(...)` or `save_changes()`.
+composite primary key fail with a stable error when loaded through
+`find_tracked(...)` or when pending `Added`, `Modified` or `Deleted` entries
+are persisted through `save_changes()`. `add_tracked(...)` can still create a
+temporary in-memory entry because it is infallible and does not need the
+database key yet; that entry fails before SQL execution if `save_changes()` is
+called. `remove_tracked(...)` remains an infallible state transition and the
+same `save_changes()` guard applies when a composite-key entry is pending
+delete.
 
 For `Added` entities without a database-generated key yet, the registry uses a
 temporary local identity:

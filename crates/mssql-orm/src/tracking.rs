@@ -12,7 +12,8 @@
 //! - infer inserts, updates or deletes globally outside of `Tracked<T>`
 //! - diff entity fields structurally before deciding whether an entity changed
 //! - keep dropped wrappers in the unit of work
-//! - support composite primary keys through `save_changes()`
+//! - support composite primary keys through `save_changes()`; that limit is
+//!   now an explicit first-stable-cut scope rather than an implicit behavior
 //!
 //! Current experimental entry points:
 //! - `DbSet::find_tracked(id)` for existing entities with single-column PK
@@ -37,6 +38,10 @@
 //! - removing a tracked `Added` entity cancels the pending insert locally
 //! - successful tracked deletes unregister the wrapper from the internal registry
 //! - rowversion conflicts are still surfaced as `OrmError::ConcurrencyConflict`
+//! - composite-primary-key entities fail with a stable `OrmError` when loaded
+//!   through `find_tracked(...)` or persisted through `save_changes()`; the
+//!   first stable cut intentionally keeps tracking persistence scoped to
+//!   single-column primary keys
 //! - navigation includes and explicit navigation loads attach values to the
 //!   root entity only; related entities are not automatically registered in the
 //!   experimental tracker and relationship changes are not persisted as graph
