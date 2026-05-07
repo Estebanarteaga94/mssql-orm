@@ -48,6 +48,16 @@ As of 2026-05-07, the first registry slice is implemented:
   and explicit loads do not register related entities, assignment of single or
   collection navigations to a tracked root does not mark the root `Modified`,
   and `save_changes()` does not persist relationship wrapper mutations.
+- ownership behavior for the current wrapper-backed implementation is covered:
+  cloning a `Tracked<T>` produces a detached wrapper that cannot unregister the
+  original entry, and consuming a registered wrapper with `into_current()`
+  unregisters it through `Drop`.
+- registry collision behavior is covered when converting an `Added` temporary
+  identity to a persisted primary key: duplicate persisted identities return
+  `OrmError` and do not replace the temporary entry identity.
+- explicit `mark_unchanged()` restoration is covered for `Deleted` wrappers:
+  it accepts the current value as the new original snapshot and returns the
+  wrapper to `Unchanged` without database I/O.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the

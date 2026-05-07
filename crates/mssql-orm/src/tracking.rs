@@ -870,6 +870,37 @@ mod tests {
     }
 
     #[test]
+    fn into_current_consumes_registered_wrapper_and_unregisters_it() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+
+        assert_eq!(registry.entry_count(), 1);
+
+        let _current = tracked.into_current();
+
+        assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[test]
+    fn cloned_tracked_wrapper_is_detached_from_original_registry_entry() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut original = Tracked::from_loaded(DummyEntity);
+        original.attach_registry(Arc::clone(&registry));
+        original.mark_modified();
+
+        let clone = original.clone();
+
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(clone.state(), EntityState::Modified);
+
+        drop(clone);
+
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, EntityState::Modified);
+    }
+
+    #[test]
     fn mutable_access_transitions_loaded_entity_to_modified() {
         let mut tracked = Tracked::from_loaded(String::from("Ana"));
 
@@ -921,6 +952,19 @@ mod tests {
     fn explicit_mark_unchanged_accepts_current_snapshot() {
         let mut tracked = Tracked::from_loaded(String::from("Ana"));
         tracked.current_mut().push_str(" Maria");
+
+        tracked.mark_unchanged();
+
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(tracked.original(), "Ana Maria");
+        assert_eq!(tracked.current(), "Ana Maria");
+    }
+
+    #[test]
+    fn explicit_mark_unchanged_restores_deleted_wrapper_with_current_snapshot() {
+        let mut tracked = Tracked::from_loaded(String::from("Ana"));
+        tracked.current_mut().push_str(" Maria");
+        tracked.mark_deleted();
 
         tracked.mark_unchanged();
 
@@ -1036,6 +1080,42 @@ mod tests {
             .unwrap_err();
 
         assert!(error.message().contains("already tracked"));
+    }
+
+    #[test]
+    fn tracking_registry_rejects_persisted_identity_update_collision_without_mutating_entry() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut existing = Tracked::from_loaded(DummyEntity);
+        let mut pending = Tracked::from_added(DummyEntity);
+
+        existing
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(11))
+            .unwrap();
+        pending.attach_registry_added(Arc::clone(&registry));
+
+        let pending_registration = pending.registration_id.expect("registered pending entity");
+        let error = registry
+            .update_persisted_identity::<DummyEntity>(pending_registration, SqlValue::I64(11))
+            .unwrap_err();
+
+        assert!(error.message().contains("already tracked"));
+        assert_eq!(registry.entry_count(), 2);
+
+        let mut duplicate = Tracked::from_loaded(DummyEntity);
+        let duplicate_error = duplicate
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(11))
+            .unwrap_err();
+        assert!(duplicate_error.message().contains("already tracked"));
+
+        registry
+            .update_persisted_identity::<DummyEntity>(pending_registration, SqlValue::I64(12))
+            .unwrap();
+
+        let mut second_duplicate = Tracked::from_loaded(DummyEntity);
+        let second_duplicate_error = second_duplicate
+            .attach_registry_loaded(Arc::clone(&registry), SqlValue::I64(12))
+            .unwrap_err();
+        assert!(second_duplicate_error.message().contains("already tracked"));
     }
 
     #[test]
