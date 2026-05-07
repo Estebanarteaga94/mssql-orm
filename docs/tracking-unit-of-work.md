@@ -58,6 +58,9 @@ As of 2026-05-07, the first registry slice is implemented:
 - explicit `mark_unchanged()` restoration is covered for `Deleted` wrappers:
   it accepts the current value as the new original snapshot and returns the
   wrapper to `Unchanged` without database I/O.
+- public `trybuild` coverage now includes `Tracked<T>::save(&db)` and
+  `Tracked<T>::delete(&db)` from `mssql_orm::prelude`, and rejects direct
+  access to internal registry attachment helpers.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
