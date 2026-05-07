@@ -2,9 +2,11 @@
 //!
 //! Stability audit status, 2026-04-30: this is the only root-crate public
 //! surface still explicitly marked experimental. It remains implemented but
-//! not stable until the unit-of-work, identity, operation ordering,
-//! transaction, policy and public-test guarantees tracked in Etapa 21 are
-//! defined and validated.
+//! not stable until the context owns tracked snapshots instead of depending on
+//! live wrappers. The current slice has validated identity registration,
+//! explicit state APIs, no-op change detection, operation ordering,
+//! transaction behavior for direct connections, policy integration and public
+//! compile-time coverage, but ownership remains the blocking contract.
 //!
 //! This module intentionally defines only the minimal public contracts for the
 //! future tracking pipeline. In this stage it does not:
@@ -51,6 +53,10 @@
 //!   root entity only; related entities are not automatically registered in the
 //!   experimental tracker and relationship changes are not persisted as graph
 //!   updates
+//! - future relationship persistence is intentionally deferred until graph
+//!   update semantics can define dependent insert/delete behavior, foreign-key
+//!   updates, direct many-to-many exclusions and conflict handling without
+//!   bypassing the existing `DbSet` persistence paths
 
 use crate::EntityPersist;
 use core::ops::{Deref, DerefMut};
@@ -80,6 +86,8 @@ pub enum EntityState {
 /// dropping or consuming a registered wrapper removes it from the current
 /// context tracker. Cloning a wrapper copies its visible state and snapshots,
 /// but the clone is detached from the registry.
+/// Calling [`Tracked::detach`] repeatedly is a no-op after the first detach and
+/// does not reset the visible wrapper state.
 ///
 /// State can be inspected with [`Tracked::state`] and changed explicitly with
 /// [`Tracked::mark_modified`], [`Tracked::mark_deleted`],

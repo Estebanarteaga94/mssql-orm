@@ -167,6 +167,30 @@ included entities and explicit loads, but implementing that before the registry
 owns snapshots would preserve the current wrapper-lifetime problem. That work
 remains a separate Etapa 21 task.
 
+## Future Relationship Persistence
+
+Relationship persistence is deliberately outside the first stable tracking cut.
+The current navigation wrappers describe loaded graph state; they are not
+change commands.
+
+Before `save_changes()` can persist relationship changes, the project must
+define explicit graph update semantics for:
+
+- dependent inserts attached through `Collection<T>` or `LazyCollection<T>`;
+- dependent deletes removed from a loaded collection;
+- foreign-key updates caused by moving a dependent between principals;
+- optional versus required relationships and `SET NULL` behavior;
+- direct many-to-many exclusions, where explicit join entities remain the
+  supported shape;
+- conflict behavior when a related row is also tracked or modified separately;
+- ordering and rollback behavior when relationship changes mix with ordinary
+  `Added`, `Modified` and `Deleted` entity operations.
+
+The future implementation must still route persistence through the existing
+`DbSet` insert, update and delete paths so tenant, audit, soft-delete,
+rowversion and SQL Server execution boundaries remain centralized. It must not
+move SQL generation into `mssql-orm-query` or execution into tracking.
+
 ## Goal
 
 `save_changes()` must persist changes owned by the `DbContext`, not by the

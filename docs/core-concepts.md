@@ -130,6 +130,12 @@ related entities. Mutating a navigation wrapper can still mark the root wrapper
 as `Modified` through normal `Tracked<T>` mutable access, but `save_changes()`
 does not persist relationship graph changes yet.
 
+Future relationship persistence must be explicit about dependent inserts,
+dependent deletes, foreign-key moves, optional relationship `SET NULL`
+behavior, many-to-many join rows and conflicts with separately tracked
+entities. Until that exists, persist relationship changes through ordinary
+`DbSet` operations on the dependent entity or explicit join entity.
+
 The future stable graph-tracking direction is a context-owned identity map keyed
 by entity type and primary-key values. Root queries, includes and explicit loads
 should reuse a canonical tracked instance for the same row inside one context.

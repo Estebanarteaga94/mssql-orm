@@ -462,6 +462,13 @@ The planned stable direction is a context-owned identity map shared by roots,
 includes and explicit loads. That remains future tracking stabilization work
 because the current registry still depends on live `Tracked<T>` wrappers.
 
+Relationship persistence is also future work. Removing an item from a loaded
+collection, assigning a different parent navigation, or filling a navigation
+wrapper does not currently mean "insert", "delete", "set null" or "update the
+foreign key". Until graph update semantics are designed and validated, persist
+relationship changes through ordinary entity operations: insert/update/delete
+the dependent entity or explicit join entity directly.
+
 ## Validation
 
 Navigation runtime behavior is covered by:

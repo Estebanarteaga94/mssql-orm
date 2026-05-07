@@ -575,7 +575,9 @@ impl<E: Entity> DbSet<E> {
     /// type, schema, table and primary key value. Tracking the same persisted
     /// identity twice in one context returns `OrmError` instead of creating
     /// duplicate entries. Composite primary keys are rejected with a stable
-    /// tracking error in the first stable cut.
+    /// tracking error in the first stable cut. Included navigation graphs are
+    /// not registered automatically; use explicit tracking entry points for
+    /// every entity that should participate in `save_changes()`.
     pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
     where
         E: Clone + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -604,7 +606,9 @@ impl<E: Entity> DbSet<E> {
     /// with composite primary keys can be held in memory, but `save_changes()`
     /// rejects them before executing SQL in the first stable cut. A successful
     /// tracked insert replaces the temporary identity with the persisted
-    /// single-column primary key returned by SQL Server.
+    /// single-column primary key returned by SQL Server. Dropping the returned
+    /// wrapper still detaches the pending insert in this experimental
+    /// wrapper-backed slice.
     pub fn add_tracked(&self, entity: E) -> Tracked<E>
     where
         E: Clone,
@@ -619,7 +623,9 @@ impl<E: Entity> DbSet<E> {
     ///
     /// Calling this on an `Added` wrapper cancels the pending insert locally:
     /// the wrapper becomes `Deleted` and is detached from the tracker, so no
-    /// database delete is issued by a later `save_changes()`.
+    /// database delete is issued by a later `save_changes()`. Calling this on
+    /// a loaded or modified wrapper marks only that wrapper; relationship
+    /// wrappers are not interpreted as cascade instructions.
     pub fn remove_tracked(&self, tracked: &mut Tracked<E>) {
         let was_added = tracked.state() == crate::EntityState::Added;
         tracked.mark_deleted();

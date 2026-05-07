@@ -583,6 +583,8 @@ See [docs/stability-audit.md](docs/stability-audit.md) for the updated stability
 | `Tracked<T>` | Experimental |
 | `save_changes()` | Experimental |
 | Composite primary keys | Metadata exists, public persistence support is limited |
+| Tracking ownership | Current tracker still depends on live `Tracked<T>` wrappers |
+| Relationship graph persistence | Not implemented; persist dependents or explicit join entities directly |
 | Many-to-many navigation | Use an explicit join entity |
 | Lazy loading | No automatic I/O from field access |
 | `include_many(...).split_query()` | API exists, execution returns not implemented |

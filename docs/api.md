@@ -168,6 +168,11 @@ Relevant limits:
 
 - `find`, `update`, `delete`, Active Record, and public tracking remain oriented around simple primary keys.
 - `save_changes()` and `Tracked<T>` are experimental.
+- The current tracker still depends on live `Tracked<T>` wrappers; dropping a
+  wrapper detaches its pending work.
+- Navigation wrapper mutations are not graph update commands. Persist
+  relationship changes by updating, deleting or inserting the dependent entity
+  or explicit join entity directly.
 - `db.transaction(...)` is blocked for contexts created from pools until one physical connection can be pinned for the full closure.
 
 The current inventory of experimental, pending verification, deferred, and
