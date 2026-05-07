@@ -35,7 +35,11 @@ As of 2026-05-07, the first registry slice is implemented:
 - composite primary keys are an explicit first-stable-cut limit for tracking:
   `find_tracked(...)` and pending `save_changes()` routes return
   `OrmError` before SQL execution when the entity primary key is not a single
-  column.
+  column,
+- Active Record interop has explicit wrapper semantics: `tracked.save(&db)`
+  syncs the wrapper snapshot after immediate persistence, and
+  `tracked.delete(&db)` detaches after immediate delete so `save_changes()`
+  does not persist the same wrapper a second time.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
@@ -60,6 +64,34 @@ The current experimental policy is explicit:
   entry after success. `detach_tracked(...)`, `clear_tracker()` or dropping the
   wrapper discards the pending delete from the tracker; the wrapper keeps its
   `Deleted` state.
+
+## Active Record Interop
+
+Active Record remains a convenience layer over `DbSet`; it is not a parallel
+tracking pipeline.
+
+Stable rules for the first cut:
+
+- `Entity::query(&db)`, `Entity::find(&db, id)`, `entity.save(&db)` and
+  `entity.delete(&db)` operate on ordinary entity values and do not
+  automatically register those values in the tracker.
+- `find_tracked(...)`, `add_tracked(...)`, `remove_tracked(...)`,
+  `detach_tracked(...)`, `clear_tracker()` and `save_changes()` are the
+  explicit tracking surface.
+- `Tracked<T>` has inherent `save(&db)` and `delete(&db)` methods so method
+  calls on a tracked wrapper do not silently dereference to the `ActiveRecord`
+  implementation for `T`.
+- `tracked.save(&db)` is a no-op for `Unchanged`, returns an error for
+  `Deleted`, and for `Added`/`Modified` persists through Active Record, then
+  synchronizes `original`, `current`, state and persisted registry identity.
+- `tracked.delete(&db)` cancels local `Added` entries without SQL. For
+  persisted `Unchanged`/`Modified` entries it delegates to Active Record delete
+  and detaches the wrapper after a row is affected, so a later
+  `save_changes()` cannot delete the same row again.
+- Calling Active Record on an ordinary clone or detached entity remains outside
+  the tracker. If that row is also tracked elsewhere in the same context, the
+  tracker cannot observe the external mutation until the stable owned-registry
+  identity-map work is completed.
 
 Because the registry is still pointer-backed, dropping a wrapper remains
 equivalent to detach in this slice. This behavior is documented for the current

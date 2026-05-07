@@ -42,6 +42,9 @@
 //!   through `find_tracked(...)` or persisted through `save_changes()`; the
 //!   first stable cut intentionally keeps tracking persistence scoped to
 //!   single-column primary keys
+//! - `tracked.save(&db).await` and `tracked.delete(&db).await` have explicit
+//!   wrapper semantics, so they do not dereference to Active Record and leave
+//!   stale tracker state behind
 //! - navigation includes and explicit navigation loads attach values to the
 //!   root entity only; related entities are not automatically registered in the
 //!   experimental tracker and relationship changes are not persisted as graph
@@ -217,6 +220,97 @@ impl<T> Tracked<T> {
             (self.registration_id.take(), self.tracking_registry.take())
         {
             registry.unregister(registration_id);
+        }
+    }
+
+    /// Persists this tracked entity immediately through the Active Record
+    /// pipeline and synchronizes the tracking snapshot after success.
+    ///
+    /// This method exists so `tracked.save(&db).await` has explicit tracking
+    /// semantics instead of dereferencing to `T::save(&db)` and leaving the
+    /// tracker with a stale original snapshot. `Unchanged` wrappers are a
+    /// no-op, `Added` and `Modified` wrappers use the same persistence path as
+    /// Active Record, and `Deleted` wrappers return an error.
+    pub fn save<C>(
+        &mut self,
+        db: &C,
+    ) -> impl core::future::Future<Output = Result<(), OrmError>> + Send
+    where
+        C: crate::DbContextEntitySet<T> + Sync,
+        T: crate::ActiveRecord
+            + crate::AuditEntity
+            + crate::EntityPersist
+            + crate::EntityPrimaryKey
+            + crate::SoftDeleteEntity
+            + crate::TenantScopedEntity
+            + Clone
+            + mssql_orm_core::FromRow
+            + Send,
+    {
+        async move {
+            match self.inner.state {
+                EntityState::Unchanged => Ok(()),
+                EntityState::Deleted => Err(OrmError::new(
+                    "tracked deleted entities cannot be saved; detach them or persist deletion",
+                )),
+                EntityState::Added | EntityState::Modified => {
+                    crate::ActiveRecord::save(&mut self.inner.current, db).await?;
+                    self.inner.original = self.inner.current.clone();
+                    self.inner.state = EntityState::Unchanged;
+
+                    if let (Some(registration_id), Some(registry)) =
+                        (self.registration_id, self.tracking_registry.as_ref())
+                    {
+                        let key =
+                            <T as crate::EntityPrimaryKey>::primary_key_value(&self.inner.current)?;
+                        registry.update_persisted_identity::<T>(registration_id, key)?;
+                    }
+
+                    Ok(())
+                }
+            }
+        }
+    }
+
+    /// Deletes this tracked entity immediately through the Active Record
+    /// pipeline and removes it from the context tracker after success.
+    ///
+    /// Calling `tracked.delete(&db).await` on an `Added` wrapper cancels the
+    /// local insert without touching the database. Persisted wrappers delegate
+    /// to Active Record delete and detach after the row is affected, so a later
+    /// `save_changes()` will not issue a second delete for the same wrapper.
+    pub fn delete<C>(
+        &mut self,
+        db: &C,
+    ) -> impl core::future::Future<Output = Result<bool, OrmError>> + Send
+    where
+        C: crate::DbContextEntitySet<T> + Sync,
+        T: crate::ActiveRecord
+            + crate::EntityPersist
+            + crate::EntityPrimaryKey
+            + crate::SoftDeleteEntity
+            + crate::TenantScopedEntity
+            + Clone
+            + mssql_orm_core::FromRow
+            + Send,
+    {
+        async move {
+            match self.inner.state {
+                EntityState::Added => {
+                    self.inner.state = EntityState::Deleted;
+                    self.detach_registry();
+                    Ok(false)
+                }
+                EntityState::Deleted => Ok(false),
+                EntityState::Unchanged | EntityState::Modified => {
+                    let deleted = crate::ActiveRecord::delete(&self.inner.current, db).await?;
+                    if deleted {
+                        self.inner.state = EntityState::Deleted;
+                        self.detach_registry();
+                    }
+                    Ok(deleted)
+                }
+            }
         }
     }
 }

@@ -229,11 +229,21 @@ Tracking must remain layered on top of `DbSet` persistence.
 
 Stable rules must define:
 
-- whether Active Record `save/delete` can operate on tracked values,
-- whether Active Record methods attach or detach entities,
-- whether mixing `entity.save(&db)` and `db.save_changes()` for the same
-  identity is allowed,
-- and how duplicate identity conflicts are reported.
+- ordinary Active Record `query/find/save/delete` does not automatically
+  attach or detach values in the tracker,
+- tracked wrappers expose inherent `save/delete` methods so calls on
+  `Tracked<T>` do not accidentally dereference to ordinary Active Record and
+  leave stale tracker snapshots,
+- `tracked.save(&db)` must synchronize the wrapper after immediate
+  persistence so a later `save_changes()` does not update the same values
+  again,
+- `tracked.delete(&db)` must detach after successful immediate delete so a
+  later `save_changes()` does not delete the same row again,
+- mixing ordinary detached `entity.save(&db)` with a separately tracked row of
+  the same identity remains outside automatic observation until the owned
+  registry and identity-map work is completed,
+- and duplicate identity conflicts keep using the documented tracker duplicate
+  error.
 
 There must not be two independent persistence routes for the same tracked row.
 

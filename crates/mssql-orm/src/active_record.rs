@@ -153,6 +153,7 @@ mod tests {
     use super::{ActiveRecord, EntityPersist, EntityPersistMode, EntityPrimaryKey};
     use crate::{
         AuditEntity, DbContext, DbContextEntitySet, DbSet, SoftDeleteEntity, TenantScopedEntity,
+        Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata, FromRow,
@@ -330,6 +331,59 @@ mod tests {
         fn require_active_record<E: ActiveRecord>() {}
 
         require_active_record::<TestEntity>();
+    }
+
+    #[tokio::test]
+    async fn tracked_save_unchanged_is_noop_without_dereferencing_to_active_record() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let mut tracked = Tracked::from_loaded(TestEntity {
+            id: 7,
+            name: "Tracked".to_string(),
+        });
+
+        tracked.save(&context).await.unwrap();
+
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(tracked.original(), tracked.current());
+    }
+
+    #[tokio::test]
+    async fn tracked_save_deleted_returns_stable_error_before_active_record() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let mut tracked = Tracked::from_loaded(TestEntity {
+            id: 7,
+            name: "Tracked".to_string(),
+        });
+        context.entities.remove_tracked(&mut tracked);
+
+        let error = tracked.save(&context).await.unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "tracked deleted entities cannot be saved; detach them or persist deletion"
+        );
+    }
+
+    #[tokio::test]
+    async fn tracked_delete_added_cancels_local_insert_without_active_record() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let registry = context.entities.tracking_registry();
+        let mut tracked = context.entities.add_tracked(TestEntity {
+            id: 0,
+            name: "Pending".to_string(),
+        });
+
+        let deleted = tracked.delete(&context).await.unwrap();
+
+        assert!(!deleted);
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
     }
 
     #[test]
