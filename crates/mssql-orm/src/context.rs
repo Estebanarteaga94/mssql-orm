@@ -571,8 +571,11 @@ impl<E: Entity> DbSet<E> {
     /// Loads an entity by its single-column primary key and wraps it in the
     /// experimental snapshot-based tracking container.
     ///
-    /// Composite primary keys are rejected with a stable tracking error in the
-    /// first stable cut.
+    /// The loaded row is registered in this context's tracker using entity
+    /// type, schema, table and primary key value. Tracking the same persisted
+    /// identity twice in one context returns `OrmError` instead of creating
+    /// duplicate entries. Composite primary keys are rejected with a stable
+    /// tracking error in the first stable cut.
     pub async fn find_tracked<K>(&self, key: K) -> Result<Option<Tracked<E>>, OrmError>
     where
         E: Clone + FromRow + Send + SoftDeleteEntity + TenantScopedEntity,
@@ -599,7 +602,9 @@ impl<E: Entity> DbSet<E> {
     ///
     /// `Added` entries use a temporary identity until persistence. Entities
     /// with composite primary keys can be held in memory, but `save_changes()`
-    /// rejects them before executing SQL in the first stable cut.
+    /// rejects them before executing SQL in the first stable cut. A successful
+    /// tracked insert replaces the temporary identity with the persisted
+    /// single-column primary key returned by SQL Server.
     pub fn add_tracked(&self, entity: E) -> Tracked<E>
     where
         E: Clone,
@@ -611,6 +616,10 @@ impl<E: Entity> DbSet<E> {
 
     /// Marks a tracked entity for deletion so a later `save_changes()` can
     /// persist it through the regular delete pipeline.
+    ///
+    /// Calling this on an `Added` wrapper cancels the pending insert locally:
+    /// the wrapper becomes `Deleted` and is detached from the tracker, so no
+    /// database delete is issued by a later `save_changes()`.
     pub fn remove_tracked(&self, tracked: &mut Tracked<E>) {
         let was_added = tracked.state() == crate::EntityState::Added;
         tracked.mark_deleted();

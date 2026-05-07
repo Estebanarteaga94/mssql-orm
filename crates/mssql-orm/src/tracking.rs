@@ -76,7 +76,16 @@ pub enum EntityState {
 ///
 /// `Tracked<T>` keeps the original snapshot together with the current value so
 /// later stages can compare and persist changes without relying on runtime
-/// proxies or reflection.
+/// proxies or reflection. The current implementation is still wrapper-backed:
+/// dropping or consuming a registered wrapper removes it from the current
+/// context tracker. Cloning a wrapper copies its visible state and snapshots,
+/// but the clone is detached from the registry.
+///
+/// State can be inspected with [`Tracked::state`] and changed explicitly with
+/// [`Tracked::mark_modified`], [`Tracked::mark_deleted`],
+/// [`Tracked::mark_unchanged`] and [`Tracked::detach`]. Immediate
+/// persistence through [`Tracked::save`] and [`Tracked::delete`] delegates to
+/// the same `DbSet`/Active Record pipelines used by ordinary CRUD.
 pub struct Tracked<T> {
     inner: Box<TrackedInner<T>>,
     registration_id: Option<usize>,
