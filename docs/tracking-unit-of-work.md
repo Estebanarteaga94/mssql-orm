@@ -21,6 +21,8 @@ As of 2026-05-07, the first registry slice is implemented:
   `mark_modified()`, `mark_deleted()`, `mark_unchanged()` and `detach()`,
 - `DbSet::detach_tracked(...)` removes one wrapper from the current tracker,
 - `DbContext::clear_tracker()` removes all current tracker entries,
+  with unit coverage proving it does not reset the visible state of the
+  detached wrappers,
 - `save_changes()` skips `Modified` entries when their original/current
   snapshots produce the same `EntityPersist::update_changes()` payload,
 - `save_changes()` plans tracked operations deterministically from context

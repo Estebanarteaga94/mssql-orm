@@ -3174,6 +3174,26 @@ mod tests {
         assert_eq!(registry.entry_count(), 0);
     }
 
+    #[test]
+    fn dbcontext_clear_tracker_removes_entries_without_resetting_wrappers() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let registry = <DummyContext as DbContext>::tracking_registry(&context);
+        let added = context.entities.add_tracked(TestEntity);
+        let mut modified = Tracked::from_loaded(TestEntity);
+        modified.attach_registry(registry.clone());
+        modified.mark_modified();
+
+        assert_eq!(registry.entry_count(), 2);
+
+        <DummyContext as DbContext>::clear_tracker(&context);
+
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(added.state(), crate::EntityState::Added);
+        assert_eq!(modified.state(), crate::EntityState::Modified);
+    }
+
     #[tokio::test]
     async fn save_tracked_modified_skips_update_when_persisted_snapshot_is_unchanged() {
         let dbset = DbSet::<ExplicitLoadRoot>::disconnected();
