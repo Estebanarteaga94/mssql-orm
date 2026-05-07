@@ -797,6 +797,31 @@ mod tests {
         navigations: &[],
     };
 
+    static CATEGORY_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
+        "fk_categories_parent",
+        &["parent_id"],
+        "catalog",
+        "categories",
+        &["id"],
+        ReferentialAction::NoAction,
+        ReferentialAction::NoAction,
+    )];
+
+    static CATEGORY_METADATA: EntityMetadata = EntityMetadata {
+        rust_name: "Category",
+        schema: "catalog",
+        table: "categories",
+        renamed_from: None,
+        columns: &[],
+        primary_key: PrimaryKeyMetadata {
+            name: None,
+            columns: &["id"],
+        },
+        indexes: &[],
+        foreign_keys: &CATEGORY_FOREIGN_KEYS,
+        navigations: &[],
+    };
+
     static CYCLE_A_FOREIGN_KEYS: [ForeignKeyMetadata; 1] = [ForeignKeyMetadata::new(
         "fk_cycle_a_cycle_b",
         &["cycle_b_id"],
@@ -1202,6 +1227,35 @@ mod tests {
         .unwrap();
 
         assert_eq!(plan.deleted_order(), &[0, 2, 1]);
+    }
+
+    #[test]
+    fn save_changes_plan_preserves_context_order_without_dependencies() {
+        let plan = save_changes_operation_plan(&[&ORDER_METADATA, &DUMMY_ENTITY_METADATA]).unwrap();
+
+        assert_eq!(plan.added_order(), &[0, 1]);
+        assert_eq!(plan.modified_order(), &[0, 1]);
+        assert_eq!(plan.deleted_order(), &[1, 0]);
+    }
+
+    #[test]
+    fn save_changes_plan_ignores_foreign_keys_to_entities_outside_context() {
+        let plan =
+            save_changes_operation_plan(&[&ORDER_ITEM_METADATA, &DUMMY_ENTITY_METADATA]).unwrap();
+
+        assert_eq!(plan.added_order(), &[0, 1]);
+        assert_eq!(plan.modified_order(), &[0, 1]);
+        assert_eq!(plan.deleted_order(), &[1, 0]);
+    }
+
+    #[test]
+    fn save_changes_plan_ignores_simple_self_references() {
+        let plan =
+            save_changes_operation_plan(&[&CATEGORY_METADATA, &DUMMY_ENTITY_METADATA]).unwrap();
+
+        assert_eq!(plan.added_order(), &[0, 1]);
+        assert_eq!(plan.modified_order(), &[0, 1]);
+        assert_eq!(plan.deleted_order(), &[1, 0]);
     }
 
     #[test]

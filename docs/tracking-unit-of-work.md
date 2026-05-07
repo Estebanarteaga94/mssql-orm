@@ -28,7 +28,10 @@ As of 2026-05-07, the first registry slice is implemented:
 - `save_changes()` plans tracked operations deterministically from context
   entity metadata: `Added` and `Modified` run parent tables before child tables
   for simple foreign keys present in the context, and `Deleted` runs the same
-  order in reverse so child tables are deleted before parent tables,
+  order in reverse so child tables are deleted before parent tables. Focused
+  unit coverage also fixes the no-dependency fallback order, foreign keys whose
+  principal is outside the context, and simple self-FKs that must not create an
+  artificial cycle,
 - `save_changes()` opens an internal transaction when the shared connection is
   not already inside `db.transaction(...)`, and reuses the outer transaction
   when one is active,
