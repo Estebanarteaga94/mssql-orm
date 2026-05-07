@@ -52,6 +52,12 @@ As of 2026-05-07, the first registry slice is implemented:
   syncs the wrapper snapshot after immediate persistence, and
   `tracked.delete(&db)` detaches after immediate delete so `save_changes()`
   does not persist the same wrapper a second time,
+- Active Record interop no-op/error states have additional unit coverage:
+  `tracked.save(&db)` on a registered `Unchanged` wrapper does not require a
+  connection and keeps the registry entry, `tracked.save(&db)` on a registered
+  `Deleted` wrapper returns the stable tracking error without unregistering the
+  pending delete, and `tracked.delete(&db)` on an already detached `Deleted`
+  wrapper is idempotent without touching Active Record,
 - navigation interop is intentionally non-graph-aware in this slice: includes
   and explicit loads do not register related entities, assignment of single or
   collection navigations to a tracked root does not mark the root `Modified`,

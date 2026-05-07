@@ -350,6 +350,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn tracked_save_unchanged_registered_entry_remains_tracked() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let registry = context.entities.tracking_registry();
+        let mut tracked = Tracked::from_loaded(TestEntity {
+            id: 7,
+            name: "Tracked".to_string(),
+        });
+        tracked
+            .attach_registry_loaded(registry.clone(), mssql_orm_core::SqlValue::I64(7))
+            .unwrap();
+
+        tracked.save(&context).await.unwrap();
+
+        assert_eq!(tracked.state(), crate::EntityState::Unchanged);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations()[0].state,
+            crate::EntityState::Unchanged
+        );
+    }
+
+    #[tokio::test]
     async fn tracked_save_deleted_returns_stable_error_before_active_record() {
         let context = DummyContext {
             entities: DbSet::<TestEntity>::disconnected(),
@@ -369,6 +393,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn tracked_save_deleted_registered_entry_keeps_pending_delete_after_error() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let registry = context.entities.tracking_registry();
+        let mut tracked = Tracked::from_loaded(TestEntity {
+            id: 7,
+            name: "Tracked".to_string(),
+        });
+        tracked
+            .attach_registry_loaded(registry.clone(), mssql_orm_core::SqlValue::I64(7))
+            .unwrap();
+        context.entities.remove_tracked(&mut tracked);
+
+        let error = tracked.save(&context).await.unwrap_err();
+
+        assert_eq!(
+            error.message(),
+            "tracked deleted entities cannot be saved; detach them or persist deletion"
+        );
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(
+            registry.registrations()[0].state,
+            crate::EntityState::Deleted
+        );
+    }
+
+    #[tokio::test]
     async fn tracked_delete_added_cancels_local_insert_without_active_record() {
         let context = DummyContext {
             entities: DbSet::<TestEntity>::disconnected(),
@@ -378,6 +431,25 @@ mod tests {
             id: 0,
             name: "Pending".to_string(),
         });
+
+        let deleted = tracked.delete(&context).await.unwrap();
+
+        assert!(!deleted);
+        assert_eq!(tracked.state(), crate::EntityState::Deleted);
+        assert_eq!(registry.entry_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn tracked_delete_deleted_entry_is_idempotent_without_active_record() {
+        let context = DummyContext {
+            entities: DbSet::<TestEntity>::disconnected(),
+        };
+        let registry = context.entities.tracking_registry();
+        let mut tracked = context.entities.add_tracked(TestEntity {
+            id: 0,
+            name: "Pending".to_string(),
+        });
+        tracked.delete(&context).await.unwrap();
 
         let deleted = tracked.delete(&context).await.unwrap();
 
