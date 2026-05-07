@@ -17,6 +17,8 @@ As of 2026-05-07, the first registry slice is implemented:
 - added entities use temporary local identities,
 - successful tracked inserts update the registry identity to the persisted
   primary key returned by SQL Server,
+- `Tracked<T>` exposes explicit public state APIs: `state()`,
+  `mark_modified()`, `mark_deleted()`, `mark_unchanged()` and `detach()`,
 - `DbSet::detach_tracked(...)` removes one wrapper from the current tracker,
 - `DbContext::clear_tracker()` removes all current tracker entries,
 - `save_changes()` skips `Modified` entries when their original/current
@@ -50,18 +52,26 @@ next ownership/state transition tasks.
 The current experimental policy is explicit:
 
 - `Unchanged`: `save_changes()` ignores the entry. `detach_tracked(...)`,
-  `clear_tracker()` or dropping the wrapper removes it with no SQL.
+  `Tracked::detach()`, `clear_tracker()` or dropping the wrapper removes it
+  with no SQL. `mark_modified()` moves it to `Modified`; `mark_deleted()`
+  moves it to `Deleted`.
 - `Modified`: `save_changes()` persists through the normal update pipeline.
-  `detach_tracked(...)`, `clear_tracker()` or dropping the wrapper discards the
-  pending update from the tracker; the wrapper keeps its `Modified` state.
+  `mark_unchanged()` accepts the current value as the new original snapshot and
+  returns it to `Unchanged`. `detach_tracked(...)`, `Tracked::detach()`,
+  `clear_tracker()` or dropping the wrapper discards the pending update from
+  the tracker; the wrapper keeps its `Modified` state.
 - `Added`: `save_changes()` persists through the normal insert pipeline and
   syncs the registry identity to the persisted key. `remove_tracked(...)`
   cancels the pending insert by marking the wrapper `Deleted` and detaching it.
-  `detach_tracked(...)`, `clear_tracker()` or dropping the wrapper discards the
-  pending insert without SQL.
+  `mark_modified()` keeps it `Added`; `mark_unchanged()` accepts the current
+  value as unchanged. `detach_tracked(...)`, `Tracked::detach()`,
+  `clear_tracker()` or dropping the wrapper discards the pending insert without
+  SQL.
 - `Deleted`: `save_changes()` persists through the normal delete pipeline,
   using soft-delete when the entity declares that policy, and unregisters the
-  entry after success. `detach_tracked(...)`, `clear_tracker()` or dropping the
+  entry after success. `mark_modified()` keeps it `Deleted`; `mark_unchanged()`
+  explicitly restores it to `Unchanged` by accepting the current snapshot.
+  `detach_tracked(...)`, `Tracked::detach()`, `clear_tracker()` or dropping the
   wrapper discards the pending delete from the tracker; the wrapper keeps its
   `Deleted` state.
 
@@ -76,8 +86,9 @@ Stable rules for the first cut:
   `entity.delete(&db)` operate on ordinary entity values and do not
   automatically register those values in the tracker.
 - `find_tracked(...)`, `add_tracked(...)`, `remove_tracked(...)`,
-  `detach_tracked(...)`, `clear_tracker()` and `save_changes()` are the
-  explicit tracking surface.
+  `detach_tracked(...)`, `Tracked::detach()`, `Tracked::mark_modified()`,
+  `Tracked::mark_deleted()`, `Tracked::mark_unchanged()`, `clear_tracker()`
+  and `save_changes()` are the explicit tracking surface.
 - `Tracked<T>` has inherent `save(&db)` and `delete(&db)` methods so method
   calls on a tracked wrapper do not silently dereference to the `ActiveRecord`
   implementation for `T`.

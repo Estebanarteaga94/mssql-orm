@@ -10,7 +10,6 @@
 //! future tracking pipeline. In this stage it does not:
 //! - replace the explicit `DbSet`/`ActiveRecord` APIs
 //! - infer inserts, updates or deletes globally outside of `Tracked<T>`
-//! - diff entity fields structurally before deciding whether an entity changed
 //! - keep dropped wrappers in the unit of work
 //! - support composite primary keys through `save_changes()`; that limit is
 //!   now an explicit first-stable-cut scope rather than an implicit behavior
@@ -19,6 +18,9 @@
 //! - `DbSet::find_tracked(id)` for existing entities with single-column PK
 //! - `DbSet::add_tracked(entity)` for new entities pending insertion
 //! - `DbSet::remove_tracked(&mut tracked)` for explicit tracked deletion
+//! - `Tracked::mark_modified()`, `Tracked::mark_deleted()`,
+//!   `Tracked::mark_unchanged()` and `Tracked::detach()` for explicit state
+//!   transitions on a wrapper
 //! - `DbContext::save_changes()` for explicit persistence of live wrappers
 //!
 //! Observable limits in the current stage:
@@ -194,6 +196,46 @@ impl<T> Tracked<T> {
         self.inner.state
     }
 
+    /// Explicitly marks this tracked value as `Modified`.
+    ///
+    /// `Added` values remain `Added` because they still need an insert, and
+    /// `Deleted` values remain `Deleted` because deletion wins over pending
+    /// modifications until the caller explicitly marks the value unchanged.
+    pub fn mark_modified(&mut self) {
+        self.mark_modified_if_unchanged();
+    }
+
+    /// Explicitly marks this tracked value as `Deleted`.
+    ///
+    /// This is a state transition only; it does not execute SQL. Prefer
+    /// `DbSet::remove_tracked(...)` when the wrapper is still attached to a
+    /// context, because that API also cancels pending `Added` inserts by
+    /// detaching them from the tracker.
+    pub fn mark_deleted(&mut self) {
+        self.inner.state = EntityState::Deleted;
+    }
+
+    /// Explicitly accepts the current in-memory value as unchanged.
+    ///
+    /// The current value becomes the new original snapshot and later
+    /// `save_changes()` calls ignore this wrapper until it is marked or
+    /// mutably accessed again.
+    pub fn mark_unchanged(&mut self)
+    where
+        T: Clone,
+    {
+        self.inner.original = self.inner.current.clone();
+        self.inner.state = EntityState::Unchanged;
+    }
+
+    /// Detaches this wrapper from its context tracker without executing SQL.
+    ///
+    /// Detach removes the registration from the current context unit of work
+    /// and leaves the visible wrapper state unchanged.
+    pub fn detach(&mut self) {
+        self.detach_registry();
+    }
+
     /// Returns mutable access to the current value and marks the entity as
     /// modified when it was previously loaded as unchanged.
     pub fn current_mut(&mut self) -> &mut T {
@@ -209,10 +251,6 @@ impl<T> Tracked<T> {
         if self.inner.state == EntityState::Unchanged {
             self.inner.state = EntityState::Modified;
         }
-    }
-
-    pub(crate) fn mark_deleted(&mut self) {
-        self.inner.state = EntityState::Deleted;
     }
 
     pub(crate) fn detach_registry(&mut self) {
@@ -854,6 +892,44 @@ mod tests {
     }
 
     #[test]
+    fn explicit_mark_modified_transitions_unchanged_only() {
+        let mut loaded = Tracked::from_loaded(String::from("Ana"));
+        loaded.mark_modified();
+
+        let mut added = Tracked::from_added(String::from("Luis"));
+        added.mark_modified();
+
+        let mut deleted = Tracked::from_loaded(String::from("Maria"));
+        deleted.mark_deleted();
+        deleted.mark_modified();
+
+        assert_eq!(loaded.state(), EntityState::Modified);
+        assert_eq!(added.state(), EntityState::Added);
+        assert_eq!(deleted.state(), EntityState::Deleted);
+    }
+
+    #[test]
+    fn explicit_mark_deleted_transitions_wrapper_to_deleted() {
+        let mut tracked = Tracked::from_loaded(String::from("Ana"));
+
+        tracked.mark_deleted();
+
+        assert_eq!(tracked.state(), EntityState::Deleted);
+    }
+
+    #[test]
+    fn explicit_mark_unchanged_accepts_current_snapshot() {
+        let mut tracked = Tracked::from_loaded(String::from("Ana"));
+        tracked.current_mut().push_str(" Maria");
+
+        tracked.mark_unchanged();
+
+        assert_eq!(tracked.state(), EntityState::Unchanged);
+        assert_eq!(tracked.original(), "Ana Maria");
+        assert_eq!(tracked.current(), "Ana Maria");
+    }
+
+    #[test]
     fn mark_deleted_transitions_any_registered_entity_to_deleted() {
         let registry = Arc::new(TrackingRegistry::default());
         let mut tracked = Tracked::from_loaded(DummyEntity);
@@ -986,6 +1062,19 @@ mod tests {
 
         assert_eq!(registry.entry_count(), 0);
         assert_eq!(tracked.state(), EntityState::Unchanged);
+    }
+
+    #[test]
+    fn public_detach_unregisters_without_resetting_state() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+        tracked.mark_modified();
+
+        tracked.detach();
+
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(tracked.state(), EntityState::Modified);
     }
 
     #[test]
