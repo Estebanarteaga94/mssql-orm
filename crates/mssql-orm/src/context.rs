@@ -1584,7 +1584,8 @@ mod tests {
     use crate::{
         AuditEntity, AuditOperation, AuditProvider, AuditRequestValues, EntityPersist,
         EntityPersistMode, EntityPrimaryKey, IncludeCollection, SoftDeleteContext,
-        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, TenantScopedEntity, Tracked,
+        SoftDeleteEntity, SoftDeleteOperation, SoftDeleteProvider, SoftDeleteRequestValues,
+        TenantScopedEntity, Tracked,
     };
     use mssql_orm_core::{
         ColumnMetadata, ColumnValue, Entity, EntityMetadata, EntityPolicyMetadata,
@@ -3291,6 +3292,79 @@ mod tests {
     }
 
     #[test]
+    fn save_changes_modified_route_preserves_audit_request_values_before_provider_values() {
+        let dbset = DbSet::<AuditedWriteEntity>::disconnected();
+        let request_values = AuditRequestValues::new(vec![ColumnValue::new(
+            "updated_by",
+            SqlValue::String("request-user".to_string()),
+        )]);
+
+        let query = dbset
+            .update_query_sql_value_with_audit_runtime(
+                SqlValue::I64(7),
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("tracked audited row".to_string()),
+                )],
+                None,
+                None,
+                Some(&TestAuditProvider),
+                Some(&request_values),
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_update(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[audited_write_entities] SET [name] = @P1, [updated_by] = @P2 OUTPUT INSERTED.* WHERE ([dbo].[audited_write_entities].[id] = @P3)"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("tracked audited row".to_string()),
+                SqlValue::String("request-user".to_string()),
+                SqlValue::I64(7),
+            ]
+        );
+    }
+
+    #[test]
+    fn save_changes_modified_route_preserves_tenant_and_rowversion_predicates() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let query = dbset
+            .update_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("tracked tenant row".to_string()),
+                )],
+                Some(SqlValue::Bytes(vec![1, 2, 3, 4])),
+                Some(&active_tenant),
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_update(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[tenant_write_entities] SET [name] = @P1 OUTPUT INSERTED.* WHERE ((([dbo].[tenant_write_entities].[id] = @P2) AND ([dbo].[tenant_write_entities].[tenant_id] = @P3)) AND ([dbo].[tenant_write_entities].[version] = @P4))"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("tracked tenant row".to_string()),
+                SqlValue::I64(7),
+                SqlValue::I64(42),
+                SqlValue::Bytes(vec![1, 2, 3, 4]),
+            ]
+        );
+    }
+
+    #[test]
     fn dbset_update_applies_audit_provider_values_before_compiling_update() {
         let dbset = DbSet::<AuditedWriteEntity>::disconnected();
         let provider = TestAuditProvider;
@@ -3320,6 +3394,57 @@ mod tests {
                 SqlValue::String("audited row".to_string()),
                 SqlValue::String("audit-provider".to_string()),
                 SqlValue::I64(7),
+            ]
+        );
+    }
+
+    #[test]
+    fn save_changes_added_route_preserves_audit_request_values_before_provider_values() {
+        struct InsertAuditProvider;
+
+        impl AuditProvider for InsertAuditProvider {
+            fn values(
+                &self,
+                context: crate::AuditContext<'_>,
+            ) -> Result<Vec<ColumnValue>, OrmError> {
+                assert_eq!(context.entity.table, "audited_write_entities");
+                assert_eq!(context.operation, AuditOperation::Insert);
+                assert!(context.request_values.is_some());
+
+                Ok(vec![ColumnValue::new(
+                    "updated_by",
+                    SqlValue::String("provider-user".to_string()),
+                )])
+            }
+        }
+
+        let dbset = DbSet::<AuditedWriteEntity>::disconnected();
+        let request_values = AuditRequestValues::new(vec![ColumnValue::new(
+            "updated_by",
+            SqlValue::String("request-user".to_string()),
+        )]);
+
+        let query = dbset
+            .insert_query_values_with_runtime_for_test(
+                vec![ColumnValue::new(
+                    "name",
+                    SqlValue::String("tracked audited insert".to_string()),
+                )],
+                Some(&InsertAuditProvider),
+                Some(&request_values),
+            )
+            .unwrap();
+        let compiled = super::SqlServerCompiler::compile_insert(&query).unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "INSERT INTO [dbo].[audited_write_entities] ([name], [updated_by]) OUTPUT INSERTED.* VALUES (@P1, @P2)"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("tracked audited insert".to_string()),
+                SqlValue::String("request-user".to_string()),
             ]
         );
     }
@@ -3395,6 +3520,43 @@ mod tests {
             error
                 .message()
                 .contains("tenant-scoped write requires an active tenant")
+        );
+    }
+
+    #[test]
+    fn save_changes_deleted_route_preserves_soft_delete_request_tenant_and_rowversion() {
+        let dbset = DbSet::<TenantWriteEntity>::disconnected();
+        let request_values = SoftDeleteRequestValues::new(vec![ColumnValue::new(
+            "deleted_at",
+            SqlValue::String("2026-05-07T00:00:00".to_string()),
+        )]);
+        let active_tenant = ActiveTenant {
+            column_name: "tenant_id",
+            value: SqlValue::I64(42),
+        };
+
+        let compiled = dbset
+            .delete_compiled_query_sql_value_with_active_tenant(
+                SqlValue::I64(7),
+                Some(SqlValue::Bytes(vec![9, 8, 7])),
+                None,
+                Some(&request_values),
+                Some(&active_tenant),
+            )
+            .unwrap();
+
+        assert_eq!(
+            compiled.sql,
+            "UPDATE [dbo].[tenant_write_entities] SET [deleted_at] = @P1 OUTPUT INSERTED.* WHERE ((([dbo].[tenant_write_entities].[id] = @P2) AND ([dbo].[tenant_write_entities].[tenant_id] = @P3)) AND ([dbo].[tenant_write_entities].[version] = @P4))"
+        );
+        assert_eq!(
+            compiled.params,
+            vec![
+                SqlValue::String("2026-05-07T00:00:00".to_string()),
+                SqlValue::I64(7),
+                SqlValue::I64(42),
+                SqlValue::Bytes(vec![9, 8, 7]),
+            ]
         );
     }
 

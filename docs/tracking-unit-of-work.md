@@ -9,7 +9,7 @@ document does not claim that the runtime has already been stabilized.
 
 ## Implementation Status
 
-As of 2026-05-06, the first registry slice is implemented:
+As of 2026-05-07, the first registry slice is implemented:
 
 - loaded tracked entities are registered with identity derived from entity
   type, schema, table and single-column primary key value,
@@ -27,7 +27,11 @@ As of 2026-05-06, the first registry slice is implemented:
   order in reverse so child tables are deleted before parent tables,
 - `save_changes()` opens an internal transaction when the shared connection is
   not already inside `db.transaction(...)`, and reuses the outer transaction
-  when one is active.
+  when one is active,
+- the `Added`, `Modified` and `Deleted` routes used by `save_changes()` have
+  focused coverage proving they continue through the existing insert, update
+  and delete pipelines for tenant predicates, rowversion predicates, audit
+  provider/request values and soft-delete provider/request values.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
