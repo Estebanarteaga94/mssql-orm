@@ -63,6 +63,11 @@ As of 2026-05-07, the first registry slice is implemented:
 - registry collision behavior is covered when converting an `Added` temporary
   identity to a persisted primary key: duplicate persisted identities return
   `OrmError` and do not replace the temporary entry identity.
+- registry error/idempotency behavior is covered for the current internal
+  slice: updating a missing registration returns a stable `OrmError`,
+  unregistering a missing registration is a no-op, and public
+  `Tracked::detach()` can be called repeatedly without resetting visible
+  wrapper state.
 - explicit `mark_unchanged()` restoration is covered for `Deleted` wrappers:
   it accepts the current value as the new original snapshot and returns the
   wrapper to `Unchanged` without database I/O.

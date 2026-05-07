@@ -1153,6 +1153,17 @@ mod tests {
     }
 
     #[test]
+    fn tracking_registry_rejects_persisted_identity_update_for_missing_registration() {
+        let registry = TrackingRegistry::default();
+
+        let error = registry
+            .update_persisted_identity::<DummyEntity>(99, SqlValue::I64(11))
+            .unwrap_err();
+
+        assert_eq!(error.message(), "tracked entity registration was not found");
+    }
+
+    #[test]
     fn tracking_registry_clear_removes_all_entries() {
         let registry = Arc::new(TrackingRegistry::default());
         let mut first = Tracked::from_added(DummyEntity);
@@ -1179,6 +1190,20 @@ mod tests {
     }
 
     #[test]
+    fn public_detach_is_idempotent_and_keeps_visible_state() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+        tracked.mark_deleted();
+
+        tracked.detach();
+        tracked.detach();
+
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(tracked.state(), EntityState::Deleted);
+    }
+
+    #[test]
     fn public_detach_unregisters_without_resetting_state() {
         let registry = Arc::new(TrackingRegistry::default());
         let mut tracked = Tracked::from_loaded(DummyEntity);
@@ -1189,6 +1214,18 @@ mod tests {
 
         assert_eq!(registry.entry_count(), 0);
         assert_eq!(tracked.state(), EntityState::Modified);
+    }
+
+    #[test]
+    fn tracking_registry_unregister_missing_registration_is_noop() {
+        let registry = Arc::new(TrackingRegistry::default());
+        let mut tracked = Tracked::from_loaded(DummyEntity);
+        tracked.attach_registry(Arc::clone(&registry));
+
+        registry.unregister(99);
+
+        assert_eq!(registry.entry_count(), 1);
+        assert_eq!(registry.registrations()[0].state, EntityState::Unchanged);
     }
 
     #[test]
