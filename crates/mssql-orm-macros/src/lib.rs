@@ -1719,6 +1719,13 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 <Self as ::mssql_orm::DbContext>::health_check(self).await
             }
 
+            /// Clears every experimental tracking entry currently registered
+            /// on this context.
+            ///
+            /// This does not execute SQL and does not reset values already
+            /// held by `Tracked<T>` wrappers. It only detaches the current
+            /// unit-of-work entries so later `save_changes()` calls ignore
+            /// them.
             pub fn clear_tracker(&self) {
                 <Self as ::mssql_orm::DbContext>::clear_tracker(self)
             }
@@ -1756,6 +1763,25 @@ fn derive_db_context_impl(input: DeriveInput) -> Result<TokenStream2> {
                 Ok(saved)
             }
 
+            /// Persists currently registered experimental tracking entries.
+            ///
+            /// This method processes live `Tracked<T>` wrappers registered by
+            /// this context in three deterministic phases: `Added`,
+            /// `Modified`, then `Deleted`. For simple foreign keys declared
+            /// between entities in the context, inserts and updates run
+            /// principals before dependents and deletes run the reverse order.
+            ///
+            /// The implementation reuses the normal `DbSet` insert, update
+            /// and delete paths, so tenant, audit, soft-delete and rowversion
+            /// behavior remains centralized in the public persistence layer.
+            /// It opens an internal transaction when no transaction is active
+            /// and reuses an outer `db.transaction(...)` when one is already
+            /// active.
+            ///
+            /// Tracking remains experimental in this release slice: dropping a
+            /// wrapper detaches it, relationship graph mutations are not
+            /// persisted, and composite primary keys are rejected before SQL
+            /// for pending tracked operations.
             pub async fn save_changes(&self) -> Result<usize, ::mssql_orm::core::OrmError>
             where
                 #(#save_changes_bounds,)*
