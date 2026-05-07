@@ -72,8 +72,10 @@ As of 2026-05-07, the first registry slice is implemented:
   it accepts the current value as the new original snapshot and returns the
   wrapper to `Unchanged` without database I/O.
 - public `trybuild` coverage now includes `Tracked<T>::save(&db)` and
-  `Tracked<T>::delete(&db)` from `mssql_orm::prelude`, and rejects direct
-  access to internal registry attachment helpers.
+  `Tracked<T>::delete(&db)` from `mssql_orm::prelude`, context-level
+  `find_tracked(...)`, `remove_tracked(...)`, `save_changes()` and ownership
+  operations `clone`, `into_current()` and repeated `detach()`, and rejects
+  direct access to internal registry attachment helpers.
 
 The registry still stores pointers to live `Tracked<T>` wrappers for snapshots
 and state. Removing the wrapper-lifetime dependency remains assigned to the
